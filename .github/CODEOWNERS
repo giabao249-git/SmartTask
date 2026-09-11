@@ -1,0 +1,6 @@
+# Người review mặc định theo thư mục — điền tài khoản GitHub ở Tuần 02.
+# docs/01-de-cuong/  @<TV1>
+# apps/api/          @<TV2>
+# apps/web/          @<TV3>
+# apps/api/src/ai/ apps/api/src/realtime/ apps/api/src/workload/  @<TV4>
+# infra/ .github/    @<TV5>

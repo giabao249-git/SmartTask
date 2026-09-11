@@ -7,7 +7,7 @@
 **Nhóm thực hiện:** «TV1» (nhóm trưởng), «TV2», «TV3», «TV4», «TV5» — xem `danh-sach-nhom.md`
 **Thời gian thực hiện:** 12 tuần, 11/09/2026 – 27/11/2026
 
-> Phiên bản: **v1 — Tuần 01 (11/09/2026)** — hoàn thành Mục 1–5; Mục 6–10 hoàn thiện ở Tuần 02.
+> Phiên bản: **Draft 2 — Tuần 02** — đủ 10 mục; chờ điền họ tên thành viên và góp ý GVHD (Tuần 03).
 > Bản in nộp Tuần 02–03 định dạng theo tiêu chí 10: Times New Roman 13, giãn dòng 1.3–1.5, lề trên/dưới 2.5 cm, trái 3.5 cm, phải 2.0 cm, bìa kiếng.
 
 ---
@@ -90,20 +90,80 @@ Nguồn: tài liệu chính thức của các sản phẩm [3]–[5], [7], [8], 
 
 ## 6. Điểm mới do nhóm thực hiện
 
-*(hoàn thiện Tuần 02)*
+1. **Ma trận kỹ năng gắn với khối lượng công việc.** Mỗi thành viên khai báo kỹ năng mức 1–5 (PM xác nhận); mỗi task khai kỹ năng yêu cầu. Tải được tính bằng *giờ hiệu dụng*: giờ còn lại × hệ số ước lượng cá nhân (EAR = giờ thực tế ÷ giờ ước lượng, làm mượt Bayes) × hệ số độ khó × hệ số thiếu kỹ năng × phạt chuyển ngữ cảnh, so với *năng lực hiệu dụng* (giờ chuẩn trừ giờ họp và ngày nghỉ). Các sản phẩm phổ biến chỉ so giờ ước lượng với 40 giờ.
+2. **Điểm nguy cơ burnout nhiều tuần.** Tổng hợp mức sử dụng tuần hiện tại, số tuần liên tiếp quá 90%, tỷ lệ việc quá hạn, xu hướng chậm dần so với chính mình và tỷ lệ việc khẩn — cảnh báo trước khi tiến độ lộ ra chậm; mọi hệ số hiển thị được cho người bị gắn nhãn.
+3. **AI Agent phân rã yêu cầu an toàn và tái lập.** LLM chỉ được gọi với schema đầu ra bắt buộc; backend nạp ngữ cảnh (thành viên, kỹ năng, tải, task hiện có), kiểm tra hợp lệ (kẹp ước lượng, ánh xạ kỹ năng về danh mục, phụ thuộc không vòng), và người dùng xem trước – sửa – xác nhận trước khi ghi. Lớp trừu tượng nhà cung cấp cho phép đổi Gemini ↔ Ollama bằng cấu hình; mọi lượt gọi được ghi token, thời gian, vân tay prompt.
+4. **Dự báo trễ hạn tách phần tính khỏi phần giải thích.** Ngày hoàn thành dự kiến và mức rủi ro tính xác định từ snapshot burn-down và vận tốc (có kiểm thử đơn vị); AI chỉ diễn giải nguyên nhân và đề xuất hành động — trả lời được câu hỏi "AI có đáng tin không".
+5. **Thuật toán ghép người – việc – thời gian.** Chấm điểm phù hợp (kỹ năng, sẵn sàng, lịch sử, công bằng, liên tục) rồi xếp lịch theo heuristic danh sách vào năng lực còn trống theo ngày; đo độ chênh tải (Spread) và đề xuất cân bằng. Đây là phần "giải thuật lõi" theo yêu cầu Tuần 07.
+6. **Ba chế độ xem trên cùng một dữ liệu, đồng bộ thời gian thực.** Kanban, Gantt, Eisenhower đọc cùng một truy vấn task; mọi thay đổi đi qua REST rồi phát qua Socket.io với số phiên bản để phát hiện xung đột; cập nhật lạc quan có hoàn tác.
+7. **Toàn bộ chạy trên hạ tầng miễn phí, API-First**, có Swagger, CI, kiểm thử tự động và số liệu thực nghiệm — theo đúng triết lý "không làm phần mềm đồ chơi" của học phần.
 
 ## 7. Kết quả dự kiến
 
-*(hoàn thiện Tuần 02)*
+**Sản phẩm phần mềm:** ứng dụng web SmartTask chạy công khai (Vercel + Render + Supabase) gồm 24 use case bắt buộc; mã nguồn GitHub có README cài đặt, CI, tag `v1.0.0`; tài liệu API Swagger; script dữ liệu mẫu (2 dự án, 6 người, ~80 task, 3 tuần lịch sử).
+
+**Hồ sơ phân tích thiết kế:** bản mô tả hiện trạng; BFD, BPMN; sơ đồ Use Case tổng quát và phân hệ; đặc tả 5 use case cốt lõi; 6 sequence diagram; ERD chuẩn 3NF và từ điển dữ liệu; đặc tả OpenAPI 3; wireframe 8 màn hình; kế hoạch và báo cáo kiểm thử.
+
+**Số liệu thực nghiệm (Chương 3–4):** độ trễ đồng bộ realtime; thời gian phản hồi API (p95); thời gian phản hồi và tỷ lệ hợp lệ của AI phân rã; sai số ước lượng AI so với ước lượng của người trên tập task mẫu; độ chính xác cảnh báo quá tải trên kịch bản dựng sẵn; kết quả kiểm thử tải 20 người dùng ảo và 20 kết nối socket.
+
+**Quyển báo cáo** 60–120 trang, 5 chương, kèm đề cương đã duyệt; slide 15–20 trang; video demo dự phòng.
 
 ## 8. Kế hoạch thực hiện chi tiết 12 tuần
 
-*(hoàn thiện Tuần 02 — WBS gán họ tên từng việc, xem `wbs-12-tuan.md`)*
+Bảng WBS đầy đủ (mã việc, người thực hiện, ngày bắt đầu/kết thúc, sản phẩm, phụ thuộc) tại `wbs-12-tuan.md`; tóm tắt theo tuần:
+
+| Tuần | Thời gian | Công việc chính | Người phụ trách chính | Sản phẩm |
+|---|---|---|---|---|
+| 01 | 11/09 – 17/09 | Lập nhóm, chọn đề tài; khởi tạo Git; thảo luận phạm vi; nháp đề cương Mục 1–5 | «TV1», «TV2», «TV4» | Đề cương v1, DS nhóm |
+| 02 | 18/09 – 24/09 | WBS gán tên; Mục 6–10; môi trường phát triển (Docker PostgreSQL, IDE, nhánh Git, CI); dàn trang bản in | «TV1», «TV3», «TV4», «TV5», «TV2» | Đề cương Draft 2 |
+| 03 | 25/09 – 01/10 | Trình bày và sửa đề cương theo góp ý; ký biên bản; chuẩn bị khảo sát | «TV1», «TV3», «TV5» | **Đề cương được duyệt** |
+| 04 | 02/10 – 08/10 | Phỏng vấn đơn vị khảo sát; hiện trạng AS-IS/TO-BE; BFD; BPMN; FR/NFR | «TV1», «TV2», «TV4», «TV3», «TV5» | Bản mô tả hiện trạng + BFD |
+| 05 | 09/10 – 15/10 | Use Case tổng quát/phân hệ; đặc tả 5 UC cốt lõi; 6 sequence | «TV3», «TV4», «TV2», «TV1», «TV5» | UC & Sequence mức 0 |
+| 06 | 16/10 – 22/10 | ERD 3NF + từ điển dữ liệu; OpenAPI 3 + Postman; wireframe 8 màn; test plan | «TV2», «TV4», «TV5», «TV3» | **Hồ sơ thiết kế mức 0** |
+| 07 | 23/10 – 29/10 | NestJS + Prisma + Supabase; JWT/RBAC; workspace, dự án, task; WorkloadCalculator + test; Next.js skeleton; Swagger, CI, deploy API | «TV2», «TV5», «TV4», «TV3» | Backend API ổn định có Swagger |
+| 08 | 30/10 – 05/11 | Kanban, danh sách, chi tiết task; Socket.io realtime; bình luận/đính kèm/thông báo; AI phân rã, burn-down, dự báo; kỹ năng, tải, dashboard, Gantt; deploy Vercel | «TV3», «TV4», «TV5», «TV2», «TV1» | **Demo MVP với GVHD** |
+| 09 | 06/11 – 12/11 | Đóng băng; test cases, unit/integration/E2E; Docker Compose; deploy chính thức | «TV1», «TV5», «TV2», «TV3», «TV4» | Link online + báo cáo test |
+| 10 | 13/11 – 19/11 | Đo số liệu thực nghiệm; viết Chương 1–5; ảnh minh chứng, từ điển dữ liệu | «TV4», «TV1», «TV2», «TV3», «TV5» | Quyển báo cáo Draft 1 |
+| 11 | 20/11 – 26/11 | Rà soát với GVHD; in bìa kiếng; dọn Git, README, video; slide; **nộp 11h30 23/11**; diễn tập demo | «TV1», «TV3», «TV2», «TV5», «TV4» | Hồ sơ nộp |
+| 12 | 27/11 | Bảo vệ: thuyết trình, demo trực tiếp trên Cloud, vấn đáp | Cả 5 thành viên trình bày phần mình | Nghiệm thu |
+
+Nhịp làm việc: sprint 1 tuần; họp kế hoạch thứ Hai, demo nội bộ và gửi tiến độ GVHD thứ Sáu; commit Git theo tài khoản cá nhân hằng ngày.
 
 ## 9. Bố cục dự kiến của quyển báo cáo
 
-*(hoàn thiện Tuần 02)*
+**Chương 1. Tổng quan** — 1.1 Lý do chọn đề tài; 1.2 Khảo sát hiện trạng tại đơn vị (AS-IS, pain point); 1.3 Các giải pháp và nghiên cứu liên quan; 1.4 Mục tiêu, đối tượng, phạm vi; 1.5 Phương pháp thực hiện; 1.6 Cơ sở lý thuyết và công nghệ sử dụng (Agile/Kanban, Use Case Points, RCPSP, LLM structured output; Next.js, NestJS, Prisma, PostgreSQL, Socket.io, Gemini API).
+
+**Chương 2. Phân tích và thiết kế hệ thống** — 2.1 Mô hình nghiệp vụ (BFD, BPMN TO-BE); 2.2 Yêu cầu chức năng và phi chức năng; 2.3 Tác nhân và sơ đồ Use Case; 2.4 Đặc tả use case cốt lõi; 2.5 Sequence diagram; 2.6 Kiến trúc hệ thống và quyết định công nghệ; 2.7 Thiết kế cơ sở dữ liệu (ERD 3NF, từ điển dữ liệu); 2.8 Đặc tả API (OpenAPI) và sự kiện realtime; 2.9 Thiết kế giao diện (wireframe).
+
+**Chương 3. Hiện thực và kết quả** — 3.1 Tổ chức mã nguồn monorepo; 3.2 Hiện thực backend (xác thực, phân quyền, module nghiệp vụ); 3.3 Hiện thực realtime; 3.4 Hiện thực giải thuật lõi (mô hình tải, burnout, ghép người–việc–thời gian, dự báo); 3.5 Tích hợp AI Agent (prompt, schema, validator, nhật ký); 3.6 Hiện thực frontend (Kanban, Gantt, Eisenhower, workload, trợ lý AI); 3.7 Kết quả: ảnh màn hình các luồng chính và số liệu thực nghiệm.
+
+**Chương 4. Kiểm thử và triển khai** — 4.1 Kế hoạch và test cases theo use case; 4.2 Kiểm thử đơn vị, tích hợp, đầu cuối; 4.3 Kiểm thử tải và hiệu năng; 4.4 Triển khai Cloud (Vercel, Render, Supabase), CI/CD, vận hành; 4.5 Đánh giá theo mục tiêu đo được ở Mục 3.
+
+**Chương 5. Kết luận và hướng phát triển** — 5.1 Kết quả đạt được so với mục tiêu; 5.2 Hạn chế; 5.3 Hướng phát triển (gợi ý phân công học từ phản hồi, tích hợp lịch doanh nghiệp, ứng dụng di động, SSO); 5.4 Bài học kinh nghiệm.
+
+Tài liệu tham khảo (IEEE). Phụ lục: bảng chức năng → use case đầy đủ; đặc tả API; từ điển dữ liệu; biên bản khảo sát; biên bản họp và % đóng góp.
 
 ## 10. Tài liệu tham khảo
 
-*(hoàn thiện Tuần 02 — chuẩn IEEE; các số [1]–[20] đã dùng ở Mục 1–2)*
+[1] C. Maslach and M. P. Leiter, "Understanding the burnout experience: recent research and its implications for psychiatry," *World Psychiatry*, vol. 15, no. 2, pp. 103–111, 2016.
+[2] F. P. Brooks, *The Mythical Man-Month: Essays on Software Engineering*, Anniversary ed. Reading, MA, USA: Addison-Wesley, 1995.
+[3] Atlassian, "Jira Software documentation," 2026. [Online]. Available: https://support.atlassian.com/jira-software-cloud/. [Accessed: 11-Sep-2026].
+[4] Asana, "Asana product guide — Workload," 2026. [Online]. Available: https://help.asana.com/. [Accessed: 11-Sep-2026].
+[5] ClickUp, "ClickUp Help Center — Workload view, ClickUp Brain," 2026. [Online]. Available: https://help.clickup.com/. [Accessed: 11-Sep-2026].
+[6] Google, "Gemini API — Structured output," 2026. [Online]. Available: https://ai.google.dev/gemini-api/docs/structured-output. [Accessed: 11-Sep-2026].
+[7] Atlassian, "Trello guide," 2026. [Online]. Available: https://trello.com/guide. [Accessed: 11-Sep-2026].
+[8] Linear, "Linear documentation — Cycles, Projects, Insights," 2026. [Online]. Available: https://linear.app/docs. [Accessed: 11-Sep-2026].
+[9] K. Schwaber and J. Sutherland, *The Scrum Guide*, Nov. 2020. [Online]. Available: https://scrumguides.org/.
+[10] D. J. Anderson, *Kanban: Successful Evolutionary Change for Your Technology Business*. Sequim, WA, USA: Blue Hole Press, 2010.
+[11] G. Karner, "Resource estimation for Objectory projects," Objective Systems SF AB, Sweden, Tech. Rep., 1993.
+[12] Bộ Thông tin và Truyền thông, *Công văn số 2589/BTTTT-ƯDCNTT ngày 24/8/2011 hướng dẫn xác định chi phí phát triển, nâng cấp phần mềm nội bộ*, Hà Nội, 2011.
+[13] R. Kolisch and S. Hartmann, "Heuristic algorithms for the resource-constrained project scheduling problem: Classification and computational analysis," in *Project Scheduling: Recent Models, Algorithms and Applications*, J. Węglarz, Ed. Boston, MA, USA: Kluwer, 1999, pp. 147–178.
+[14] S. R. Covey, *The 7 Habits of Highly Effective People*. New York, NY, USA: Free Press, 1989.
+[15] J. Wei et al., "Chain-of-thought prompting elicits reasoning in large language models," in *Proc. 36th Conf. Neural Information Processing Systems (NeurIPS)*, New Orleans, LA, USA, 2022.
+[16] NestJS, "NestJS documentation," 2026. [Online]. Available: https://docs.nestjs.com/. [Accessed: 11-Sep-2026].
+[17] Vercel, "Next.js documentation — App Router," 2026. [Online]. Available: https://nextjs.org/docs. [Accessed: 11-Sep-2026].
+[18] Prisma, "Prisma ORM documentation," 2026. [Online]. Available: https://www.prisma.io/docs. [Accessed: 11-Sep-2026].
+[19] Socket.IO, "Socket.IO documentation," 2026. [Online]. Available: https://socket.io/docs/v4/. [Accessed: 11-Sep-2026].
+[20] *Systems and software engineering — Life cycle processes — Requirements engineering*, ISO/IEC/IEEE 29148:2018, 2018.
+
+> Ghi chú: các mục [3]–[8], [16]–[19] là tài liệu trực tuyến, cần kiểm tra lại đường dẫn và ngày truy cập khi in; bổ sung tài liệu phỏng vấn/khảo sát (Tuần 04) vào danh mục khi có.

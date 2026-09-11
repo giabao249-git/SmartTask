@@ -44,8 +44,8 @@ nvm use
 
 # 2. CSDL PostgreSQL cục bộ
 cp .env.example .env
-make db-up          # hoặc: docker compose -f infra/docker-compose.yml up -d
-make db-psql        # vào psql kiểm tra
+make db-up          # PostgreSQL 16 tại localhost:5434 (5432/5433 đã có dự án khác dùng)
+make db-psql        # vào psql kiểm tra; make db-ui mở Adminer tại :8080
 
 # 3. Nhánh làm việc
 git switch develop

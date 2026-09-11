@@ -1,0 +1,5 @@
+default: true
+MD013: false   # dòng dài — bảng tiếng Việt
+MD033: false   # cho phép HTML inline
+MD041: false   # dòng đầu không bắt buộc là H1 (bảng, blockquote)
+MD024: { siblings_only: true }

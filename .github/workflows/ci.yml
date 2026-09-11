@@ -1,0 +1,33 @@
+# CI khung (Tuần 02). Tuần 07 bổ sung: install, lint, type-check, test, build cho apps/api và apps/web.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  kiem-tra-ho-so:
+    name: Kiểm tra cấu hình & tài liệu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: docker compose config hợp lệ
+        run: docker compose -f infra/docker-compose.yml config -q
+
+      - name: .env.example không chứa khoá thật
+        run: |
+          if grep -Eiq '(AIza[0-9A-Za-z_-]{30,}|sk-[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{30,})' .env.example; then
+            echo "Phát hiện chuỗi giống khoá thật trong .env.example"; exit 1; fi
+
+      - name: Tài liệu bắt buộc tồn tại
+        run: |
+          for f in README.md docs/01-de-cuong/de-cuong-chi-tiet.md docs/01-de-cuong/wbs-12-tuan.md docs/00-quy-che/quy-tac-git.md; do
+            test -f "$f" || { echo "Thiếu $f"; exit 1; }; done
+
+      - name: Markdown lint
+        uses: DavidAnson/markdownlint-cli2-action@v19
+        with:
+          globs: "docs/**/*.md README.md"
+        continue-on-error: true
