@@ -30,6 +30,7 @@ SmartTask/
 │   ├── 01-de-cuong/       # đề cương chi tiết, phạm vi, WBS, danh sách nhóm
 │   ├── 02-phan-tich/      # (Tuần 4–5) hiện trạng, BFD/BPMN, FR/NFR, Use Case, Sequence
 │   ├── 03-thiet-ke/       # (Tuần 6) ERD, API Specs, wireframe
+│   ├── 04-kien-truc/      # kiến trúc, module, UC, công thức, AI agent, trí nhớ, cache & chi phí, dữ liệu
 │   └── 09-bien-ban/       # biên bản họp nhóm, biên bản làm việc với GVHD
 ├── infra/                 # docker-compose PostgreSQL cục bộ
 ├── apps/                  # (Tuần 7–8) apps/api NestJS · apps/web Next.js
@@ -61,7 +62,7 @@ Quy tắc nhánh, commit và PR: [docs/00-quy-che/quy-tac-git.md](docs/00-quy-ch
 - Phạm vi đề tài (MoSCoW): [docs/01-de-cuong/pham-vi-de-tai.md](docs/01-de-cuong/pham-vi-de-tai.md)
 - WBS 12 tuần gán tên: [docs/01-de-cuong/wbs-12-tuan.md](docs/01-de-cuong/wbs-12-tuan.md)
 - Danh sách nhóm & % đóng góp: [docs/01-de-cuong/danh-sach-nhom.md](docs/01-de-cuong/danh-sach-nhom.md)
-- Hồ sơ phân tích kiến trúc (tham chiếu, trực tuyến): Hồ sơ kiến trúc SmartTask · D05 AI giao việc
+- Bộ tài liệu kiến trúc & AI: [docs/04-kien-truc/README.md](docs/04-kien-truc/README.md) — nguyên tắc **LLM suy luận, backend chỉ tính, backend không quyết định**
 
 ## Công nghệ (theo đề bài, gói miễn phí)
 
