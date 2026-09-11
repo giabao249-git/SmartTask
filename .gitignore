@@ -1,0 +1,35 @@
+# Phụ thuộc & build
+node_modules/
+dist/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# Môi trường & bí mật — KHÔNG commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Prisma / CSDL cục bộ
+*.db
+*.db-journal
+infra/pgdata/
+
+# IDE & hệ điều hành
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.DS_Store
+Thumbs.db
+
+# Nhật ký, tạm
+*.log
+npm-debug.log*
+.turbo/
+.cache/
+tmp/
