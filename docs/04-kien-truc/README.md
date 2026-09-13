@@ -31,6 +31,7 @@ Nguồn: `~/Table_Calendar/docs/ai-scheduling-architecture/01-target-architectur
 | [07-cache-va-chi-phi.md](07-cache-va-chi-phi.md) | Cắt prompt tĩnh/động, ba cơ chế cache, sổ token, tính tiền, hạn mức | Tuần 08–10; số liệu Chương 3 |
 | [08-mo-hinh-du-lieu.md](08-mo-hinh-du-lieu.md) | ERD lõi + bảng AI/chat/lịch/lịch sử, ràng buộc SQL tay | Tuần 06 (ERD 3NF); Tuần 07 `schema.prisma` |
 | [09-cong-nghe.md](09-cong-nghe.md) | Danh mục công nghệ theo lớp, phiên bản, lý do, thay thế; miễn phí ↔ doanh nghiệp; lệnh cài đặt Tuần 07 | Đề cương Mục 5; Chương 1.6; Tuần 07 |
+| [10-quy-uoc-giao-dien.md](10-quy-uoc-giao-dien.md) | shadcn/ui là nguồn duy nhất: ba tầng component, cấm/bắt buộc, token, variant, ESLint chặn phần tử thô, thứ tự việc Frontend Lead | Tuần 06 mockup; Tuần 07–08 |
 
 ## Quy ước
 

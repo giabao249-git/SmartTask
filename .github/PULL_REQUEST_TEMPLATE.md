@@ -19,6 +19,7 @@
 - [ ] Không có bí mật (.env, khoá API) trong thay đổi
 - [ ] Tài liệu liên quan (README, docs/) đã cập nhật nếu hành vi thay đổi
 - [ ] Người thực hiện đúng với phân công trong WBS
+- [ ] (Web) Chỉ dùng component shadcn/ui hoặc `components/app`; không màu hex; đủ 4 trạng thái tải/rỗng/lỗi/dữ liệu
 
 ## Người review đề nghị
 
