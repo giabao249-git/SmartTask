@@ -5,6 +5,8 @@ Bộ tài liệu kỹ thuật dùng chung cho hồ sơ thiết kế (Tuần 05�
 ## Nguyên tắc chi phối toàn bộ phần AI
 
 > **LLM suy luận. Backend chỉ tính và kiểm tra. Backend không được quyết định.**
+>
+> Đã xác nhận với nhóm (13/09/2026): mọi phép tính được backend **tính trước** rồi đưa vào ngữ cảnh cho LLM đọc; LLM không tự tính lại, chỉ cân nhắc và chọn.
 
 | Backend được làm | Backend không được làm |
 |---|---|
@@ -28,6 +30,7 @@ Nguồn: `~/Table_Calendar/docs/ai-scheduling-architecture/01-target-architectur
 | [06-tri-nho-ai.md](06-tri-nho-ai.md) | Trí nhớ cá nhân, trí nhớ sắp lịch/sắp việc/năng lực, thói quen: quyền sở hữu, vòng đời, cách vào prompt | Tuần 08 (Should) |
 | [07-cache-va-chi-phi.md](07-cache-va-chi-phi.md) | Cắt prompt tĩnh/động, ba cơ chế cache, sổ token, tính tiền, hạn mức | Tuần 08–10; số liệu Chương 3 |
 | [08-mo-hinh-du-lieu.md](08-mo-hinh-du-lieu.md) | ERD lõi + bảng AI/chat/lịch/lịch sử, ràng buộc SQL tay | Tuần 06 (ERD 3NF); Tuần 07 `schema.prisma` |
+| [09-cong-nghe.md](09-cong-nghe.md) | Danh mục công nghệ theo lớp, phiên bản, lý do, thay thế; miễn phí ↔ doanh nghiệp; lệnh cài đặt Tuần 07 | Đề cương Mục 5; Chương 1.6; Tuần 07 |
 
 ## Quy ước
 

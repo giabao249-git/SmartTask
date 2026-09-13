@@ -62,7 +62,7 @@ Quy tắc nhánh, commit và PR: [docs/00-quy-che/quy-tac-git.md](docs/00-quy-ch
 - Phạm vi đề tài (MoSCoW): [docs/01-de-cuong/pham-vi-de-tai.md](docs/01-de-cuong/pham-vi-de-tai.md)
 - WBS 12 tuần gán tên: [docs/01-de-cuong/wbs-12-tuan.md](docs/01-de-cuong/wbs-12-tuan.md)
 - Danh sách nhóm & % đóng góp: [docs/01-de-cuong/danh-sach-nhom.md](docs/01-de-cuong/danh-sach-nhom.md)
-- Bộ tài liệu kiến trúc & AI: [docs/04-kien-truc/README.md](docs/04-kien-truc/README.md) — nguyên tắc **LLM suy luận, backend chỉ tính, backend không quyết định**
+- Bộ tài liệu kiến trúc & AI: [docs/04-kien-truc/README.md](docs/04-kien-truc/README.md) · danh mục công nghệ: [09-cong-nghe.md](docs/04-kien-truc/09-cong-nghe.md) — nguyên tắc **LLM suy luận, backend chỉ tính, backend không quyết định**
 
 ## Công nghệ (theo đề bài, gói miễn phí)
 
