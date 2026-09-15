@@ -10,6 +10,10 @@ import {
   type TaskEventPayload,
 } from '../common/events/task.events';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  WORKLOAD_EVENTS,
+  type WorkloadAlertPayload,
+} from '../workload/workload.service';
 import { NotificationsService } from './notifications.service';
 
 /** Thông báo sinh từ sự kiện — không gọi từ service nghiệp vụ. Mọi lỗi chỉ ghi log. */
@@ -102,6 +106,43 @@ export class NotificationsListener {
   @OnEvent(SPRINT_EVENTS.closed, { async: true })
   async onSprintClosed(p: SprintEventPayload): Promise<void> {
     await this.sprintNotice(p, NotificationType.SPRINT_CLOSED, 'kết thúc');
+  }
+
+  @OnEvent(WORKLOAD_EVENTS.alert, { async: true })
+  async onWorkloadAlert(p: WorkloadAlertPayload): Promise<void> {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: p.userId },
+        select: { fullName: true },
+      });
+      const pms = p.projectIds.length
+        ? await this.prisma.projectMember.findMany({
+            where: { projectId: { in: p.projectIds }, role: 'PM' },
+            select: { userId: true },
+          })
+        : [];
+      const label = p.kind === 'BURNOUT' ? 'nguy cơ burnout' : 'quá tải';
+      const pct = Math.round(p.utilization * 100);
+      await this.notifications.notify({
+        userIds: [p.userId],
+        type: NotificationType.WORKLOAD_ALERT,
+        title: `Bạn đang ${label} tuần ${p.weekStart} (${pct}%)`,
+        body: 'Trao đổi với PM để đổi người hoặc dời hạn.',
+        link: '/me/workload',
+        data: { alertId: p.alertId, kind: p.kind, weekStart: p.weekStart },
+      });
+      await this.notifications.notify({
+        userIds: pms.map((m) => m.userId),
+        excludeUserId: p.userId,
+        type: NotificationType.WORKLOAD_ALERT,
+        title: `${user?.fullName ?? 'Thành viên'} đang ${label} tuần ${p.weekStart} (${pct}%)`,
+        body: `Điểm nguy cơ ${p.riskScore}/100.`,
+        link: `/workload?user=${p.userId}`,
+        data: { alertId: p.alertId, kind: p.kind, userId: p.userId },
+      });
+    } catch (e) {
+      this.warn('workload.alert', e);
+    }
   }
 
   private async sprintNotice(

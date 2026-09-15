@@ -6,6 +6,7 @@ import { WorkspaceAccessService } from '../common/access/workspace-access.servic
 import { AppError } from '../common/app-error';
 import { PROJECT_EVENTS } from '../common/events/task.events';
 import { PrismaService } from '../prisma/prisma.service';
+import { isoDate, toDate, weekStartOf } from '../workload/domain/calendar';
 import type {
   CreateProjectDto,
   LabelDto,
@@ -449,7 +450,7 @@ export class ProjectsService {
 
   async dashboard(userId: string, projectId: string) {
     await this.access.assertRead(userId, projectId);
-    const today = new Date(new Date().toDateString());
+    const today = toDate(new Date());
     const [byColumn, total, overdue, unassigned, byAssignee] =
       await Promise.all([
         this.prisma.task.groupBy({
@@ -491,6 +492,66 @@ export class ProjectsService {
     const done = byColumn
       .filter((b) => columns.find((c) => c.id === b.columnId)?.isDone)
       .reduce((s, b) => s + b._count._all, 0);
+    const weekStart = weekStartOf(today);
+    const project = await this.prisma.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: {
+        workspaceId: true,
+        members: { select: { userId: true } },
+        sprints: {
+          where: { status: 'ACTIVE' },
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true,
+            scopeHoursInitial: true,
+            snapshots: { orderBy: { date: 'desc' }, take: 1 },
+          },
+          take: 1,
+        },
+      },
+    });
+    const memberIds = project.members.map((m) => m.userId);
+    const [workloadWeek, openAlerts] = await Promise.all([
+      this.prisma.workloadSnapshot.findMany({
+        where: {
+          workspaceId: project.workspaceId,
+          weekStart,
+          userId: { in: memberIds },
+        },
+        select: {
+          userId: true,
+          utilization: true,
+          level: true,
+          riskScore: true,
+          effLoadHours: true,
+          effCapacityHours: true,
+          user: {
+            select: { fullName: true, shortName: true, avatarUrl: true },
+          },
+        },
+        orderBy: { utilization: 'desc' },
+      }),
+      this.prisma.workloadAlert.findMany({
+        where: {
+          workspaceId: project.workspaceId,
+          userId: { in: memberIds },
+          ackedAt: null,
+        },
+        select: {
+          id: true,
+          userId: true,
+          kind: true,
+          weekStart: true,
+          riskScore: true,
+          user: { select: { fullName: true } },
+        },
+        orderBy: { weekStart: 'desc' },
+      }),
+    ]);
+    const active = project.sprints[0];
+    const last = active?.snapshots[0];
     return {
       counts: { total, done, open: total - done, overdue, unassigned },
       byStatus: columns.map((c) => ({
@@ -503,9 +564,37 @@ export class ProjectsService {
         userId: b.userId,
         openTasks: b._count._all,
       })),
-      workloadWeek: [],
-      openAlerts: [],
-      burndownMini: null,
+      workloadWeek: workloadWeek.map((w) => ({
+        userId: w.userId,
+        ...w.user,
+        utilization: Number(w.utilization),
+        level: w.level,
+        riskScore: w.riskScore,
+        effLoadHours: Number(w.effLoadHours),
+        effCapacityHours: Number(w.effCapacityHours),
+      })),
+      openAlerts: openAlerts.map((a) => ({
+        ...a,
+        weekStart: isoDate(toDate(a.weekStart)),
+      })),
+      burndownMini: active
+        ? {
+            sprintId: active.id,
+            name: active.name,
+            startDate: isoDate(toDate(active.startDate)),
+            endDate: isoDate(toDate(active.endDate)),
+            scopeInitial: active.scopeHoursInitial
+              ? Number(active.scopeHoursInitial)
+              : null,
+            lastSnapshot: last
+              ? {
+                  date: isoDate(toDate(last.date)),
+                  remaining: Number(last.remainingHours),
+                  scope: Number(last.scopeHours),
+                }
+              : null,
+          }
+        : null,
     };
   }
 }
