@@ -1,5 +1,7 @@
 # Phạm vi đề tài — kết quả thảo luận Tuần 01
 
+> Bản chốt chi tiết hơn (ba mức, thứ tự làm-nếu-kịp, danh mục API): [docs/04-kien-truc/11-chot-chuc-nang-va-api.md](../04-kien-truc/11-chot-chuc-nang-va-api.md).
+
 Tài liệu này chốt "làm gì / không làm gì" để viết Mục 4 của đề cương và làm căn cứ khi GVHD khoanh vùng phạm vi ở Tuần 03. Chi tiết 41 use case (bảng chuyển đổi chức năng → UC) nằm trong Hồ sơ kiến trúc SmartTask (bản trực tuyến); ở đây chỉ giữ mức chốt phạm vi.
 
 ## 1. Bài toán

@@ -32,6 +32,7 @@ Nguồn: `~/Table_Calendar/docs/ai-scheduling-architecture/01-target-architectur
 | [08-mo-hinh-du-lieu.md](08-mo-hinh-du-lieu.md) | ERD lõi + bảng AI/chat/lịch/lịch sử, ràng buộc SQL tay | Tuần 06 (ERD 3NF); Tuần 07 `schema.prisma` |
 | [09-cong-nghe.md](09-cong-nghe.md) | Danh mục công nghệ theo lớp, phiên bản, lý do, thay thế; miễn phí ↔ doanh nghiệp; lệnh cài đặt Tuần 07 | Đề cương Mục 5; Chương 1.6; Tuần 07 |
 | [10-quy-uoc-giao-dien.md](10-quy-uoc-giao-dien.md) | shadcn/ui là nguồn duy nhất: ba tầng component, cấm/bắt buộc, token, variant, ESLint chặn phần tử thô, thứ tự việc Frontend Lead | Tuần 06 mockup; Tuần 07–08 |
+| [11-chot-chuc-nang-va-api.md](11-chot-chuc-nang-va-api.md) | **Bản chốt** phạm vi 3 mức (MVP 24 UC / làm nếu kịp theo thứ tự / không làm), quy ước API, 146 operation REST, sự kiện socket, mã lỗi | Đề cương Mục 4, 7; OpenAPI Tuần 06; controller Tuần 07 |
 
 ## Quy ước
 
