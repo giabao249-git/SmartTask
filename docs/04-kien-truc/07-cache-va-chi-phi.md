@@ -70,9 +70,9 @@ Trên gói **miễn phí** Gemini: chi phí tiền = 0 nhưng **hạn mức** l�
 
 - Hạn mức theo người/ngày `settings.ai_daily_limit_per_user` (mặc định 20) và theo workspace/ngày; hết → 429 `AI_QUOTA_EXCEEDED` kèm giờ mở lại.
 - Khoá nút trong lúc gọi; debounce gõ.
-- **Cache kết quả** theo `sha256(prompt động chuẩn hoá + prompt_hash tĩnh)` trong 6 giờ cho `EXPLAIN` và `DECOMPOSE` — cùng câu hỏi trên cùng dữ liệu không gọi lại.
-- 429 từ nhà cung cấp → trả cache gần nhất nếu có, ngược lại báo thời điểm thử lại; không retry dồn dập.
-- Demo: bộ kết quả cache sẵn cho kịch bản (mất mạng vẫn chạy).
+- Không cache kết quả trong DB (đã cân nhắc và bỏ 15/09): khoá nút khi đang gọi; DRAFT đang mở được trả lại thay vì gọi mới; giải thích rủi ro chỉ gọi khi PM bấm.
+- 429 từ nhà cung cấp → báo thời điểm thử lại; không retry dồn dập.
+- Demo: `AI_PROVIDER=ollama` chạy trên laptop là kế hoạch B khi mất mạng; kèm video dự phòng theo yêu cầu học phần.
 
 ## 6. Màn quản trị (UC-40)
 

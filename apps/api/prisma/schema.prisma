@@ -178,20 +178,19 @@ model Workspace {
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  owner            User                @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  members          WorkspaceMember[]
-  invitations      Invitation[]
-  skills           Skill[]
-  projects         Project[]
-  snapshots        WorkloadSnapshot[]
-  aiConfigs        AiConfig[]
-  aiPrompts        AiPromptConfig[]
-  aiMemories       AiMemory[]
-  aiHabits         AiHabit[]
-  chatSessions     ChatSession[]
-  aiTokenLogs      AiTokenLog[]
-  metricsWeekly    UserMetricsWeekly[]
-  aiResponseCaches AiResponseCache[]
+  owner         User                @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members       WorkspaceMember[]
+  invitations   Invitation[]
+  skills        Skill[]
+  projects      Project[]
+  snapshots     WorkloadSnapshot[]
+  aiConfigs     AiConfig[]
+  aiPrompts     AiPromptConfig[]
+  aiMemories    AiMemory[]
+  aiHabits      AiHabit[]
+  chatSessions  ChatSession[]
+  aiTokenLogs   AiTokenLog[]
+  metricsWeekly UserMetricsWeekly[]
 
   @@map("workspaces")
 }
@@ -946,6 +945,7 @@ model AiProposal {
   tokenLogs AiTokenLog[]
 
   @@index([projectId, status, createdAt])
+  @@index([status, expiresAt])
   @@map("ai_proposals")
 }
 
@@ -1001,36 +1001,17 @@ model AiTokenLog {
   rawResponse            String?     @map("raw_response")
   createdAt              DateTime    @default(now()) @map("created_at")
 
-  config        AiConfig?         @relation(fields: [configId], references: [id], onDelete: SetNull)
-  workspace     Workspace?        @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
-  message       ChatMessage?      @relation(fields: [messageId], references: [id], onDelete: SetNull)
-  proposal      AiProposal?       @relation(fields: [proposalId], references: [id], onDelete: SetNull)
-  responseCache AiResponseCache[]
+  config    AiConfig?    @relation(fields: [configId], references: [id], onDelete: SetNull)
+  workspace Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  message   ChatMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  proposal  AiProposal?  @relation(fields: [proposalId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, createdAt])
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([workspaceId, purpose, createdAt])
   @@map("ai_token_logs")
-}
-
-/// Kết quả AI tái sử dụng trong thời hạn (docs 07 §5): cùng yêu cầu + cùng ngữ cảnh → không gọi lại.
-/// Dữ liệu tạm, cron dọn mỗi giờ; khác sổ token (bất biến).
-model AiResponseCache {
-  cacheKey    String    @id @map("cache_key") // sha256(purpose + prompt_hash tĩnh + prompt động chuẩn hoá)
-  workspaceId String    @map("workspace_id") @db.Uuid
-  purpose     AiPurpose
-  response    Json
-  tokenLogId  String?   @map("token_log_id") @db.Uuid
-  hits        Int       @default(0)
-  expiresAt   DateTime  @map("expires_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-
-  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  tokenLog  AiTokenLog? @relation(fields: [tokenLogId], references: [id], onDelete: SetNull)
-
-  @@index([workspaceId, purpose, expiresAt])
-  @@map("ai_response_cache")
 }
 
 // ───────────────────────── Lịch bận ─────────────────────────

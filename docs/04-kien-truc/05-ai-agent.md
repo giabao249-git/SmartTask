@@ -36,7 +36,7 @@ flowchart LR
 |---|---|---|
 | `ContextBuilder` | Nạp **mới từ DB mỗi lượt** 4 tầng ngữ cảnh; gán mã ngắn; không cache trong tiến trình | `ai-v2/context-builder.service.ts`, `13-db-context-loading.md` |
 | `PromptAssembler` | Ghép các khối có tiêu đề; phần tĩnh trước, mốc `════════ DỮ LIỆU HAY THAY ĐỔI`, phần động sau | `ai-v2/prompt-assembler.ts`, `smart-scheduler/tach-prompt.ts` |
-| `AiProvider` | Gọi Gemini (`responseSchema`) hoặc Ollama (JSON mode); retry 2 lần lỗi mạng/5xx; timeout 30 s; cache phần tĩnh; ghi sổ token | `ai-v2/provider.service.ts`, `ai-config/gemini-prompt-cache.service.ts` |
+| `AiProvider` | Gọi Gemini (`responseSchema`) hoặc Ollama (JSON mode); retry 2 lần lỗi mạng/5xx; timeout 30 s; cache phần tĩnh (prompt) nếu bật; ghi sổ token | `ai-v2/provider.service.ts`, `ai-config/gemini-prompt-cache.service.ts` |
 | `ResponseParser` | JSON → zod `structuredActionSchema` (discriminated union theo `type`); lỗi → coi như `CHAT_RESPONSE` kèm cờ `parseFailed` và ghi `raw_response` | `smart-scheduler/learned-knowledge.parser.ts` (thuần, không ném lỗi) |
 | `ActionValidator` | Kiểm từng dòng trên dữ liệu sống; trả `{ok, errors[]}`; **không sửa** | `ai-v2/action-validator.service.ts` |
 | `Executor` | Gọi `TasksService`/`SprintsService`/`MemoryService` — cùng đường code với UI | `ai-v2/executor.service.ts` |
@@ -134,7 +134,7 @@ Mọi dòng dưới đây đều: LLM trả structured action → Validator ki�
 | "Phân rã yêu cầu: xây dựng quên mật khẩu qua email" | `DECOMPOSE_PROPOSAL` | 1–25 task, ước lượng 0,5–40 h, kỹ năng trong danh mục, không vòng | tạo hàng loạt |
 | "Giao hết việc sprint 3, đừng dồn cho Lan" | `ASSIGN_PROPOSAL` | từng dòng: thành viên, nghỉ, kỹ năng, giờ trống, ≤ 110% | `assign/reschedule` từng task, ghi `ai_feedback` |
 | "Ai đang quá tải? Gỡ bớt cho Minh" | `REBALANCE_PROPOSAL` (moves[]) | như trên cho người nhận | `assign` từng task |
-| "Sprint này có kịp không? Vì sao chậm?" | `RISK_EXPLANATION` (số liệu lấy từ backend) | `riskLevel` phải trùng số backend | không ghi gì; cache 6 h |
+| "Sprint này có kịp không? Vì sao chậm?" | `RISK_EXPLANATION` (số liệu lấy từ backend) | `riskLevel` phải trùng số backend | không ghi gì |
 | "Tuần này tôi còn bao nhiêu giờ trống?", "Lan đang bao nhiêu %?" | `CHAT_RESPONSE` (đọc từ BẢNG NĂNG LỰC trong ngữ cảnh) + `dataRef` tuỳ chọn để UI vẽ thẻ số | — | không ghi gì |
 | "Từ giờ đừng giao Minh tuần cuối tháng" | `MEMORY_PROPOSAL` (+ đề xuất ghi vào `user_time_off`) | — | memory hoặc dữ liệu có cấu trúc, theo nút người chọn |
 | "Giao cho Bảo" (có hai Bảo) | `ASK_CLARIFICATION` (options u4, u9) | — | lượt sau mang `selectedCode` |
@@ -150,7 +150,7 @@ Giới hạn cố ý: chat **không** đổi cấu hình workspace, vai trò, pr
 |---|---|
 | **Một bản nháp mỗi (dự án, người, loại)** | Tạo đề xuất mới cùng loại → bản DRAFT cũ chuyển `EXPIRED` ngay; DB khoá bằng partial unique index `ai_proposals_one_draft (project_id, user_id, kind) WHERE status = 'DRAFT'` |
 | **Sửa nhiều lượt = cập nhật một dòng** | "cái thứ hai đổi 6 giờ" → `UPDATE_TASK_DRAFT` vá vào `payload` của đề xuất đang mở, không tạo dòng mới |
-| **Yêu cầu trùng không gọi lại** | `ai_response_cache` trả bản cũ trong 6 giờ → không có đề xuất mới |
+| **Bấm trùng không tạo hai lượt** | Nút khoá khi đang gọi; server giữ khoá trong bộ nhớ theo (dự án, người, loại) — lượt thứ hai khi lượt đầu chưa xong → 409; DRAFT đang mở được trả lại thay vì gọi mới |
 | **Dọn theo tuổi** (cron 03:00) | DRAFT quá `expires_at` (7 ngày) → EXPIRED; EXPIRED/REJECTED quá 30 ngày → xoá; APPLIED giữ 180 ngày rồi xoá (`tasks.ai_proposal_id` về null, nguồn AI vẫn còn ở `activity_logs.source` và `tasks.source`) |
 
 Ước lượng xấu nhất: 5 người × 20 lượt/ngày × 60 ngày = 6.000 dòng, mỗi `payload` 5–20 KB → dưới 100 MB, trước cả khi cron dọn; thực tế ít hơn nhiều vì phần lớn lượt là hỏi đáp (`CHAT_RESPONSE`, `ASK_CLARIFICATION`) không tạo đề xuất.
