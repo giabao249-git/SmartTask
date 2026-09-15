@@ -108,7 +108,7 @@ Không có action cho alias/thói quen (Admin quản alias; thói quen do hệ t
 
 ## 6. Đoán "ai" — mention và định danh
 
-- **@mention trong bình luận** (UC-18): giao diện Combobox liệt kê thành viên dự án — chọn tường minh, không AI.
+- **@mention trong bình luận** (UC-18): giao diện Combobox gọi `GET /projects/:id/members/suggest?q=` — tìm kiểu elastic (Elasticsearch khi có, `pg_trgm + unaccent` khi không): không dấu, gõ thiếu, sai một ký tự, email; người dùng chọn tường minh, không AI.
 - **Tên người trong chat**: LLM nhận DANH BẠ (mã ngắn, họ tên, tên gọi ngắn, chức danh, vai) và tự đối chiếu. Một khớp → dùng; nhiều khớp ("Bảo" → Thế Bảo, Gia Bảo) → `ASK_CLARIFICATION` với `options` là mã ngắn. Backend **không** chọn hộ (bài học `smart-scheduler/person-name-match.ts`: `includes()` lấy người đầu tiên đã mời nhầm người).
 - **Validator** vẫn đối chiếu lại mã ngắn với danh bạ và quyền; mã không có → lỗi, không "khớp mờ hộ".
 - **Kỹ năng do LLM sinh** ("ReactJS", "react js"): ánh xạ về danh mục bằng `skill_aliases` rồi khớp mờ theo tiếng có bỏ dấu (hàm `boDau`, `chuaCumTu` — sao chép từ `person-name-match.ts`); khớp mờ ở đây là **chuẩn hoá dữ liệu vào danh mục**, không phải quyết định nghiệp vụ; không khớp → bỏ và ghi `assumptions`.

@@ -52,6 +52,7 @@ Phiên bản ghi là **major khoá trong `package.json`**; bản vá cụ thể 
 | @supabase/supabase-js | 2 | Ký URL upload/tải Storage (service role, chỉ ở server) | Không dùng cho Auth/DB | S3 SDK + MinIO |
 | ical.js hoặc node-ical | mới nhất | Parse ICS lịch bận | UC-37 | — |
 | pino + nestjs-pino | mới nhất | Log có cấu trúc, ẩn token | Render đọc stdout | winston |
+| @elastic/elasticsearch + Elasticsearch 8 (Docker) | 8.x | Gợi ý @mention kiểu elastic (bỏ dấu, edge_ngram, fuzziness) | Quyết định 15/09; **tự rơi về pg_trgm** khi không có `ELASTICSEARCH_URL` (Render/Supabase free không chạy ES) | pg_trgm + unaccent (luôn có) |
 | crypto (Node) AES-256-GCM | — | Mã hoá khoá API AI trong DB (`APP_KEY`) | Không thêm thư viện | — |
 
 ## 3. Cơ sở dữ liệu & lưu trữ

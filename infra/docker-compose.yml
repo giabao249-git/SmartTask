@@ -38,5 +38,28 @@ services:
       postgres:
         condition: service_healthy
 
+  # Elasticsearch cho @mention (tuỳ chọn, bật bằng: make search-up). Cần ~1 GB RAM.
+  # Không có trên Render/Supabase free → API tự rơi về pg_trgm khi không kết nối được.
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    container_name: smarttask-elasticsearch
+    profiles: ["search"]
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+    ports:
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
 volumes:
   pgdata:
+  esdata:

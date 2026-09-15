@@ -21,6 +21,33 @@ export const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   APP_KEY: z.string().optional(),
+  // Tìm kiếm @mention: có URL → Elasticsearch, không → pg_trgm
+  ELASTICSEARCH_URL: z
+    .string()
+    .url()
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  ELASTICSEARCH_API_KEY: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  // Storage: có Supabase → ký URL Supabase; không → lưu đĩa cục bộ (dev/test)
+  SUPABASE_URL: z
+    .string()
+    .url()
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  SUPABASE_SERVICE_ROLE_KEY: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => v || undefined),
+  SUPABASE_STORAGE_BUCKET: z.string().default('attachments'),
+  API_PUBLIC_URL: z.string().url().optional(),
+  UPLOAD_DIR: z.string().default('uploads'),
   // AI (dùng từ Phase 7)
   AI_PROVIDER: z.enum(['gemini', 'ollama']).default('gemini'),
   GEMINI_API_KEY: z.string().optional(),
