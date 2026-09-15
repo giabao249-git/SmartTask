@@ -7,7 +7,10 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { AccessModule } from './common/access/access.module';
 import { WorkspaceRoleGuard } from './common/guards/workspace-role.guard';
+import { ProjectsModule } from './projects/projects.module';
 import { SkillsModule } from './skills/skills.module';
+import { SprintsModule } from './sprints/sprints.module';
+import { TasksModule } from './tasks/tasks.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -29,6 +32,9 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     WorkspacesModule,
     SkillsModule,
+    ProjectsModule,
+    SprintsModule,
+    TasksModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
