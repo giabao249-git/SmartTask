@@ -142,6 +142,19 @@ Mọi dòng dưới đây đều: LLM trả structured action → Validator ki�
 
 Giới hạn cố ý: chat **không** đổi cấu hình workspace, vai trò, prompt, alias (Admin làm trên màn cấu hình); không xoá dự án/sprint; không tạo/đổi thói quen. Mức triển khai: MVP có `POST /projects/:id/ai/decompose` (form) và `forecast/explain`; chat theo phiên là mục S9 trong [11](11-chot-chuc-nang-va-api.md), làm sau khi có bảng năng lực (S4).
 
+## 7c. Vòng đời và dung lượng `ai_proposals` — để không phình
+
+Đề xuất chỉ sinh ra khi **người chủ động** (bấm "Phân rã", "Đề xuất phân công", hoặc gửi một tin nhắn); AI không có cron, không có vòng lặp tự gọi. Vì vậy số dòng bị chặn trên bởi hạn mức gọi AI (mặc định 20 lượt/người/ngày). Thêm bốn quy tắc:
+
+| Quy tắc | Cơ chế |
+|---|---|
+| **Một bản nháp mỗi (dự án, người, loại)** | Tạo đề xuất mới cùng loại → bản DRAFT cũ chuyển `EXPIRED` ngay; DB khoá bằng partial unique index `ai_proposals_one_draft (project_id, user_id, kind) WHERE status = 'DRAFT'` |
+| **Sửa nhiều lượt = cập nhật một dòng** | "cái thứ hai đổi 6 giờ" → `UPDATE_TASK_DRAFT` vá vào `payload` của đề xuất đang mở, không tạo dòng mới |
+| **Yêu cầu trùng không gọi lại** | `ai_response_cache` trả bản cũ trong 6 giờ → không có đề xuất mới |
+| **Dọn theo tuổi** (cron 03:00) | DRAFT quá `expires_at` (7 ngày) → EXPIRED; EXPIRED/REJECTED quá 30 ngày → xoá; APPLIED giữ 180 ngày rồi xoá (`tasks.ai_proposal_id` về null, nguồn AI vẫn còn ở `activity_logs.source` và `tasks.source`) |
+
+Ước lượng xấu nhất: 5 người × 20 lượt/ngày × 60 ngày = 6.000 dòng, mỗi `payload` 5–20 KB → dưới 100 MB, trước cả khi cron dọn; thực tế ít hơn nhiều vì phần lớn lượt là hỏi đáp (`CHAT_RESPONSE`, `ASK_CLARIFICATION`) không tạo đề xuất.
+
 ## 8. Giờ trống trong prompt
 
 Lấy từ [04 mục 5](04-cong-thuc-tinh-toan.md#5-giờ-trống-theo-ngày-đầu-vào-chính-cho-llm-giao-việc): mỗi người một dòng khoảng bận + giờ trống theo ngày + khối tập trung. LLM đề xuất `start`/`due`; Validator kiểm `FreeBefore`. Chính sách trong Master prompt: task độ khó ≥ 4 chỉ đặt vào ngày có khối tập trung; không đặt việc vào ngày nghỉ.
