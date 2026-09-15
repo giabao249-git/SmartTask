@@ -106,6 +106,8 @@ model User {
   timezone            String    @default("Asia/Ho_Chi_Minh")
   weeklyCapacityHours Int?      @map("weekly_capacity_hours") // null = dùng mặc định workspace
   notificationPrefs   Json      @default("{}") @map("notification_prefs")
+  /// Sở thích cá nhân cho trợ lý AI (tầng ý định, docs 06) — ≤ 2.000 ký tự.
+  aiPersonalPrompt    String?   @map("ai_personal_prompt")
   isActive            Boolean   @default(true) @map("is_active")
   lastLoginAt         DateTime? @map("last_login_at")
   createdAt           DateTime  @default(now()) @map("created_at")
@@ -132,20 +134,17 @@ model User {
   timeOffs            UserTimeOff[]
   aiConfigsCreated    AiConfig[]           @relation("AiConfigCreator")
   aiPromptsEdited     AiPromptConfig[]     @relation("AiPromptEditor")
-  aiPersonalPrompt    AiPersonalPrompt?
   aiMemories          AiMemory[]
   aiHabits            AiHabit[]
   chatSessions        ChatSession[]
   aiProposals         AiProposal[]         @relation("ProposalOwner")
   aiProposalsApplied  AiProposal[]         @relation("ProposalApplier")
   aiTokenLogs         AiTokenLog[]
-  aiUsageDaily        AiUsageDaily[]
   calendarConnections CalendarConnection[]
   calendarEvents      CalendarEvent[]
   timeEntries         TimeEntry[]
   taskReviews         TaskReview[]
   metricsWeekly       UserMetricsWeekly[]
-  weeklyCheckins      WeeklyCheckin[]
 
   @@map("users")
 }
@@ -179,21 +178,20 @@ model Workspace {
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  owner         User                @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  members       WorkspaceMember[]
-  invitations   Invitation[]
-  skills        Skill[]
-  projects      Project[]
-  snapshots     WorkloadSnapshot[]
-  aiConfigs     AiConfig[]
-  aiPrompts     AiPromptConfig[]
-  aiMemories    AiMemory[]
-  aiHabits      AiHabit[]
-  chatSessions  ChatSession[]
-  aiProposals   AiProposal[]
-  aiTokenLogs   AiTokenLog[]
-  aiUsageDaily  AiUsageDaily[]
-  metricsWeekly UserMetricsWeekly[]
+  owner            User                @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members          WorkspaceMember[]
+  invitations      Invitation[]
+  skills           Skill[]
+  projects         Project[]
+  snapshots        WorkloadSnapshot[]
+  aiConfigs        AiConfig[]
+  aiPrompts        AiPromptConfig[]
+  aiMemories       AiMemory[]
+  aiHabits         AiHabit[]
+  chatSessions     ChatSession[]
+  aiTokenLogs      AiTokenLog[]
+  metricsWeekly    UserMetricsWeekly[]
+  aiResponseCaches AiResponseCache[]
 
   @@map("workspaces")
 }
@@ -791,32 +789,28 @@ model AiModelCatalog {
 /// chưa có dòng nào). Phân rã cần model sáng tạo hơn, phân công cần bám schema chặt — chia theo việc thì
 /// đổi model cho việc này không kéo theo việc kia.
 model AiConfig {
-  id              String     @id @default(uuid()) @db.Uuid
-  workspaceId     String?    @map("workspace_id") @db.Uuid
+  id              String    @id @default(uuid()) @db.Uuid
+  workspaceId     String?   @map("workspace_id") @db.Uuid
   name            String
-  provider        AiProvider
-  model           String
-  catalogId       String?    @map("catalog_id") @db.Uuid
+  /// Model (và nhà cung cấp, giá, năng lực) luôn tra qua catalog — không lặp lại ở đây.
+  catalogId       String    @map("catalog_id") @db.Uuid
   /// AES-256-GCM bằng APP_KEY: base64(iv):base64(tag):base64(cipher). Không bao giờ trả về API.
-  apiKeyEncrypted String?    @map("api_key_encrypted")
-  baseUrl         String?    @map("base_url")
-  purpose         AiPurpose  @default(GENERAL)
+  apiKeyEncrypted String?   @map("api_key_encrypted")
+  baseUrl         String?   @map("base_url")
+  purpose         AiPurpose @default(GENERAL)
   /// JSON: { temperature?, maxOutputTokens?, promptCache?: { enabled, ttlSeconds, minStaticChars }, trace?: { enabled } }
-  advancedParams  Json?      @map("advanced_params")
-  timeoutMs       Int        @default(30000) @map("timeout_ms")
-  /// Giá chụp lại tại thời điểm cấu hình để sổ cũ giữ đúng chi phí lúc đó (ELPREP).
-  inputPrice      Float      @default(0) @map("input_price")
-  outputPrice     Float      @default(0) @map("output_price")
-  isDefault       Boolean    @default(false) @map("is_default")
-  isActive        Boolean    @default(true) @map("is_active")
+  advancedParams  Json?     @map("advanced_params")
+  timeoutMs       Int       @default(30000) @map("timeout_ms")
+  isDefault       Boolean   @default(false) @map("is_default")
+  isActive        Boolean   @default(true) @map("is_active")
   notes           String?
-  createdById     String?    @map("created_by_id") @db.Uuid
-  createdAt       DateTime   @default(now()) @map("created_at")
-  updatedAt       DateTime   @updatedAt @map("updated_at")
+  createdById     String?   @map("created_by_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  workspace Workspace?      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  catalog   AiModelCatalog? @relation(fields: [catalogId], references: [id], onDelete: SetNull)
-  createdBy User?           @relation("AiConfigCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  workspace Workspace?     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  catalog   AiModelCatalog @relation(fields: [catalogId], references: [id])
+  createdBy User?          @relation("AiConfigCreator", fields: [createdById], references: [id], onDelete: SetNull)
   tokenLogs AiTokenLog[]
 
   @@index([workspaceId, purpose, isActive, isDefault])
@@ -841,16 +835,6 @@ model AiPromptConfig {
 
   @@index([workspaceId, type, isActive])
   @@map("ai_prompt_configs")
-}
-
-model AiPersonalPrompt {
-  userId    String   @id @map("user_id") @db.Uuid
-  content   String
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("ai_personal_prompts")
 }
 
 /// Trí nhớ riêng của từng người dùng (docs 06). Chỉ CONFIRMED mới vào prompt; DB luôn thắng memory.
@@ -940,7 +924,6 @@ model ChatMessage {
 /// Đề xuất của AI có vòng đời: DRAFT → APPLIED / REJECTED / EXPIRED (7 ngày). code_map đổi mã ngắn u1/t1 về UUID.
 model AiProposal {
   id               String           @id @default(uuid()) @db.Uuid
-  workspaceId      String           @map("workspace_id") @db.Uuid
   projectId        String           @map("project_id") @db.Uuid
   userId           String           @map("user_id") @db.Uuid
   messageId        String?          @map("message_id") @db.Uuid
@@ -954,13 +937,13 @@ model AiProposal {
   expiresAt        DateTime         @map("expires_at")
   createdAt        DateTime         @default(now()) @map("created_at")
 
-  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user      User         @relation("ProposalOwner", fields: [userId], references: [id], onDelete: Cascade)
   appliedBy User?        @relation("ProposalApplier", fields: [appliedById], references: [id], onDelete: SetNull)
   message   ChatMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
   feedback  AiFeedback[]
   tasks     Task[]
+  tokenLogs AiTokenLog[]
 
   @@index([projectId, status, createdAt])
   @@map("ai_proposals")
@@ -991,6 +974,7 @@ model AiTokenLog {
   workspaceId            String?     @map("workspace_id") @db.Uuid
   userId                 String?     @map("user_id") @db.Uuid
   messageId              String?     @map("message_id") @db.Uuid
+  proposalId             String?     @map("proposal_id") @db.Uuid
   endpoint               String
   purpose                AiPurpose   @default(GENERAL)
   provider               AiProvider
@@ -1017,10 +1001,12 @@ model AiTokenLog {
   rawResponse            String?     @map("raw_response")
   createdAt              DateTime    @default(now()) @map("created_at")
 
-  config    AiConfig?    @relation(fields: [configId], references: [id], onDelete: SetNull)
-  workspace Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  message   ChatMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  config        AiConfig?         @relation(fields: [configId], references: [id], onDelete: SetNull)
+  workspace     Workspace?        @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  message       ChatMessage?      @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  proposal      AiProposal?       @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  responseCache AiResponseCache[]
 
   @@index([workspaceId, createdAt])
   @@index([userId, createdAt])
@@ -1028,20 +1014,23 @@ model AiTokenLog {
   @@map("ai_token_logs")
 }
 
-/// Đếm hạn mức theo ngày (ELPREP AiUsage) — rẻ hơn đếm ai_token_logs mỗi lượt.
-model AiUsageDaily {
-  workspaceId String   @map("workspace_id") @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  usageDate   DateTime @map("usage_date") @db.Date
-  calls       Int      @default(0)
-  tokens      Int      @default(0)
-  updatedAt   DateTime @updatedAt @map("updated_at")
+/// Kết quả AI tái sử dụng trong thời hạn (docs 07 §5): cùng yêu cầu + cùng ngữ cảnh → không gọi lại.
+/// Dữ liệu tạm, cron dọn mỗi giờ; khác sổ token (bất biến).
+model AiResponseCache {
+  cacheKey    String    @id @map("cache_key") // sha256(purpose + prompt_hash tĩnh + prompt động chuẩn hoá)
+  workspaceId String    @map("workspace_id") @db.Uuid
+  purpose     AiPurpose
+  response    Json
+  tokenLogId  String?   @map("token_log_id") @db.Uuid
+  hits        Int       @default(0)
+  expiresAt   DateTime  @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tokenLog  AiTokenLog? @relation(fields: [tokenLogId], references: [id], onDelete: SetNull)
 
-  @@id([workspaceId, userId, usageDate])
-  @@map("ai_usage_daily")
+  @@index([workspaceId, purpose, expiresAt])
+  @@map("ai_response_cache")
 }
 
 // ───────────────────────── Lịch bận ─────────────────────────
@@ -1139,18 +1128,4 @@ model UserMetricsWeekly {
 
   @@id([userId, workspaceId, weekStart, skillCategory])
   @@map("user_metrics_weekly")
-}
-
-model WeeklyCheckin {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  weekStart DateTime @map("week_start") @db.Date
-  score     Int // 1..5
-  note      String?
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, weekStart])
-  @@map("weekly_checkins")
 }
