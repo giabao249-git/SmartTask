@@ -1,0 +1,621 @@
+// SmartTask — schema lõi (docs/04-kien-truc/08-mo-hinh-du-lieu.md §1)
+// Quy ước: model PascalCase, bảng snake_case số nhiều (@@map), cột snake_case (@map).
+// Ràng buộc Prisma không diễn tả được (partial unique index, CHECK) nằm trong file migration SQL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ───────────────────────── Enums ─────────────────────────
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum ProjectRole {
+  PM
+  MEMBER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum SprintStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskSize {
+  S
+  M
+  L
+  XL
+}
+
+enum TaskSource {
+  MANUAL
+  AI
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  MENTIONED
+  TASK_DUE_SOON
+  TASK_OVERDUE
+  WORKLOAD_ALERT
+  SPRINT_STARTED
+  SPRINT_CLOSED
+  AI_PROPOSAL_APPLIED
+  INVITATION
+}
+
+enum WorkloadLevel {
+  NORMAL
+  HIGH
+  FULL
+  OVERLOAD
+}
+
+enum AlertKind {
+  OVERLOAD
+  BURNOUT
+}
+
+enum TimeOffKind {
+  LEAVE
+  HOLIDAY
+  PARTIAL
+  RECURRING
+}
+
+// ───────────────────────── Tài khoản ─────────────────────────
+
+model User {
+  id                  String    @id @default(uuid()) @db.Uuid
+  email               String    @unique @db.Citext
+  passwordHash        String    @map("password_hash")
+  fullName            String    @map("full_name")
+  shortName           String?   @map("short_name")
+  avatarUrl           String?   @map("avatar_url")
+  timezone            String    @default("Asia/Ho_Chi_Minh")
+  weeklyCapacityHours Int?      @map("weekly_capacity_hours") // null = dùng mặc định workspace
+  notificationPrefs   Json      @default("{}") @map("notification_prefs")
+  isActive            Boolean   @default(true) @map("is_active")
+  lastLoginAt         DateTime? @map("last_login_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  refreshTokens     RefreshToken[]
+  ownedWorkspaces   Workspace[]        @relation("WorkspaceOwner")
+  workspaceMembers  WorkspaceMember[]
+  invitationsSent   Invitation[]       @relation("InvitationInviter")
+  userSkills        UserSkill[]        @relation("UserSkillOwner")
+  verifiedSkills    UserSkill[]        @relation("UserSkillVerifier")
+  projectMembers    ProjectMember[]
+  createdTasks      Task[]             @relation("TaskCreator")
+  taskAssignees     TaskAssignee[]
+  comments          Comment[]
+  mentions          Mention[]
+  attachments       Attachment[]
+  notifications     Notification[]
+  pushSubscriptions PushSubscription[]
+  activityLogs      ActivityLog[]
+  workloadSnapshots WorkloadSnapshot[]
+  workloadAlerts    WorkloadAlert[]    @relation("AlertUser")
+  ackedAlerts       WorkloadAlert[]    @relation("AlertAcker")
+  timeOffs          UserTimeOff[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  userAgent String?   @map("user_agent")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ───────────────────────── Workspace ─────────────────────────
+
+model Workspace {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String
+  slug       String    @unique
+  logoUrl    String?   @map("logo_url")
+  ownerId    String    @map("owner_id") @db.Uuid
+  // ngưỡng tải, trọng số, workdays, holidays, defaultCapacityHours, ai.dailyLimitPerUser, usdVnd
+  settings   Json      @default("{}")
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  owner       User               @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members     WorkspaceMember[]
+  invitations Invitation[]
+  skills      Skill[]
+  projects    Project[]
+  snapshots   WorkloadSnapshot[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  workspaceId String        @map("workspace_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now()) @map("joined_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model Invitation {
+  id          String           @id @default(uuid()) @db.Uuid
+  workspaceId String           @map("workspace_id") @db.Uuid
+  email       String?          @db.Citext // null = link mời chung
+  role        WorkspaceRole    @default(MEMBER)
+  token       String           @unique
+  status      InvitationStatus @default(PENDING)
+  invitedById String           @map("invited_by_id") @db.Uuid
+  expiresAt   DateTime         @map("expires_at")
+  acceptedAt  DateTime?        @map("accepted_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation("InvitationInviter", fields: [invitedById], references: [id])
+
+  @@index([workspaceId, status])
+  @@map("invitations")
+}
+
+// ───────────────────────── Kỹ năng ─────────────────────────
+
+model Skill {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  name        String
+  category    String   @default("Khác")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace  Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  aliases    SkillAlias[]
+  userSkills UserSkill[]
+  taskSkills TaskSkill[]
+
+  @@unique([workspaceId, name])
+  @@map("skills")
+}
+
+model SkillAlias {
+  skillId String @map("skill_id") @db.Uuid
+  alias   String
+
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([skillId, alias])
+  @@map("skill_aliases")
+}
+
+model UserSkill {
+  userId       String    @map("user_id") @db.Uuid
+  skillId      String    @map("skill_id") @db.Uuid
+  level        Int // 1..5 (CHECK trong migration)
+  verifiedById String?   @map("verified_by_id") @db.Uuid
+  verifiedAt   DateTime? @map("verified_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user       User  @relation("UserSkillOwner", fields: [userId], references: [id], onDelete: Cascade)
+  skill      Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  verifiedBy User? @relation("UserSkillVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@id([userId, skillId])
+  @@map("user_skills")
+}
+
+// ───────────────────────── Dự án ─────────────────────────
+
+model Project {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  key         String // "ST" — mã task = key-number
+  name        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+  startDate   DateTime?     @map("start_date") @db.Date
+  endDate     DateTime?     @map("end_date") @db.Date
+  taskCounter Int           @default(0) @map("task_counter")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members      ProjectMember[]
+  columns      BoardColumn[]
+  labels       Label[]
+  sprints      Sprint[]
+  tasks        Task[]
+  activityLogs ActivityLog[]
+
+  @@unique([workspaceId, key])
+  @@map("projects")
+}
+
+model ProjectMember {
+  projectId String      @map("project_id") @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  role      ProjectRole @default(MEMBER)
+  joinedAt  DateTime    @default(now()) @map("joined_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+  @@map("project_members")
+}
+
+model BoardColumn {
+  id        String  @id @default(uuid()) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  name      String
+  statusKey String  @map("status_key") // TODO | IN_PROGRESS | REVIEW | DONE — cột DONE đặt completed_at
+  position  Int
+  wipLimit  Int?    @map("wip_limit")
+  isDone    Boolean @default(false) @map("is_done")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@unique([projectId, statusKey])
+  @@map("board_columns")
+}
+
+model Label {
+  id        String @id @default(uuid()) @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  name      String
+  color     String @default("#64748b")
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskLabels TaskLabel[]
+
+  @@unique([projectId, name])
+  @@map("labels")
+}
+
+model Sprint {
+  id                String       @id @default(uuid()) @db.Uuid
+  projectId         String       @map("project_id") @db.Uuid
+  name              String
+  goal              String?
+  startDate         DateTime     @map("start_date") @db.Date
+  endDate           DateTime     @map("end_date") @db.Date
+  status            SprintStatus @default(PLANNED)
+  scopeHoursInitial Decimal?     @map("scope_hours_initial") @db.Decimal(8, 2)
+  startedAt         DateTime?    @map("started_at")
+  closedAt          DateTime?    @map("closed_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  project   Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  snapshots BurndownSnapshot[]
+
+  @@index([projectId, status])
+  @@map("sprints")
+}
+
+// ───────────────────────── Công việc ─────────────────────────
+
+model Task {
+  id             String     @id @default(uuid()) @db.Uuid
+  projectId      String     @map("project_id") @db.Uuid
+  sprintId       String?    @map("sprint_id") @db.Uuid
+  parentId       String?    @map("parent_id") @db.Uuid
+  columnId       String     @map("column_id") @db.Uuid
+  number         Int
+  title          String
+  description    String?
+  priority       Priority   @default(MEDIUM)
+  isUrgent       Boolean    @default(false) @map("is_urgent")
+  difficulty     Int        @default(3) // 1..5
+  size           TaskSize?
+  startDate      DateTime?  @map("start_date") @db.Date
+  dueDate        DateTime?  @map("due_date") @db.Date
+  estimateHours  Decimal?   @map("estimate_hours") @db.Decimal(7, 2)
+  remainingHours Decimal?   @map("remaining_hours") @db.Decimal(7, 2)
+  progress       Int        @default(0) // 0..100
+  position       Float      @default(0)
+  version        Int        @default(1)
+  source         TaskSource @default(MANUAL)
+  aiProposalId   String?    @map("ai_proposal_id") @db.Uuid // FK thêm ở phase AI
+  createdById    String     @map("created_by_id") @db.Uuid
+  startedAt      DateTime?  @map("started_at")
+  completedAt    DateTime?  @map("completed_at")
+  deletedAt      DateTime?  @map("deleted_at")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint       Sprint?          @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  parent       Task?            @relation("TaskParent", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks     Task[]           @relation("TaskParent")
+  column       BoardColumn      @relation(fields: [columnId], references: [id])
+  createdBy    User             @relation("TaskCreator", fields: [createdById], references: [id])
+  assignees    TaskAssignee[]
+  skills       TaskSkill[]
+  dependsOn    TaskDependency[] @relation("DependencyTask")
+  dependents   TaskDependency[] @relation("DependencyBlocker")
+  labels       TaskLabel[]
+  comments     Comment[]
+  attachments  Attachment[]
+  activityLogs ActivityLog[]
+
+  @@unique([projectId, number])
+  @@index([projectId, sprintId, columnId, position])
+  @@index([dueDate])
+  @@index([parentId])
+  @@map("tasks")
+}
+
+model TaskAssignee {
+  taskId     String   @map("task_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
+  @@map("task_assignees")
+}
+
+model TaskSkill {
+  taskId   String @map("task_id") @db.Uuid
+  skillId  String @map("skill_id") @db.Uuid
+  minLevel Int    @default(1) @map("min_level")
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, skillId])
+  @@map("task_skills")
+}
+
+model TaskDependency {
+  taskId      String @map("task_id") @db.Uuid
+  dependsOnId String @map("depends_on_id") @db.Uuid
+
+  task      Task @relation("DependencyTask", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOn Task @relation("DependencyBlocker", fields: [dependsOnId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, dependsOnId])
+  @@index([dependsOnId])
+  @@map("task_dependencies")
+}
+
+model TaskLabel {
+  taskId  String @map("task_id") @db.Uuid
+  labelId String @map("label_id") @db.Uuid
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@map("task_labels")
+}
+
+// ───────────────────────── Cộng tác ─────────────────────────
+
+model Comment {
+  id        String    @id @default(uuid()) @db.Uuid
+  taskId    String    @map("task_id") @db.Uuid
+  authorId  String    @map("author_id") @db.Uuid
+  parentId  String?   @map("parent_id") @db.Uuid
+  body      String
+  editedAt  DateTime? @map("edited_at")
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  task     Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id])
+  parent   Comment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[] @relation("CommentThread")
+  mentions Mention[]
+
+  @@index([taskId, createdAt])
+  @@map("comments")
+}
+
+model Mention {
+  commentId String @map("comment_id") @db.Uuid
+  userId    String @map("user_id") @db.Uuid
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, userId])
+  @@map("mentions")
+}
+
+model Attachment {
+  id          String   @id @default(uuid()) @db.Uuid
+  taskId      String   @map("task_id") @db.Uuid
+  uploaderId  String   @map("uploader_id") @db.Uuid
+  fileName    String   @map("file_name")
+  mime        String
+  sizeBytes   Int      @map("size_bytes")
+  storagePath String   @map("storage_path")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  task     Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploader User @relation(fields: [uploaderId], references: [id])
+
+  @@index([taskId])
+  @@map("attachments")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  body      String?
+  link      String?
+  data      Json?
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@map("notifications")
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+model ActivityLog {
+  id        String     @id @default(uuid()) @db.Uuid
+  projectId String     @map("project_id") @db.Uuid
+  taskId    String?    @map("task_id") @db.Uuid
+  actorId   String?    @map("actor_id") @db.Uuid
+  action    String // task.created | task.moved | task.assigned | comment.created | sprint.started ...
+  diff      Json?
+  source    TaskSource @default(MANUAL)
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task?   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([taskId, createdAt])
+  @@map("activity_logs")
+}
+
+// ───────────────────────── Tải & tiến độ ─────────────────────────
+
+model WorkloadSnapshot {
+  id               String        @id @default(uuid()) @db.Uuid
+  workspaceId      String        @map("workspace_id") @db.Uuid
+  userId           String        @map("user_id") @db.Uuid
+  weekStart        DateTime      @map("week_start") @db.Date
+  loadHours        Decimal       @map("load_hours") @db.Decimal(8, 2)
+  effLoadHours     Decimal       @map("eff_load_hours") @db.Decimal(8, 2)
+  capacityHours    Decimal       @map("capacity_hours") @db.Decimal(8, 2)
+  effCapacityHours Decimal       @map("eff_capacity_hours") @db.Decimal(8, 2)
+  utilization      Decimal       @db.Decimal(6, 3)
+  level            WorkloadLevel
+  riskScore        Int           @default(0) @map("risk_score")
+  riskBreakdown    Json?         @map("risk_breakdown")
+  computedAt       DateTime      @default(now()) @map("computed_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, weekStart])
+  @@index([userId, weekStart])
+  @@map("workload_snapshots")
+}
+
+model WorkloadAlert {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  weekStart   DateTime  @map("week_start") @db.Date
+  kind        AlertKind
+  riskScore   Int       @default(0) @map("risk_score")
+  notifiedAt  DateTime? @map("notified_at")
+  ackedById   String?   @map("acked_by_id") @db.Uuid
+  ackedAt     DateTime? @map("acked_at")
+  ackNote     String?   @map("ack_note")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user    User  @relation("AlertUser", fields: [userId], references: [id], onDelete: Cascade)
+  ackedBy User? @relation("AlertAcker", fields: [ackedById], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, userId, weekStart, kind])
+  @@map("workload_alerts")
+}
+
+model BurndownSnapshot {
+  sprintId       String   @map("sprint_id") @db.Uuid
+  date           DateTime @db.Date
+  scopeHours     Decimal  @map("scope_hours") @db.Decimal(8, 2)
+  remainingHours Decimal  @map("remaining_hours") @db.Decimal(8, 2)
+  completedHours Decimal  @map("completed_hours") @db.Decimal(8, 2)
+
+  sprint Sprint @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+
+  @@id([sprintId, date])
+  @@map("burndown_snapshots")
+}
+
+model UserTimeOff {
+  id             String      @id @default(uuid()) @db.Uuid
+  userId         String      @map("user_id") @db.Uuid
+  fromDate       DateTime    @map("from_date") @db.Date
+  toDate         DateTime    @map("to_date") @db.Date
+  kind           TimeOffKind @default(LEAVE)
+  hoursPerDay    Decimal?    @map("hours_per_day") @db.Decimal(4, 2) // PARTIAL
+  recurrenceRule String?     @map("recurrence_rule") // RECURRING, ví dụ "LAST_WEEK_OF_MONTH"
+  note           String?
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, fromDate, toDate])
+  @@map("user_time_off")
+}
