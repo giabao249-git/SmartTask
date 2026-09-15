@@ -51,6 +51,7 @@ export const COMMENT_EVENTS = {
 export const NOTIFICATION_EVENTS = { created: 'notification.created' } as const;
 
 export interface CommentEventPayload {
+  event?: string;
   projectId: string;
   taskId: string;
   commentId: string;

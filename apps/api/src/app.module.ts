@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -15,13 +15,14 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AccessModule } from './common/access/access.module';
 import { WorkspaceRoleGuard } from './common/guards/workspace-role.guard';
 import { ProjectsModule } from './projects/projects.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { SkillsModule } from './skills/skills.module';
 import { SprintsModule } from './sprints/sprints.module';
 import { TasksModule } from './tasks/tasks.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
-import { validateEnv } from './config/env.schema';
+import { validateEnv, type Env } from './config/env.schema';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
@@ -29,7 +30,16 @@ import { UsersModule } from './users/users.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) => [
+        {
+          name: 'default',
+          ttl: 60_000,
+          limit: config.get('RATE_LIMIT_PER_MINUTE', { infer: true }),
+        },
+      ],
+    }),
     EventEmitterModule.forRoot({ wildcard: true, delimiter: '.' }),
     ScheduleModule.forRoot(),
     PrismaModule,
@@ -49,6 +59,7 @@ import { UsersModule } from './users/users.module';
     MetricsModule,
     WorkloadModule,
     ForecastModule,
+    RealtimeModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

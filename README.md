@@ -17,7 +17,7 @@ kèm ước lượng; tự tính khối lượng công việc theo ma trận k�
 | 04 | 02/10 – 08/10 | Khảo sát hiện trạng, BFD/BPMN, FR/NFR | ⬜ |
 | 05 | 09/10 – 15/10 | Use Case, đặc tả UC, Sequence | ⬜ |
 | 06 | 16/10 – 22/10 | ERD 3NF, API Specs, Wireframe | ⬜ |
-| 07 | 23/10 – 29/10 | Core Backend (NestJS, JWT, RBAC, CSDL) | 🔄 bắt đầu sớm 15/09 — Phase 0–5 xong (…, tải/burnout/giờ trống/burn-down/dự báo); xem [docs/05-hien-thuc](docs/05-hien-thuc/00-ke-hoach-backend.md) |
+| 07 | 23/10 – 29/10 | Core Backend (NestJS, JWT, RBAC, CSDL) | 🔄 bắt đầu sớm 15/09 — Phase 0–6 xong (…, tải/burnout/dự báo, realtime Socket.io); xem [docs/05-hien-thuc](docs/05-hien-thuc/00-ke-hoach-backend.md) |
 | 08 | 30/10 – 05/11 | Frontend (Next.js), Realtime, Demo MVP | ⬜ |
 | 09–12 | 06/11 – 27/11 | Đóng băng, test, deploy, báo cáo, bảo vệ | ⬜ |
 

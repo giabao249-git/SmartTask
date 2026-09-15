@@ -21,6 +21,8 @@ export const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   APP_KEY: z.string().optional(),
+  /** Giới hạn tần suất chung mỗi IP mỗi phút (tăng khi chạy loadtest) */
+  RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(100),
   // Tìm kiếm @mention: có URL → Elasticsearch, không → pg_trgm
   ELASTICSEARCH_URL: z
     .string()
