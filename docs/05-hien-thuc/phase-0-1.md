@@ -45,3 +45,7 @@ curl -c cj.txt -H 'Content-Type: application/json' -d '{"email":"lan@smarttask.l
 ## Việc còn lại của phase (làm ở phase sau)
 - `prisma.config.ts` thay `package.json#prisma` (Prisma 7).
 - Log có cấu trúc (pino) — Phase 10.
+
+## Bổ sung 15/09 — nhóm bảng AI (migration `ai_chat_calendar_metrics`)
+
+Thêm 18 bảng + 14 enum: `ai_model_catalog`, `ai_configs`, `ai_prompt_configs`, `ai_personal_prompts`, `ai_memories`, `ai_habits`, `chat_sessions`, `chat_messages`, `ai_proposals`, `ai_feedback`, `ai_token_logs`, `ai_usage_daily`, `calendar_connections`, `calendar_events`, `time_entries`, `task_reviews`, `user_metrics_weekly`, `weekly_checkins`; FK `tasks.ai_proposal_id`. SQL tay: partial unique cho cấu hình mặc định và prompt active/version theo workspace hoặc hệ thống, CHECK rating/độ khó/điểm/confidence/giờ, index sổ token theo ngày. Tổng 46 bảng. Đối chiếu Table_Calendar/ELPREP ghi ở [08 §2](../04-kien-truc/08-mo-hinh-du-lieu.md).

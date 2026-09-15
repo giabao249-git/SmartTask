@@ -111,25 +111,41 @@ model User {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  refreshTokens     RefreshToken[]
-  ownedWorkspaces   Workspace[]        @relation("WorkspaceOwner")
-  workspaceMembers  WorkspaceMember[]
-  invitationsSent   Invitation[]       @relation("InvitationInviter")
-  userSkills        UserSkill[]        @relation("UserSkillOwner")
-  verifiedSkills    UserSkill[]        @relation("UserSkillVerifier")
-  projectMembers    ProjectMember[]
-  createdTasks      Task[]             @relation("TaskCreator")
-  taskAssignees     TaskAssignee[]
-  comments          Comment[]
-  mentions          Mention[]
-  attachments       Attachment[]
-  notifications     Notification[]
-  pushSubscriptions PushSubscription[]
-  activityLogs      ActivityLog[]
-  workloadSnapshots WorkloadSnapshot[]
-  workloadAlerts    WorkloadAlert[]    @relation("AlertUser")
-  ackedAlerts       WorkloadAlert[]    @relation("AlertAcker")
-  timeOffs          UserTimeOff[]
+  refreshTokens       RefreshToken[]
+  ownedWorkspaces     Workspace[]          @relation("WorkspaceOwner")
+  workspaceMembers    WorkspaceMember[]
+  invitationsSent     Invitation[]         @relation("InvitationInviter")
+  userSkills          UserSkill[]          @relation("UserSkillOwner")
+  verifiedSkills      UserSkill[]          @relation("UserSkillVerifier")
+  projectMembers      ProjectMember[]
+  createdTasks        Task[]               @relation("TaskCreator")
+  taskAssignees       TaskAssignee[]
+  comments            Comment[]
+  mentions            Mention[]
+  attachments         Attachment[]
+  notifications       Notification[]
+  pushSubscriptions   PushSubscription[]
+  activityLogs        ActivityLog[]
+  workloadSnapshots   WorkloadSnapshot[]
+  workloadAlerts      WorkloadAlert[]      @relation("AlertUser")
+  ackedAlerts         WorkloadAlert[]      @relation("AlertAcker")
+  timeOffs            UserTimeOff[]
+  aiConfigsCreated    AiConfig[]           @relation("AiConfigCreator")
+  aiPromptsEdited     AiPromptConfig[]     @relation("AiPromptEditor")
+  aiPersonalPrompt    AiPersonalPrompt?
+  aiMemories          AiMemory[]
+  aiHabits            AiHabit[]
+  chatSessions        ChatSession[]
+  aiProposals         AiProposal[]         @relation("ProposalOwner")
+  aiProposalsApplied  AiProposal[]         @relation("ProposalApplier")
+  aiTokenLogs         AiTokenLog[]
+  aiUsageDaily        AiUsageDaily[]
+  calendarConnections CalendarConnection[]
+  calendarEvents      CalendarEvent[]
+  timeEntries         TimeEntry[]
+  taskReviews         TaskReview[]
+  metricsWeekly       UserMetricsWeekly[]
+  weeklyCheckins      WeeklyCheckin[]
 
   @@map("users")
 }
@@ -163,12 +179,21 @@ model Workspace {
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  owner       User               @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  members     WorkspaceMember[]
-  invitations Invitation[]
-  skills      Skill[]
-  projects    Project[]
-  snapshots   WorkloadSnapshot[]
+  owner         User                @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members       WorkspaceMember[]
+  invitations   Invitation[]
+  skills        Skill[]
+  projects      Project[]
+  snapshots     WorkloadSnapshot[]
+  aiConfigs     AiConfig[]
+  aiPrompts     AiPromptConfig[]
+  aiMemories    AiMemory[]
+  aiHabits      AiHabit[]
+  chatSessions  ChatSession[]
+  aiProposals   AiProposal[]
+  aiTokenLogs   AiTokenLog[]
+  aiUsageDaily  AiUsageDaily[]
+  metricsWeekly UserMetricsWeekly[]
 
   @@map("workspaces")
 }
@@ -273,6 +298,8 @@ model Project {
   sprints      Sprint[]
   tasks        Task[]
   activityLogs ActivityLog[]
+  chatSessions ChatSession[]
+  aiProposals  AiProposal[]
 
   @@unique([workspaceId, key])
   @@map("projects")
@@ -366,7 +393,7 @@ model Task {
   position       Float      @default(0)
   version        Int        @default(1)
   source         TaskSource @default(MANUAL)
-  aiProposalId   String?    @map("ai_proposal_id") @db.Uuid // FK thêm ở phase AI
+  aiProposalId   String?    @map("ai_proposal_id") @db.Uuid
   createdById    String     @map("created_by_id") @db.Uuid
   startedAt      DateTime?  @map("started_at")
   completedAt    DateTime?  @map("completed_at")
@@ -388,6 +415,9 @@ model Task {
   comments     Comment[]
   attachments  Attachment[]
   activityLogs ActivityLog[]
+  aiProposal   AiProposal?      @relation(fields: [aiProposalId], references: [id], onDelete: SetNull)
+  timeEntries  TimeEntry[]
+  review       TaskReview?
 
   @@unique([projectId, number])
   @@index([projectId, sprintId, columnId, position])
@@ -618,4 +648,509 @@ model UserTimeOff {
 
   @@index([userId, fromDate, toDate])
   @@map("user_time_off")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// AI, chat, lịch bận, lịch sử làm việc (docs/04-kien-truc/08 §2)
+// Kế thừa AiConfig / AiModelCatalog / AiTokenLog / PromptConfiguration / ChatSession
+// của Table_Calendar và ELPREP: khai NĂNG LỰC model thay vì đoán theo tên; cấu hình theo
+// MỤC ĐÍCH; sổ token ghi cả lượt lỗi, có vân tay prompt và chi phí tại thời điểm gọi.
+// ═══════════════════════════════════════════════════════════════════════
+
+enum AiProvider {
+  GEMINI
+  OPENAI
+  OLLAMA
+}
+
+enum AiPurpose {
+  GENERAL
+  DECOMPOSE
+  ASSIGN
+  EXPLAIN
+  CHAT
+}
+
+enum AiCacheMode {
+  NONE
+  GEMINI_CACHED_CONTENTS
+  OPENAI_BREAKPOINT
+}
+
+enum AiPromptType {
+  MASTER
+  WORKSPACE
+}
+
+enum AiLogStatus {
+  SUCCESS
+  ERROR
+  TIMEOUT
+  INVALID_OUTPUT
+  QUOTA
+}
+
+enum AiMemoryKind {
+  PERSONAL
+  SCHEDULE
+  ASSIGNMENT
+  CAPACITY
+  PROJECT
+}
+
+enum AiMemoryStatus {
+  PROPOSED
+  CONFIRMED
+  DISABLED
+  STRUCTURED
+}
+
+enum AiHabitType {
+  ASSIGN_PATTERN
+  TIME_PATTERN
+  ESTIMATE_PATTERN
+  SKILL_GROWTH
+  SCOPE_PATTERN
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum AiProposalKind {
+  DECOMPOSE
+  ASSIGN
+  RESCHEDULE
+  REBALANCE
+  TASK_DRAFT
+}
+
+enum AiProposalStatus {
+  DRAFT
+  APPLIED
+  REJECTED
+  EXPIRED
+}
+
+enum AiFeedbackKind {
+  ACCEPTED
+  CHANGED_USER
+  CHANGED_TIME
+  CHANGED_HOURS
+  REJECTED
+}
+
+enum CalendarSource {
+  TABLE_CALENDAR
+  ICS
+  MANUAL
+}
+
+enum TimeEntrySource {
+  MANUAL
+  CYCLE_TIME
+}
+
+/// Danh mục model kèm NĂNG LỰC. Chỉ bật cờ cho model đã thử thật (bài học Table_Calendar/ELPREP:
+/// đoán theo tên model — "gemini" chứa "mini" — đã gây lỗi thật). AiProviderService BẮT BUỘC tra bảng này
+/// trước khi dựng request.
+model AiModelCatalog {
+  id                       String      @id @default(uuid()) @db.Uuid
+  provider                 AiProvider
+  model                    String
+  label                    String
+  /// USD cho MỘT TRIỆU token.
+  inputPrice               Float       @default(0) @map("input_price")
+  outputPrice              Float       @default(0) @map("output_price")
+  /// Giá token đầu vào đã trúng cache; null = không có giá riêng (tính như inputPrice).
+  cachedInputPrice         Float?      @map("cached_input_price")
+  priceEffectiveFrom       DateTime?   @map("price_effective_from") @db.Date
+  contextWindow            Int?        @map("context_window")
+  isReasoning              Boolean     @default(false) @map("is_reasoning")
+  supportsTemperature      Boolean     @default(true) @map("supports_temperature")
+  supportsStructuredOutput Boolean     @default(false) @map("supports_structured_output")
+  supportsVision           Boolean     @default(false) @map("supports_vision")
+  /// "max_tokens" hay "max_completion_tokens" (OpenAI dòng reasoning).
+  maxOutputTokenParam      String      @default("max_tokens") @map("max_output_token_param")
+  cacheMode                AiCacheMode @default(NONE) @map("cache_mode")
+  isActive                 Boolean     @default(true) @map("is_active")
+  sortOrder                Int         @default(0) @map("sort_order")
+  createdAt                DateTime    @default(now()) @map("created_at")
+  updatedAt                DateTime    @updatedAt @map("updated_at")
+
+  configs AiConfig[]
+
+  @@unique([provider, model])
+  @@index([provider, isActive])
+  @@map("ai_model_catalog")
+}
+
+/// Khoá API + model cho một MỤC ĐÍCH trong một workspace (null = mặc định hệ thống, lấy từ env khi
+/// chưa có dòng nào). Phân rã cần model sáng tạo hơn, phân công cần bám schema chặt — chia theo việc thì
+/// đổi model cho việc này không kéo theo việc kia.
+model AiConfig {
+  id              String     @id @default(uuid()) @db.Uuid
+  workspaceId     String?    @map("workspace_id") @db.Uuid
+  name            String
+  provider        AiProvider
+  model           String
+  catalogId       String?    @map("catalog_id") @db.Uuid
+  /// AES-256-GCM bằng APP_KEY: base64(iv):base64(tag):base64(cipher). Không bao giờ trả về API.
+  apiKeyEncrypted String?    @map("api_key_encrypted")
+  baseUrl         String?    @map("base_url")
+  purpose         AiPurpose  @default(GENERAL)
+  /// JSON: { temperature?, maxOutputTokens?, promptCache?: { enabled, ttlSeconds, minStaticChars }, trace?: { enabled } }
+  advancedParams  Json?      @map("advanced_params")
+  timeoutMs       Int        @default(30000) @map("timeout_ms")
+  /// Giá chụp lại tại thời điểm cấu hình để sổ cũ giữ đúng chi phí lúc đó (ELPREP).
+  inputPrice      Float      @default(0) @map("input_price")
+  outputPrice     Float      @default(0) @map("output_price")
+  isDefault       Boolean    @default(false) @map("is_default")
+  isActive        Boolean    @default(true) @map("is_active")
+  notes           String?
+  createdById     String?    @map("created_by_id") @db.Uuid
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  workspace Workspace?      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  catalog   AiModelCatalog? @relation(fields: [catalogId], references: [id], onDelete: SetNull)
+  createdBy User?           @relation("AiConfigCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  tokenLogs AiTokenLog[]
+
+  @@index([workspaceId, purpose, isActive, isDefault])
+  @@map("ai_configs")
+}
+
+/// Prompt có phiên bản: MASTER (hệ thống, workspace_id null) và WORKSPACE (Admin). Quay lại bản cũ được;
+/// ai_token_logs trỏ tới đúng phiên bản đã dùng.
+model AiPromptConfig {
+  id          String       @id @default(uuid()) @db.Uuid
+  workspaceId String?      @map("workspace_id") @db.Uuid
+  type        AiPromptType
+  version     Int          @default(1)
+  content     String
+  isActive    Boolean      @default(true) @map("is_active")
+  changeNote  String?      @map("change_note")
+  updatedById String?      @map("updated_by_id") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  updatedBy User?      @relation("AiPromptEditor", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, type, isActive])
+  @@map("ai_prompt_configs")
+}
+
+model AiPersonalPrompt {
+  userId    String   @id @map("user_id") @db.Uuid
+  content   String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_personal_prompts")
+}
+
+/// Trí nhớ riêng của từng người dùng (docs 06). Chỉ CONFIRMED mới vào prompt; DB luôn thắng memory.
+model AiMemory {
+  id                  String         @id @default(uuid()) @db.Uuid
+  userId              String         @map("user_id") @db.Uuid
+  workspaceId         String         @map("workspace_id") @db.Uuid
+  kind                AiMemoryKind   @default(PERSONAL)
+  content             String
+  status              AiMemoryStatus @default(PROPOSED)
+  /// Đề xuất chuyển thành dữ liệu có cấu trúc: { type: "TIME_OFF" | "CAPACITY" | "SKILL", ... }
+  suggestedStructured Json?          @map("suggested_structured")
+  sourceMessageId     String?        @map("source_message_id") @db.Uuid
+  validUntil          DateTime?      @map("valid_until") @db.Date
+  confirmedAt         DateTime?      @map("confirmed_at")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceMessage ChatMessage? @relation(fields: [sourceMessageId], references: [id], onDelete: SetNull)
+
+  @@index([userId, workspaceId, status])
+  @@map("ai_memories")
+}
+
+/// Thói quen hệ thống suy ra từ ai_feedback và hành vi; người dùng bật/tắt, không sửa nội dung.
+model AiHabit {
+  id             String      @id @default(uuid()) @db.Uuid
+  userId         String      @map("user_id") @db.Uuid
+  workspaceId    String      @map("workspace_id") @db.Uuid
+  type           AiHabitType
+  key            String
+  value          Json
+  timesObserved  Int         @default(1) @map("times_observed")
+  confidence     Float       @default(0.3)
+  isVisible      Boolean     @default(true) @map("is_visible")
+  lastObservedAt DateTime    @default(now()) @map("last_observed_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId, type, key])
+  @@map("ai_habits")
+}
+
+model ChatSession {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  projectId   String?  @map("project_id") @db.Uuid
+  title       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  messages  ChatMessage[]
+
+  @@index([userId, workspaceId, updatedAt])
+  @@map("chat_sessions")
+}
+
+/// structured_data = structured action đã validate (không phải văn bản thô) — lượt sau LLM đọc lại để hiểu
+/// "phương án 2"; giao diện render thẻ theo type.
+model ChatMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  sessionId      String   @map("session_id") @db.Uuid
+  role           ChatRole
+  text           String
+  structuredData Json?    @map("structured_data")
+  schemaVersion  Int      @default(1) @map("schema_version")
+  parseFailed    Boolean  @default(false) @map("parse_failed")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  session   ChatSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  proposals AiProposal[]
+  memories  AiMemory[]
+  tokenLogs AiTokenLog[]
+
+  @@index([sessionId, createdAt])
+  @@map("chat_messages")
+}
+
+/// Đề xuất của AI có vòng đời: DRAFT → APPLIED / REJECTED / EXPIRED (7 ngày). code_map đổi mã ngắn u1/t1 về UUID.
+model AiProposal {
+  id               String           @id @default(uuid()) @db.Uuid
+  workspaceId      String           @map("workspace_id") @db.Uuid
+  projectId        String           @map("project_id") @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  messageId        String?          @map("message_id") @db.Uuid
+  kind             AiProposalKind
+  payload          Json
+  codeMap          Json?            @map("code_map")
+  validationResult Json?            @map("validation_result")
+  status           AiProposalStatus @default(DRAFT)
+  appliedById      String?          @map("applied_by_id") @db.Uuid
+  appliedAt        DateTime?        @map("applied_at")
+  expiresAt        DateTime         @map("expires_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User         @relation("ProposalOwner", fields: [userId], references: [id], onDelete: Cascade)
+  appliedBy User?        @relation("ProposalApplier", fields: [appliedById], references: [id], onDelete: SetNull)
+  message   ChatMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  feedback  AiFeedback[]
+  tasks     Task[]
+
+  @@index([projectId, status, createdAt])
+  @@map("ai_proposals")
+}
+
+/// Đề xuất của AI so với quyết định cuối của người — nguồn hiệu chỉnh và số liệu "tỷ lệ chấp nhận".
+model AiFeedback {
+  id           String         @id @default(uuid()) @db.Uuid
+  proposalId   String         @map("proposal_id") @db.Uuid
+  taskId       String?        @map("task_id") @db.Uuid
+  proposed     Json
+  final        Json?
+  editKind     AiFeedbackKind @map("edit_kind")
+  spreadBefore Float?         @map("spread_before")
+  spreadAfter  Float?         @map("spread_after")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  proposal AiProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId])
+  @@map("ai_feedback")
+}
+
+/// Sổ token: ghi CẢ lượt lỗi. Vân tay prompt + phiên bản prompt để chứng minh một thay đổi có tác dụng.
+model AiTokenLog {
+  id                     String      @id @default(uuid()) @db.Uuid
+  configId               String?     @map("config_id") @db.Uuid
+  workspaceId            String?     @map("workspace_id") @db.Uuid
+  userId                 String?     @map("user_id") @db.Uuid
+  messageId              String?     @map("message_id") @db.Uuid
+  endpoint               String
+  purpose                AiPurpose   @default(GENERAL)
+  provider               AiProvider
+  model                  String
+  inputTokens            Int         @default(0) @map("input_tokens")
+  cachedInputTokens      Int         @default(0) @map("cached_input_tokens")
+  outputTokens           Int         @default(0) @map("output_tokens")
+  reasoningTokens        Int         @default(0) @map("reasoning_tokens")
+  totalTokens            Int         @default(0) @map("total_tokens")
+  /// USD, tính tại thời điểm gọi theo giá lúc đó.
+  estimatedCost          Float       @default(0) @map("estimated_cost")
+  durationMs             Int         @default(0) @map("duration_ms")
+  status                 AiLogStatus @default(SUCCESS)
+  errorMessage           String?     @map("error_message")
+  promptChars            Int?        @map("prompt_chars")
+  promptHash             String?     @map("prompt_hash")
+  masterPromptVersion    Int?        @map("master_prompt_version")
+  workspacePromptVersion Int?        @map("workspace_prompt_version")
+  /// Cắt 2.000 ký tự, LUÔN ghi — không có thì không lần ra lượt nào ứng với khiếu nại nào.
+  userMessage            String?     @map("user_message")
+  /// Chỉ ghi phần ĐỘNG khi bật trace.
+  promptText             String?     @map("prompt_text")
+  /// Luôn ghi khi lỗi; lượt thành công chỉ khi bật trace.
+  rawResponse            String?     @map("raw_response")
+  createdAt              DateTime    @default(now()) @map("created_at")
+
+  config    AiConfig?    @relation(fields: [configId], references: [id], onDelete: SetNull)
+  workspace Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  message   ChatMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("ai_token_logs")
+}
+
+/// Đếm hạn mức theo ngày (ELPREP AiUsage) — rẻ hơn đếm ai_token_logs mỗi lượt.
+model AiUsageDaily {
+  workspaceId String   @map("workspace_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  usageDate   DateTime @map("usage_date") @db.Date
+  calls       Int      @default(0)
+  tokens      Int      @default(0)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, userId, usageDate])
+  @@map("ai_usage_daily")
+}
+
+// ───────────────────────── Lịch bận ─────────────────────────
+
+model CalendarConnection {
+  id                   String         @id @default(uuid()) @db.Uuid
+  userId               String         @map("user_id") @db.Uuid
+  source               CalendarSource
+  /// URL ICS hoặc email Table_Calendar — mã hoá bằng APP_KEY.
+  externalRefEncrypted String?        @map("external_ref_encrypted")
+  lastSyncedAt         DateTime?      @map("last_synced_at")
+  lastError            String?        @map("last_error")
+  isActive             Boolean        @default(true) @map("is_active")
+  createdAt            DateTime       @default(now()) @map("created_at")
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events CalendarEvent[]
+
+  @@index([userId, isActive])
+  @@map("calendar_connections")
+}
+
+/// Chỉ giữ khung giờ bận; không lưu nội dung cuộc họp.
+model CalendarEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  connectionId String   @map("connection_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  externalId   String?  @map("external_id")
+  startAt      DateTime @map("start_at")
+  endAt        DateTime @map("end_at")
+  isBusy       Boolean  @default(true) @map("is_busy")
+  title        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  connection CalendarConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, externalId])
+  @@index([userId, startAt])
+  @@map("calendar_events")
+}
+
+// ───────────────────────── Lịch sử làm việc (EAR, vận tốc, rating) ─────────────────────────
+
+model TimeEntry {
+  id        String          @id @default(uuid()) @db.Uuid
+  taskId    String          @map("task_id") @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  workDate  DateTime        @map("work_date") @db.Date
+  hours     Decimal         @db.Decimal(5, 2)
+  source    TimeEntrySource @default(MANUAL)
+  note      String?
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, workDate])
+  @@index([taskId])
+  @@map("time_entries")
+}
+
+model TaskReview {
+  taskId               String   @id @map("task_id") @db.Uuid
+  reviewerId           String   @map("reviewer_id") @db.Uuid
+  rating               Int // 1..5
+  difficultyActual     Int      @map("difficulty_actual") // 1..5
+  actualHoursConfirmed Decimal? @map("actual_hours_confirmed") @db.Decimal(7, 2)
+  comment              String?
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  task     Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  reviewer User @relation(fields: [reviewerId], references: [id])
+
+  @@map("task_reviews")
+}
+
+/// Vật chất hoá bằng cron chủ nhật (docs 04 §2); sample_size đi kèm mọi số để biết độ tin cậy.
+model UserMetricsWeekly {
+  userId          String   @map("user_id") @db.Uuid
+  workspaceId     String   @map("workspace_id") @db.Uuid
+  weekStart       DateTime @map("week_start") @db.Date
+  skillCategory   String   @default("*") @map("skill_category")
+  ear             Float    @default(1)
+  velocityHours   Float    @default(0) @map("velocity_hours")
+  onTimeRate      Float?   @map("on_time_rate")
+  avgRating       Float?   @map("avg_rating")
+  medianCycleDays Float?   @map("median_cycle_days")
+  reopenCount     Int      @default(0) @map("reopen_count")
+  sampleSize      Int      @default(0) @map("sample_size")
+  computedAt      DateTime @default(now()) @map("computed_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([userId, workspaceId, weekStart, skillCategory])
+  @@map("user_metrics_weekly")
+}
+
+model WeeklyCheckin {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  weekStart DateTime @map("week_start") @db.Date
+  score     Int // 1..5
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+  @@map("weekly_checkins")
 }

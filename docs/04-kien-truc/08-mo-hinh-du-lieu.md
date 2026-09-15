@@ -136,7 +136,25 @@ erDiagram
 
 Các bảng còn lại của lõi có thuộc tính hiển nhiên: `invitations(email, token, role, expires_at, status)`, `refresh_tokens(user_id, token_hash, expires_at, revoked_at)`, `board_columns(name, status_key, position, wip_limit)`, `labels(name, color)`, `task_assignees`, `task_skills(min_level)`, `task_labels`, `comments(body, parent_id, edited_at)`, `mentions`, `attachments(file_name, mime, size_bytes, storage_path)`, `notifications(type, title, link, is_read)`, `push_subscriptions(endpoint UK, p256dh, auth, user_agent)`, `activity_logs(project_id, task_id, actor_id, action, diff json, source)`.
 
-## 2. AI, chat, lịch, lịch sử (21 bảng)
+## 2. AI, chat, lịch, lịch sử (18 bảng — đã có trong `schema.prisma`, migration `ai_chat_calendar_metrics`)
+
+Đối chiếu với Table_Calendar (`AiConfig`, `AiModelCatalog`, `AiTokenLog`, `PromptConfiguration`, `ChatSession/ChatMessage`, `AiRuntimeConfig`) và ELPREP (`AiConfig.purpose`, `AiModelCatalog.supportsVision/maxOutputTokenParam`, `AiTokenLog.reasoningTokens/estimatedCost/status TIMEOUT|INVALID_OUTPUT`, `PromptConfiguration` có `changeNote` + unique `(type, version)`, `AiUsage` đếm hạn mức theo ngày):
+
+| Bảng SmartTask | Lấy từ | Thêm/khác |
+|---|---|---|
+| `ai_model_catalog` | cả hai | + `cached_input_price`, `price_effective_from`, `context_window`, `cache_mode` (Table_Calendar), `supports_vision`, `max_output_token_param` (ELPREP) |
+| `ai_configs` | cả hai | `workspace_id` null = mặc định hệ thống; `purpose` GENERAL/DECOMPOSE/ASSIGN/EXPLAIN/CHAT; khoá mã hoá AES-GCM; giá chụp lại (ELPREP); `catalog_id` để tra năng lực |
+| `ai_prompt_configs` | `PromptConfiguration` | MASTER (hệ thống) / WORKSPACE; partial unique: một ACTIVE mỗi (workspace, type), version không trùng |
+| `ai_personal_prompts`, `ai_memories`, `ai_habits` | Table_Calendar V2 (Personal prompt, Memory, Habit) | memory có `kind`, `status`, `suggested_structured`, `valid_until`; habit có `times_observed`, `confidence`, `is_visible` |
+| `chat_sessions`, `chat_messages` | Table_Calendar | + `project_id`, `parse_failed`; `structured_data` là action đã validate |
+| `ai_proposals`, `ai_feedback` | mới | vòng đời DRAFT→APPLIED, `code_map`, `validation_result`; feedback = đề xuất vs quyết định + Spread trước/sau |
+| `ai_token_logs` | cả hai | + `purpose`, `workspace_id`, `message_id`, `reasoning_tokens`, `estimated_cost`, `master/workspace_prompt_version`, status có `QUOTA` |
+| `ai_usage_daily` | ELPREP `AiUsage` | (workspace, user, ngày) → calls, tokens; kiểm hạn mức O(1) |
+| `calendar_connections`, `calendar_events` | mới | chỉ khung giờ bận |
+| `time_entries`, `task_reviews`, `user_metrics_weekly`, `weekly_checkins` | mới | nguồn EAR, rating, vận tốc |
+| `user_time_off` | (đã ở lõi) | |
+
+Không lấy `AiRuntimeConfig` (singleton) của Table_Calendar: các tuỳ chọn `dataSources`/`promptCache` đặt trong `ai_configs.advanced_params` theo từng cấu hình, vì SmartTask đa workspace.
 
 ```mermaid
 erDiagram
