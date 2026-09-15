@@ -8,6 +8,7 @@ coverage/
 
 # Môi trường & bí mật — KHÔNG commit
 .env
+apps/api/.env
 .env.*
 !.env.example
 *.pem

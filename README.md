@@ -17,7 +17,7 @@ kèm ước lượng; tự tính khối lượng công việc theo ma trận k�
 | 04 | 02/10 – 08/10 | Khảo sát hiện trạng, BFD/BPMN, FR/NFR | ⬜ |
 | 05 | 09/10 – 15/10 | Use Case, đặc tả UC, Sequence | ⬜ |
 | 06 | 16/10 – 22/10 | ERD 3NF, API Specs, Wireframe | ⬜ |
-| 07 | 23/10 – 29/10 | Core Backend (NestJS, JWT, RBAC, CSDL) | ⬜ chưa bắt đầu code |
+| 07 | 23/10 – 29/10 | Core Backend (NestJS, JWT, RBAC, CSDL) | 🔄 bắt đầu sớm 15/09 — Phase 0–1 xong (khung, Prisma, auth); xem [docs/05-hien-thuc](docs/05-hien-thuc/00-ke-hoach-backend.md) |
 | 08 | 30/10 – 05/11 | Frontend (Next.js), Realtime, Demo MVP | ⬜ |
 | 09–12 | 06/11 – 27/11 | Đóng băng, test, deploy, báo cáo, bảo vệ | ⬜ |
 
@@ -33,8 +33,8 @@ SmartTask/
 │   ├── 04-kien-truc/      # kiến trúc, module, UC, công thức, AI agent, trí nhớ, cache & chi phí, dữ liệu
 │   └── 09-bien-ban/       # biên bản họp nhóm, biên bản làm việc với GVHD
 ├── infra/                 # docker-compose PostgreSQL cục bộ
-├── apps/                  # (Tuần 7–8) apps/api NestJS · apps/web Next.js
-└── packages/              # (Tuần 7) packages/shared — kiểu dữ liệu, zod schema dùng chung
+├── apps/api/              # NestJS 11 + Prisma 6 (Phase 0–1 xong) · apps/web Next.js (Tuần 8)
+└── packages/shared/       # mã lỗi, kiểu dữ liệu, zod schema dùng chung
 ```
 
 ## Bắt đầu nhanh (môi trường phát triển — Tuần 02)
@@ -48,9 +48,19 @@ cp .env.example .env
 make db-up          # PostgreSQL 16 tại localhost:5434 (5432/5433 đã có dự án khác dùng)
 make db-psql        # vào psql kiểm tra; make db-ui mở Adminer tại :8080
 
-# 3. Nhánh làm việc
+# 3. API
+npm install                 # cài toàn bộ workspace, tự build packages/shared
+npm run db:deploy           # áp migration
+npm run db:seed             # 3 tài khoản demo (mật khẩu Demo@1234)
+npm run api:dev             # http://localhost:3000/docs
+
+# 4. Kiểm thử
+npm run api:test            # unit
+npm run api:test:e2e        # e2e trên schema smarttask_test (tự tạo lại)
+
+# 5. Nhánh làm việc
 git switch develop
-git switch -c feature/UC-01-dang-ky
+git switch -c feature/be-p2-workspaces
 ```
 
 Quy tắc nhánh, commit và PR: [docs/00-quy-che/quy-tac-git.md](docs/00-quy-che/quy-tac-git.md).
