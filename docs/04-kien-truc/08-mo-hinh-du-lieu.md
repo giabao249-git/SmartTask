@@ -136,9 +136,9 @@ erDiagram
 
 Các bảng còn lại của lõi có thuộc tính hiển nhiên: `invitations(email, token, role, expires_at, status)`, `refresh_tokens(user_id, token_hash, expires_at, revoked_at)`, `board_columns(name, status_key, position, wip_limit)`, `labels(name, color)`, `task_assignees`, `task_skills(min_level)`, `task_labels`, `comments(body, parent_id, edited_at)`, `mentions`, `attachments(file_name, mime, size_bytes, storage_path)`, `notifications(type, title, link, is_read)`, `push_subscriptions(endpoint UK, p256dh, auth, user_agent)`, `activity_logs(project_id, task_id, actor_id, action, diff json, source)`.
 
-## 2. AI, chat, lịch, lịch sử (16 bảng — `schema.prisma`, migration `ai_chat_calendar_metrics` + `ai_tables_review`)
+## 2. AI, chat, lịch, lịch sử (15 bảng — `schema.prisma`, migration `ai_chat_calendar_metrics` + `ai_tables_review` + `drop_ai_response_cache`)
 
-> Rà soát dư/đủ ngày 15/09: bỏ `ai_personal_prompts` (→ cột `users.ai_personal_prompt`), `ai_usage_daily` (đếm log), `weekly_checkins` (UC-41 không làm); bỏ `ai_configs.provider/model/giá` (tra catalog) và `ai_proposals.workspace_id`; thêm `ai_response_cache` và `ai_token_logs.proposal_id`. Lý do từng điểm: [05-hien-thuc/ra-soat-bang-ai.md](../05-hien-thuc/ra-soat-bang-ai.md).
+> Rà soát dư/đủ ngày 15/09: bỏ `ai_personal_prompts` (→ cột `users.ai_personal_prompt`), `ai_usage_daily` (đếm log), `weekly_checkins` (UC-41 không làm); bỏ `ai_configs.provider/model/giá` (tra catalog) và `ai_proposals.workspace_id`; thêm `ai_token_logs.proposal_id`; `ai_response_cache` từng thêm rồi bỏ (không cần ở quy mô này). Lý do từng điểm: [05-hien-thuc/ra-soat-bang-ai.md](../05-hien-thuc/ra-soat-bang-ai.md).
 
 Đối chiếu với Table_Calendar (`AiConfig`, `AiModelCatalog`, `AiTokenLog`, `PromptConfiguration`, `ChatSession/ChatMessage`, `AiRuntimeConfig`) và ELPREP (`AiConfig.purpose`, `AiModelCatalog.supportsVision/maxOutputTokenParam`, `AiTokenLog.reasoningTokens/estimatedCost/status TIMEOUT|INVALID_OUTPUT`, `PromptConfiguration` có `changeNote` + unique `(type, version)`, `AiUsage` đếm hạn mức theo ngày):
 
@@ -151,7 +151,6 @@ Các bảng còn lại của lõi có thuộc tính hiển nhiên: `invitations(
 | `chat_sessions`, `chat_messages` | Table_Calendar | + `project_id`, `parse_failed`; `structured_data` là action đã validate |
 | `ai_proposals`, `ai_feedback` | mới | vòng đời DRAFT→APPLIED, `code_map`, `validation_result`; workspace suy từ `project_id`; feedback = đề xuất vs quyết định + Spread trước/sau |
 | `ai_token_logs` | cả hai | + `purpose`, `workspace_id`, `message_id`, `proposal_id`, `reasoning_tokens`, `estimated_cost`, `master/workspace_prompt_version`, status có `QUOTA`; hạn mức/ngày = `COUNT(*)` trên index `(user_id, created_at)` |
-| `ai_response_cache` | mới | `cache_key` = sha256(purpose + hash tĩnh + động chuẩn hoá) → structured action, `expires_at`, `hits`; cho EXPLAIN 6 giờ và DECOMPOSE trùng yêu cầu |
 | `calendar_connections`, `calendar_events` | mới | chỉ khung giờ bận |
 | `time_entries`, `task_reviews`, `user_metrics_weekly` | mới | nguồn EAR, rating, vận tốc; check-in tuần (UC-41) không làm nên không có bảng |
 | `user_time_off` | (đã ở lõi) | |

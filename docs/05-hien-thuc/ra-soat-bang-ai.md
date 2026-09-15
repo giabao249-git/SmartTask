@@ -20,12 +20,12 @@ Ngày 15/09/2026, sau migration `ai_chat_calendar_metrics` (18 bảng). Tiêu ch
 | `calendar_connections`, `calendar_events` | Đủ (S6) | Giữ |
 | `time_entries`, `task_reviews`, `user_metrics_weekly` | Đủ (S5); `user_metrics_weekly` là vật chất hoá, có thể tính on-the-fly ở quy mô 30 người nhưng cần cho biểu đồ xu hướng trong báo cáo | Giữ |
 | `weekly_checkins` | **Dư theo phạm vi**: UC-41 là Could, đã chốt không làm | Bỏ (YAGNI) |
-| — | **Thiếu** chỗ lưu kết quả AI để tái sử dụng 6 giờ (07 §5): `raw_response` chỉ ghi khi lỗi/trace, `ai_proposals` chỉ có cho phân rã/phân công, không có cho EXPLAIN | Thêm `ai_response_cache` |
+| — | Cache kết quả AI 6 giờ (07 §5 bản cũ) | **Bỏ ý này** (quyết định 15/09): hạn mức đã đủ chặn lạm dụng, DRAFT đang mở trả lại được; thêm bảng là thêm một thứ phải dọn |
 | — | Cache prompt tĩnh Gemini (`cachedContents` name ↔ hash ↔ hạn) | Không cần bảng: một instance, giữ trong bộ nhớ và liệt kê lại qua API khi khởi động (cách `GeminiPromptCacheService` của Table_Calendar) |
 | — | Bộ hồi quy 20 kịch bản | File JSON trong repo, không phải bảng |
 | — | Idempotency cho `apply` | Chính `ai_proposals.id` + `status` là khoá; không cần bảng |
 
-Sau rà soát: **18 → 16 bảng** nhóm AI (bỏ 3, thêm 1), tổng 44 bảng. Không bảng nào chỉ "có cho đủ bộ".
+Sau rà soát: **18 → 15 bảng** nhóm AI (bỏ 3; `ai_response_cache` từng thêm rồi bỏ), tổng 43 bảng. Không bảng nào chỉ "có cho đủ bộ".
 
 ## Chi tiết từng điểm
 
@@ -43,20 +43,8 @@ Hạn mức = `COUNT(*) FROM ai_token_logs WHERE user_id = ? AND created_at >= <
 ### `weekly_checkins` → bỏ
 UC-41 ở mức Could và đã chốt "không làm" ([11 §1.3](../04-kien-truc/11-chot-chuc-nang-va-api.md)). Hạng tử check-in trong công thức burnout ([04 §4](../04-kien-truc/04-cong-thuc-tinh-toan.md)) giữ ở dạng "khi bật", giá trị 0 khi không có bảng.
 
-### `ai_response_cache` → thêm
-```
-ai_response_cache (
-  cache_key    text PK      -- sha256(purpose + prompt_hash tĩnh + prompt động chuẩn hoá)
-  purpose      AiPurpose
-  workspace_id uuid FK
-  response     json         -- structured action đã validate
-  token_log_id uuid FK?     -- lượt gọi sinh ra nó
-  hits         int          -- số lần trả từ cache (số liệu báo cáo)
-  expires_at   timestamptz
-  created_at   timestamptz
-)
-```
-Dùng cho `POST /sprints/:id/forecast/explain` (6 giờ) và `POST /projects/:id/ai/decompose` (cùng yêu cầu + cùng ngữ cảnh → trả bản nháp cũ). Cron dọn mỗi giờ. Không đưa vào `ai_token_logs` vì log là sổ bất biến, cache là dữ liệu tạm.
+### `ai_response_cache` → đã cân nhắc, không thêm
+Bảng cache kết quả 6 giờ giải bài toán bấm lặp lại trên free tier, nhưng ở quy mô 5–30 người thì khoá nút + trả lại DRAFT đang mở là đủ, và bớt được một bảng có vòng đời riêng phải dọn. Nếu sau này dùng model trả phí với lượt gọi lớn, thêm lại theo thiết kế cũ trong lịch sử git.
 
 ### `ai_token_logs.proposal_id` → thêm
 Lượt gọi từ form phân rã không có `message_id`; muốn tính "chi phí trung bình một đề xuất" và truy vết lượt lỗi của đề xuất nào thì cần khoá này.
@@ -71,7 +59,7 @@ Phụ thuộc bắc cầu qua `project_id` (vi phạm 3NF); truy vấn theo work
 | Cấu hình theo mục đích | `AiConfig.purpose` (null = chung) | `purpose` mặc định GENERAL | enum `AiPurpose`, `GENERAL` là fallback |
 | Giá | catalog + config | catalog + config | **chỉ catalog** + `estimated_cost` trong log |
 | Cache prompt tĩnh | bộ nhớ + liệt kê API | không | như Table_Calendar |
-| Cache kết quả | không | không | `ai_response_cache` (vì free tier Gemini hạn mức thấp) |
+| Cache kết quả | không | không | không (khoá nút + DRAFT đang mở) |
 | Hạn mức | không | `AiUsage` theo ngày | đếm log |
 | Prompt cá nhân | bảng riêng (V2) / `ChatMessage` role (V1) | không | cột trên `users` |
 | Memory / Habit | bảng riêng | không | bảng riêng (S9) |

@@ -30,9 +30,6 @@ ALTER TABLE "ai_usage_daily" DROP CONSTRAINT "ai_usage_daily_workspace_id_fkey";
 -- DropForeignKey
 ALTER TABLE "weekly_checkins" DROP CONSTRAINT "weekly_checkins_user_id_fkey";
 
--- DropIndex
-DROP INDEX "ai_token_logs_ws_purpose_day";
-
 -- AlterTable
 ALTER TABLE "ai_configs" DROP COLUMN "input_price",
 DROP COLUMN "model",
@@ -88,8 +85,7 @@ ALTER TABLE "ai_response_cache" ADD CONSTRAINT "ai_response_cache_workspace_id_f
 ALTER TABLE "ai_response_cache" ADD CONSTRAINT "ai_response_cache_token_log_id_fkey" FOREIGN KEY ("token_log_id") REFERENCES "ai_token_logs"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- ═══════════════════════════════════════════════════════════════════════
--- Sau rà soát (docs/05-hien-thuc/ra-soat-bang-ai.md): index sổ token theo ngày đặt lại
--- (bị Prisma drop vì không khai trong schema) và giới hạn độ dài prompt cá nhân.
+-- Sau rà soát (docs/05-hien-thuc/ra-soat-bang-ai.md):
+-- giới hạn độ dài prompt cá nhân (index sổ token theo ngày khai trong schema.prisma).
 -- ═══════════════════════════════════════════════════════════════════════
-CREATE INDEX "ai_token_logs_ws_purpose_day" ON "ai_token_logs"("workspace_id", "purpose", "created_at");
 ALTER TABLE "users" ADD CONSTRAINT "users_ai_personal_prompt_len" CHECK (char_length("ai_personal_prompt") <= 2000);

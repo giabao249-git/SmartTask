@@ -543,4 +543,4 @@ ALTER TABLE "ai_habits"       ADD CONSTRAINT "ai_habits_confidence_check"    CHE
 ALTER TABLE "time_entries"    ADD CONSTRAINT "time_entries_hours_check"      CHECK ("hours" > 0 AND "hours" <= 24);
 ALTER TABLE "calendar_events" ADD CONSTRAINT "calendar_events_range_check"   CHECK ("start_at" < "end_at");
 -- Truy vấn sổ token theo ngày cho màn chi phí
-CREATE INDEX "ai_token_logs_ws_purpose_day" ON "ai_token_logs"("workspace_id", "purpose", "created_at");
+CREATE INDEX "ai_token_logs_workspace_id_purpose_created_at_idx" ON "ai_token_logs"("workspace_id", "purpose", "created_at");
