@@ -8,6 +8,9 @@ import { ActivityModule } from './activity/activity.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { AuthModule } from './auth/auth.module';
 import { CommentsModule } from './comments/comments.module';
+import { ForecastModule } from './forecast/forecast.module';
+import { MetricsModule } from './metrics/metrics.module';
+import { WorkloadModule } from './workload/workload.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AccessModule } from './common/access/access.module';
 import { WorkspaceRoleGuard } from './common/guards/workspace-role.guard';
@@ -43,6 +46,9 @@ import { UsersModule } from './users/users.module';
     AttachmentsModule,
     NotificationsModule,
     ActivityModule,
+    MetricsModule,
+    WorkloadModule,
+    ForecastModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
