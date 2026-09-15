@@ -1,7 +1,7 @@
 # Lệnh tắt cho môi trường phát triển. Chạy `make` để xem danh sách.
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: help db-up db-down db-reset db-psql db-ui db-logs env
+.PHONY: help db-up db-down db-reset db-psql db-ui db-logs env search-up search-down
 
 help: ## Liệt kê lệnh
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
@@ -26,3 +26,9 @@ db-ui: ## Bật Adminer tại http://localhost:8080
 
 db-logs: ## Xem log PostgreSQL
 	$(COMPOSE) logs -f postgres
+
+search-up: env ## Bật Elasticsearch (cổng 9200) cho gợi ý @mention; đặt ELASTICSEARCH_URL=http://localhost:9200 trong .env
+	$(COMPOSE) --profile search up -d elasticsearch
+
+search-down: ## Tắt Elasticsearch
+	$(COMPOSE) --profile search stop elasticsearch

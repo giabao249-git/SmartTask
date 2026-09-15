@@ -34,3 +34,6 @@ npm-debug.log*
 .turbo/
 .cache/
 tmp/
+
+# tệp đính kèm khi STORAGE=local
+apps/api/uploads/

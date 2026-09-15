@@ -21,6 +21,8 @@ export const PROJECT_EVENTS = {
 } as const;
 
 export interface TaskEventPayload {
+  /** Tên sự kiện (task.created …) — listener wildcard cần vì EventEmitter2 không đưa tên vào payload */
+  event?: string;
   projectId: string;
   taskId: string;
   actorId: string | null;
@@ -38,5 +40,28 @@ export interface SprintEventPayload {
   sprintId: string;
   actorId: string;
   movedTaskIds?: string[];
+  at: Date;
+}
+
+export const COMMENT_EVENTS = {
+  created: 'comment.created',
+  updated: 'comment.updated',
+  deleted: 'comment.deleted',
+} as const;
+export const NOTIFICATION_EVENTS = { created: 'notification.created' } as const;
+
+export interface CommentEventPayload {
+  projectId: string;
+  taskId: string;
+  commentId: string;
+  actorId: string;
+  mentionedUserIds: string[];
+  at: Date;
+}
+
+export interface ProjectMemberEventPayload {
+  projectId: string;
+  userId: string;
+  actorId: string;
   at: Date;
 }

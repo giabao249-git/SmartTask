@@ -4,7 +4,11 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ActivityModule } from './activity/activity.module';
+import { AttachmentsModule } from './attachments/attachments.module';
 import { AuthModule } from './auth/auth.module';
+import { CommentsModule } from './comments/comments.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { AccessModule } from './common/access/access.module';
 import { WorkspaceRoleGuard } from './common/guards/workspace-role.guard';
 import { ProjectsModule } from './projects/projects.module';
@@ -35,6 +39,10 @@ import { UsersModule } from './users/users.module';
     ProjectsModule,
     SprintsModule,
     TasksModule,
+    CommentsModule,
+    AttachmentsModule,
+    NotificationsModule,
+    ActivityModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

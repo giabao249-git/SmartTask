@@ -1049,7 +1049,7 @@ export class TasksService {
   }
 
   private emit(name: string, payload: TaskEventPayload): void {
-    this.events.emit(name, payload);
+    this.events.emit(name, { ...payload, event: name });
   }
 
   private toListView(r: TaskListRow) {
