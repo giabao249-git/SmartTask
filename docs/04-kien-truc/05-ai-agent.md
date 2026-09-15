@@ -90,7 +90,7 @@ Discriminated union theo `type`; luôn có `reply` (văn bản hiển thị) và
 | `RISK_EXPLANATION` | "Sprint có kịp không" | `riskLevel` (phải trùng số backend), `causes[]`, `recommendations[]` |
 | `MEMORY_PROPOSAL` | Người nói điều nên nhớ lâu dài | `memory: {kind, content}` — chờ xác nhận ([06](06-tri-nho-ai.md)) |
 | `ASK_CLARIFICATION` | Mơ hồ: hai "Minh", không rõ sprint, thiếu hạn | `question`, `options[]: {code, label}` |
-| `CHAT_RESPONSE` | Trả lời, từ chối theo chính sách | `reply` |
+| `CHAT_RESPONSE` | Trả lời câu hỏi từ ngữ cảnh, từ chối theo chính sách | `reply`, `dataRef?` (ví dụ `workload:week:u1` để UI vẽ thẻ số từ backend) |
 
 Không có action cho alias/thói quen (Admin quản alias; thói quen do hệ thống suy) — đúng quy tắc 5–6 của Master prompt bên Table_Calendar.
 
@@ -122,6 +122,25 @@ Mô hình "bản nháp có khoá" của Table_Calendar (`MeetingDraft.draftKey`)
 2. Lượt 2: "cái thứ hai đổi thành 6 giờ, giao Lan" → LLM đọc `structured_data` lượt 1, trả `UPDATE_TASK_DRAFT {targetDraftKey: d2, patch}`; backend gộp patch vào bản nháp (thuần), Validator kiểm lại dòng d2.
 3. Bấm "Tạo" trên thẻ (hoặc nói "đồng ý" — vẫn là một lượt LLM, backend không regex "ok/đồng ý") → Executor tạo trong một giao dịch.
 4. Bản nháp sống theo phiên, hết hạn 7 ngày; mở lại phiên thấy lại thẻ với trạng thái.
+
+## 7b. Người dùng chat được gì — bảng ánh xạ câu nói → hành động
+
+Mọi dòng dưới đây đều: LLM trả structured action → Validator kiểm trên dữ liệu sống → thẻ xem trước → **người bấm xác nhận** → Executor gọi đúng service của UI → sự kiện realtime, thông báo, tính lại tải chạy như thao tác tay. Không có lệnh chat nào ghi thẳng.
+
+| Người nói (ví dụ) | Action | Validator kiểm | Sau khi xác nhận |
+|---|---|---|---|
+| "Tạo 3 task cho màn đăng nhập, giao Huy, hạn thứ Sáu" | `CREATE_TASK_DRAFT` (d1–d3) | người là thành viên, giờ trống trước hạn, kỹ năng | `TasksService.createMany` |
+| "Dời hạn ST-12 sang 24/10", "cái thứ hai đổi thành 6 giờ", "chuyển ST-12 sang sprint 4", "đổi người làm ST-7 thành Lan" | `UPDATE_TASK_DRAFT` (patch: dueDate / estimateHours / sprintId / assignees) | version hiện tại, hạn ≥ start, sprint tồn tại, `FreeBefore` của người mới | `TasksService.update/assign` (kèm `version`) |
+| "Phân rã yêu cầu: xây dựng quên mật khẩu qua email" | `DECOMPOSE_PROPOSAL` | 1–25 task, ước lượng 0,5–40 h, kỹ năng trong danh mục, không vòng | tạo hàng loạt |
+| "Giao hết việc sprint 3, đừng dồn cho Lan" | `ASSIGN_PROPOSAL` | từng dòng: thành viên, nghỉ, kỹ năng, giờ trống, ≤ 110% | `assign/reschedule` từng task, ghi `ai_feedback` |
+| "Ai đang quá tải? Gỡ bớt cho Minh" | `REBALANCE_PROPOSAL` (moves[]) | như trên cho người nhận | `assign` từng task |
+| "Sprint này có kịp không? Vì sao chậm?" | `RISK_EXPLANATION` (số liệu lấy từ backend) | `riskLevel` phải trùng số backend | không ghi gì; cache 6 h |
+| "Tuần này tôi còn bao nhiêu giờ trống?", "Lan đang bao nhiêu %?" | `CHAT_RESPONSE` (đọc từ BẢNG NĂNG LỰC trong ngữ cảnh) + `dataRef` tuỳ chọn để UI vẽ thẻ số | — | không ghi gì |
+| "Từ giờ đừng giao Minh tuần cuối tháng" | `MEMORY_PROPOSAL` (+ đề xuất ghi vào `user_time_off`) | — | memory hoặc dữ liệu có cấu trúc, theo nút người chọn |
+| "Giao cho Bảo" (có hai Bảo) | `ASK_CLARIFICATION` (options u4, u9) | — | lượt sau mang `selectedCode` |
+| "Tính lại tải đi" | không cần action riêng: mỗi lượt ContextBuilder **nạp mới** chỉ số từ DB, và mọi thay đổi đã áp dụng đều phát `task.updated` → `WorkloadListener` tính lại ngay | — | UI có thêm nút "Tính lại" gọi `POST /projects/:id/workload/recompute` |
+
+Giới hạn cố ý: chat **không** đổi cấu hình workspace, vai trò, prompt, alias (Admin làm trên màn cấu hình); không xoá dự án/sprint; không tạo/đổi thói quen. Mức triển khai: MVP có `POST /projects/:id/ai/decompose` (form) và `forecast/explain`; chat theo phiên là mục S9 trong [11](11-chot-chuc-nang-va-api.md), làm sau khi có bảng năng lực (S4).
 
 ## 8. Giờ trống trong prompt
 
