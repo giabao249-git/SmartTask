@@ -176,7 +176,7 @@ export class CommentsService {
   }
 
   private emit(name: string, p: CommentEventPayload): void {
-    this.events.emit(name, p);
+    this.events.emit(name, { ...p, event: name });
   }
 }
 
