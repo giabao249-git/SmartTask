@@ -37,3 +37,7 @@ tmp/
 
 # tệp đính kèm khi STORAGE=local
 apps/api/uploads/
+
+# file mẫu do thành viên thả vào, khoá tạm của OnlyOffice/LibreOffice
+docs/**/CHƯƠNG*.docx
+.~lock.*#

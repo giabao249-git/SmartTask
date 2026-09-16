@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const { Packer, Paragraph, TextRun, AlignmentType, CM, FONT, SIZE, runs, para, heading, table, markdownToDocx, buildDoc, signatureTable } = require('./lib');
+const { Packer, Paragraph, TextRun, AlignmentType, CM, FONT, SIZE, runs, para, heading, table, markdownToDocx, buildDoc, signatureTable, letterhead, coverPage, tocStatic, tocEntriesFromMarkdown } = require('./lib');
+const { execSync } = require('child_process');
+const os = require('os');
 
 const REPO = require('path').resolve(__dirname, '..', '..');
 const OUT = path.join(REPO, 'docs/01-de-cuong/nop/tuan-01');
@@ -9,11 +11,7 @@ fs.mkdirSync(OUT, { recursive: true });
 const center = (text, opts = {}) => new Paragraph({ children: runs(text, opts.run || {}), alignment: AlignmentType.CENTER, spacing: { after: opts.after ?? 60, line: 312 } });
 const blank = () => new Paragraph({ spacing: { after: 120 } });
 
-const letterhead = [
-  center('TRƯỜNG ĐẠI HỌC SÀI GÒN', { run: { bold: true } }),
-  center('KHOA CÔNG NGHỆ THÔNG TIN', { run: { bold: true } }),
-  center('Học phần: Đồ án Chuyên ngành (841476) · GVHD: ThS. Trần Đình Nghĩa', { run: { italics: true, size: 24 }, after: 240 }),
-];
+const subhead = () => center('Học phần: Đồ án Chuyên ngành (841476) · GVHD: ThS. Trần Đình Nghĩa', { run: { italics: true, size: 24 }, after: 240 });
 
 // ───────────────────────── 1. Biên bản phân công nhóm ─────────────────────────
 (async () => {
@@ -25,7 +23,8 @@ const letterhead = [
     ['«TV5»', 'DevOps & QA', 'Supabase/Render/Vercel, CI, Web Push, kế hoạch & biên bản kiểm thử, dữ liệu mẫu', ''],
   ];
   const children = [
-    ...letterhead,
+    ...letterhead(),
+    subhead(),
     center('BIÊN BẢN HỌP NHÓM LẦN 1', { run: { bold: true, size: 30 } }),
     center('THÀNH LẬP NHÓM, BẦU NHÓM TRƯỞNG, CHỌN ĐỀ TÀI VÀ PHÂN CÔNG', { run: { bold: true }, after: 240 }),
     para('**Thời gian:** ……h……, ngày 11 tháng 09 năm 2026 (Tuần 01).', { align: AlignmentType.LEFT }),
@@ -69,30 +68,51 @@ const letterhead = [
   fs.writeFileSync(path.join(OUT, '01-Bien-ban-phan-cong-nhom.docx'), await Packer.toBuffer(doc));
 
   // ───────────────────────── 2. Đề cương Draft 1 ─────────────────────────
-  const md = fs.readFileSync(path.join(REPO, 'docs/01-de-cuong/de-cuong-chi-tiet.md'), 'utf8')
+  let md = fs.readFileSync(path.join(REPO, 'docs/01-de-cuong/de-cuong-chi-tiet.md'), 'utf8')
     .replace('> Phiên bản: **Draft 2 — Tuần 02** — đủ 10 mục; chờ điền họ tên thành viên và góp ý GVHD (Tuần 03).', '> Phiên bản: **Draft 1 — nộp Tuần 01 (11/09/2026)**. Yêu cầu tuần 1 là Mục 1–5; Mục 6–10 nhóm đã phác thảo trước để GVHD góp ý sớm, sẽ hoàn thiện ở Tuần 02 (Draft 2).')
     .replace(/^> Bản in nộp Tuần 02–03.*$/m, '');
-  const body = markdownToDocx(md, { skipFirstHeading: true, tableWidths: {
-    0: [4.0, 1.9, 2.4, 2.4, 2.4, 2.4], // bảng so sánh sản phẩm
-    1: [1.5, 3.0, 5.6, 3.2, 2.2],       // kế hoạch 12 tuần
-  } });
-  const cover = [
-    ...letterhead,
-    blank(), blank(),
-    center('ĐỀ CƯƠNG CHI TIẾT ĐỒ ÁN CHUYÊN NGÀNH', { run: { bold: true, size: 32 } }),
-    center('(Bản phác thảo — Draft 1, Tuần 01)', { run: { italics: true }, after: 360 }),
-    center('XÂY DỰNG NỀN TẢNG QUẢN TRỊ DỰ ÁN THÔNG MINH', { run: { bold: true, size: 30 } }),
-    center('VÀ CÂN BẰNG TẢI NHÂN SỰ TÍCH HỢP AI AGENT', { run: { bold: true, size: 30 } }),
-    center('(SmartTask — Smart Task & Workload Management Platform with AI Agent)', { run: { italics: true }, after: 480 }),
-    center('Nhóm thực hiện: «TV1» (nhóm trưởng), «TV2», «TV3», «TV4», «TV5»', { after: 120 }),
-    center('Giảng viên hướng dẫn: ThS. Trần Đình Nghĩa', { after: 120 }),
-    center('Thời gian thực hiện: 11/09/2026 – 27/11/2026', { after: 480 }),
-    center('TP. Hồ Chí Minh, tháng 09 năm 2026', { run: { italics: true } }),
-    new Paragraph({ children: [new TextRun({ text: '', break: 1 })], pageBreakBefore: false }),
-  ];
-  const { PageBreak } = require('docx');
-  cover.push(new Paragraph({ children: [new PageBreak()] }));
-  const doc2 = buildDoc([...cover, ...body], { title: 'Đề cương chi tiết — Draft 1', headerText: 'SmartTask · Đề cương chi tiết (Draft 1) · Tuần 01' });
-  fs.writeFileSync(path.join(OUT, '02-De-cuong-chi-tiet-Draft-1.docx'), await Packer.toBuffer(doc2));
+  // Thông tin đầu (tên đề tài, GVHD, nhóm) đã nằm trên bìa → thân bắt đầu từ ghi chú phiên bản và Mục 1
+  const versionNote = (md.match(/^> Phiên bản:.*$/m) || [''])[0];
+  md = `# ĐỀ CƯƠNG\n\n${versionNote}\n\n` + md.slice(md.indexOf('## 1.'));
+  const tableWidths = { 0: [4.0, 1.9, 2.4, 2.4, 2.4, 2.4], 1: [1.5, 3.0, 5.6, 3.2, 2.2] };
+  const coverEls = coverPage({
+    studentLines: ['Nhóm sinh viên thực hiện:', '«TV1» (nhóm trưởng), «TV2», «TV3», «TV4», «TV5»'],
+    titleLines: ['ĐỀ CƯƠNG CHI TIẾT', 'ĐỒ ÁN CHUYÊN NGÀNH'],
+    subtitle: ['XÂY DỰNG NỀN TẢNG QUẢN TRỊ DỰ ÁN THÔNG MINH', 'VÀ CÂN BẰNG TẢI NHÂN SỰ TÍCH HỢP AI AGENT'],
+    info: [
+      ['Học phần', 'Đồ án Chuyên ngành (841476)'],
+      ['Giảng viên hướng dẫn', 'ThS. Trần Đình Nghĩa'],
+      ['Đề tài', 'Số 01 — Smart Task & Workload Management Platform with AI Agent'],
+      ['Phiên bản', 'Draft 1 — Tuần 01 (11/09/2026)'],
+    ],
+    placeDate: 'TP. Hồ Chí Minh, tháng 9 năm 2026',
+  });
+  const entries = tocEntriesFromMarkdown(md);
+  const assemble = (toc) => {
+    const body = markdownToDocx(md, { skipFirstHeading: true, tableWidths });
+    return buildDoc([...coverEls, ...toc, new Paragraph({ children: [new (require('docx').PageBreak)()] }), ...body], { title: 'Đề cương chi tiết — Draft 1', headerText: 'SmartTask · Đề cương chi tiết (Draft 1) · Tuần 01' });
+  };
+  const out2 = path.join(OUT, '02-De-cuong-chi-tiet-Draft-1.docx');
+  // Lượt 1: mục lục với số trang '?' → dựng PDF → tìm trang của từng tiêu đề → lượt 2 với số thật
+  fs.writeFileSync(out2, await Packer.toBuffer(assemble(tocStatic(entries))));
+  try {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'toc-'));
+    execSync(`soffice --headless --convert-to pdf --outdir "${tmp}" "${out2}"`, { stdio: 'ignore', timeout: 120000 });
+    const pdf = path.join(tmp, path.basename(out2).replace(/\.docx$/, '.pdf'));
+    const pages = Number(execSync(`pdfinfo "${pdf}" | awk '/^Pages/{print $2}'`).toString().trim());
+    const norm = (t) => t.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
+    const pageTexts = [];
+    for (let i = 1; i <= pages; i += 1) pageTexts.push(norm(execSync(`pdftotext -layout -f ${i} -l ${i} "${pdf}" -`).toString()));
+    const tocPages = new Set([2]); // trang mục lục (có thể 2 trang)
+    for (const e of entries) {
+      const key = norm(e.text).slice(0, 40);
+      const idx = pageTexts.findIndex((t, i) => !tocPages.has(i + 1) && i > 0 && t.includes(key));
+      e.page = idx >= 0 ? idx + 1 : '';
+    }
+    fs.writeFileSync(out2, await Packer.toBuffer(assemble(tocStatic(entries))));
+    console.log(`Mục lục: ${entries.filter((e) => e.page).length}/${entries.length} mục có số trang; PDF ${pages} trang`);
+  } catch (e) {
+    console.log('Không dựng được PDF để đánh số mục lục (cần soffice/pdftotext):', e.message);
+  }
   console.log('Đã tạo:', fs.readdirSync(OUT).join(', '));
 })();
