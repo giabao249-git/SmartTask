@@ -1,4 +1,5 @@
-// Bộ dựng .docx theo định dạng Khoa CNTT SGU: A4, TNR 13, giãn dòng 1.3, lề T/D 2.5 – Trái 3.5 – Phải 2.0 cm.
+// Bộ dựng .docx theo định dạng Khoa CNTT SGU: A4, TNR 13. Hai chế độ: 'report' (bìa CHƯƠNG 1.docx, mục lục, giãn 1.5)
+// và 'template' (mẫu Mau_DeCuong.docx: mục 1..10 đậm 13pt, thụt đầu dòng 1,27 cm, giãn 1.4, không mục lục).
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, HeadingLevel,
   LevelFormat, BorderStyle, ShadingType, PageNumber, Footer, Header, TabStopType, ImageRun, PageBreak, TableOfContents, LineRuleType, PositionalTab, PositionalTabAlignment, PositionalTabRelativeTo, PositionalTabLeader,
@@ -33,13 +34,20 @@ function runs(text, base = {}) {
   return out;
 }
 
-const para = (text, opts = {}) => new Paragraph({ children: runs(text, opts.run || {}), alignment: opts.align || AlignmentType.JUSTIFIED, spacing: { line: LINE, lineRule: LineRuleType.AUTO, after: 100, ...(opts.spacing || {}) }, ...(opts.numbering ? { numbering: opts.numbering } : {}), ...(opts.indent ? { indent: opts.indent } : {}) });
+const para = (text, opts = {}) => new Paragraph({ children: runs(text, opts.run || {}), alignment: opts.align || AlignmentType.JUSTIFIED, spacing: { line: opts.line || LINE, lineRule: LineRuleType.AUTO, after: 100, ...(opts.spacing || {}) }, ...(opts.numbering ? { numbering: opts.numbering } : {}), ...(opts.indent ? { indent: opts.indent } : {}), ...(opts.keepNext ? { keepNext: true } : {}) });
 /** Mục cấp 1 in hoa đậm 14pt, cấp 2 đậm 13pt, cấp 3 đậm nghiêng — theo báo cáo mẫu. */
-const heading = (text, level) => new Paragraph({
-  children: runs(level === 1 ? text.toUpperCase() : text, { bold: true, italics: level === 3, size: level === 1 ? 28 : 26 }),
-  heading: level === 1 ? HeadingLevel.HEADING_1 : level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3,
-  spacing: { before: level === 1 ? 360 : 240, after: 120, line: LINE, lineRule: LineRuleType.AUTO }, keepNext: true,
-});
+const heading = (text, level, mode = 'report') => (mode === 'template'
+  ? new Paragraph({
+    children: runs(text, { bold: true, size: 26 }),
+    heading: level === 1 ? HeadingLevel.HEADING_1 : level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3,
+    alignment: AlignmentType.JUSTIFIED, indent: level === 1 ? undefined : { firstLine: 720 },
+    spacing: { before: level === 1 ? 200 : 80, after: 80, line: 336, lineRule: LineRuleType.AUTO }, keepNext: true,
+  })
+  : new Paragraph({
+    children: runs(level === 1 ? text.toUpperCase() : text, { bold: true, italics: level === 3, size: level === 1 ? 28 : 26 }),
+    heading: level === 1 ? HeadingLevel.HEADING_1 : level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3,
+    spacing: { before: level === 1 ? 360 : 240, after: 120, line: LINE, lineRule: LineRuleType.AUTO }, keepNext: true,
+  }));
 
 function table(headers, rows, widthsCm) {
   const total = widthsCm.reduce((a, b) => a + b, 0);
@@ -59,11 +67,17 @@ function table(headers, rows, widthsCm) {
 }
 
 /** Chuyển Markdown đơn giản (#, ##, ###, đoạn, - danh sách, 1. danh sách, | bảng, > trích) thành phần tử docx. */
-function markdownToDocx(md, { skipFirstHeading = false, tableWidths = {}, shiftHeadings = true } = {}) {
+function markdownToDocx(md, { skipFirstHeading = false, tableWidths = {}, shiftHeadings = true, mode = 'report' } = {}) {
   const lines = md.split('\n');
   const els = [];
-  let i = 0; let firstHeadingSeen = false; let tableIdx = 0;
-  const flushParagraph = (buf) => { if (buf.length) els.push(para(buf.join(' '))); };
+  let i = 0; let firstHeadingSeen = false; let tableIdx = 0; let listInstance = 0; let inNumbered = false;
+  const T = mode === 'template';
+  const body = (text, extra = {}) => para(text, T ? { indent: { firstLine: 720 }, line: 336, spacing: { before: 80, after: 0 }, ...extra } : extra);
+  const flushParagraph = (buf) => {
+    if (!buf.length) return;
+    const text = buf.join(' ');
+    els.push(body(text));
+  };
   let buf = [];
   while (i < lines.length) {
     const line = lines[i];
@@ -71,7 +85,7 @@ function markdownToDocx(md, { skipFirstHeading = false, tableWidths = {}, shiftH
       flushParagraph(buf); buf = [];
       const level = line.match(/^(#{1,3}) /)[1].length;
       if (level === 1 && skipFirstHeading && !firstHeadingSeen) { firstHeadingSeen = true; i += 1; continue; }
-      els.push(heading(line.replace(/^#{1,3} /, ''), shiftHeadings && skipFirstHeading ? Math.max(1, level - 1) : level)); i += 1; continue;
+      els.push(heading(line.replace(/^#{1,3} /, ''), shiftHeadings ? Math.max(1, level - 1) : level, mode)); i += 1; continue;
     }
     if (/^\|/.test(line)) {
       flushParagraph(buf); buf = [];
@@ -81,12 +95,18 @@ function markdownToDocx(md, { skipFirstHeading = false, tableWidths = {}, shiftH
       const header = parse(rowsRaw[0]);
       const body = rowsRaw.slice(2).map(parse);
       const widths = tableWidths[tableIdx] || Array(header.length).fill(15.5 / header.length);
-      els.push(table(header, body, widths)); els.push(new Paragraph({ spacing: { after: 120 } }));
+      els.push(table(header, body, widths)); els.push(new Paragraph({ spacing: { after: T ? 60 : 120 } }));
       tableIdx += 1; continue;
     }
-    if (/^\s*[-*] /.test(line)) { flushParagraph(buf); buf = []; els.push(para(line.replace(/^\s*[-*] /, ''), { numbering: { reference: 'bullets', level: (line.match(/^\s*/)[0].length >= 2 ? 1 : 0) } })); i += 1; continue; }
-    if (/^\s*\d+\. /.test(line)) { flushParagraph(buf); buf = []; els.push(para(line.replace(/^\s*\d+\. /, ''), { numbering: { reference: 'numbers', level: 0 } })); i += 1; continue; }
-    if (/^> /.test(line)) { flushParagraph(buf); buf = []; els.push(para(line.replace(/^> /, ''), { run: { italics: true, color: '555555' }, indent: { left: 567 } })); i += 1; continue; }
+    if (/^\s*[-*] /.test(line)) { flushParagraph(buf); buf = []; els.push(para(line.replace(/^\s*[-*] /, ''), { numbering: { reference: 'bullets', level: (line.match(/^\s*/)[0].length >= 2 ? 1 : 0) }, ...(T ? { line: 336, spacing: { before: 40, after: 0 } } : {}) })); i += 1; continue; }
+    if (/^\s*\d+\. /.test(line)) {
+      flushParagraph(buf); buf = [];
+      if (!inNumbered) { listInstance += 1; inNumbered = true; } // đánh số lại từ 1 cho mỗi danh sách
+      els.push(para(line.replace(/^\s*\d+\. /, ''), { numbering: { reference: 'numbers', level: 0, instance: listInstance }, ...(T ? { line: 336, spacing: { before: 40, after: 0 } } : {}) })); i += 1; continue;
+    }
+    inNumbered = false;
+    if (/^> /.test(line)) { flushParagraph(buf); buf = []; els.push(para(line.replace(/^> /, ''), { run: { italics: true, color: '555555' }, indent: { left: 567 }, ...(T ? { line: 336, spacing: { before: 40, after: 0 } } : {}) })); i += 1; continue; }
+    if (/^\[\d+\] /.test(line)) { flushParagraph(buf); buf = []; els.push(para(line.trim(), { run: T ? { italics: true } : {}, align: AlignmentType.LEFT, indent: { left: 720, hanging: 720 }, ...(T ? { line: 336, spacing: { before: 60, after: 0 } } : { spacing: { after: 60 } }) })); i += 1; continue; }
     if (/^---/.test(line)) { flushParagraph(buf); buf = []; i += 1; continue; }
     if (line.trim() === '') { flushParagraph(buf); buf = []; i += 1; continue; }
     buf.push(line.trim()); i += 1;
@@ -95,7 +115,8 @@ function markdownToDocx(md, { skipFirstHeading = false, tableWidths = {}, shiftH
   return els;
 }
 
-function buildDoc(children, { title, headerText }) {
+function buildDoc(children, { title, headerText, margin }) {
+  const mg = margin || { top: 2.5 * CM, bottom: 2.5 * CM, left: 3.5 * CM, right: 2 * CM };
   return new Document({
     creator: 'Nhóm SmartTask', title,
     features: { updateFields: true },
@@ -120,10 +141,10 @@ function buildDoc(children, { title, headerText }) {
       ],
     },
     sections: [{
-      properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 2.5 * CM, bottom: 2.5 * CM, left: 3.5 * CM, right: 2 * CM } }, titlePage: true },
+      properties: { page: { size: { width: 11906, height: 16838 }, margin: mg }, titlePage: true },
       headers: {
         first: new Header({ children: [new Paragraph({})] }),
-        default: new Header({ children: [new Paragraph({ children: [new TextRun({ text: headerText, font: FONT, size: 20, italics: true, color: '666666' })], alignment: AlignmentType.RIGHT })] }),
+        default: new Header({ children: [headerText ? new Paragraph({ children: [new TextRun({ text: headerText, font: FONT, size: 20, italics: true, color: '666666' })], alignment: AlignmentType.RIGHT }) : new Paragraph({})] }),
       },
       footers: {
         first: new Footer({ children: [new Paragraph({})] }),
@@ -192,6 +213,37 @@ function coverPage({ studentLines, titleLines, subtitle, info, placeDate }) {
   ];
 }
 
+/**
+ * Trang bìa theo mẫu Khoa `Mau_DeCuong.docx`: 3 dòng đầu trang 16pt đậm → gạch ngắn → logo SGU (5,8 × 4,4 cm)
+ * → "Đề cương tiểu luận học phần Đồ án chuyên ngành" 16pt → TÊN ĐỒ ÁN 20pt → NHÓM 14pt → Sinh viên / GVHD 14pt → nơi, năm 12pt.
+ */
+function coverDeCuong({ titleLines, group, students, gvhd, year }) {
+  const logo = fs.readFileSync(path.join(__dirname, 'assets', 'sgu-logo-decuong.png'));
+  const c = (children, opts = {}) => new Paragraph({ children, alignment: opts.align || AlignmentType.CENTER, spacing: { before: opts.before || 0, after: opts.after || 0, line: opts.line || 240, lineRule: LineRuleType.AUTO }, ...(opts.indent ? { indent: opts.indent } : {}), ...(opts.tabStops ? { tabStops: opts.tabStops } : {}) });
+  const head = (t) => c(runs(t, { bold: true, size: 32 }));
+  const labelLine = (label, value) => new Paragraph({
+    tabStops: [{ type: TabStopType.RIGHT, position: Math.round(5.6 * CM) }, { type: TabStopType.LEFT, position: Math.round(6.0 * CM) }],
+    spacing: { before: 0, after: 0, line: 360, lineRule: LineRuleType.AUTO },
+    children: [new TextRun({ text: `\t${label}\t`, bold: true, font: FONT, size: 28 }), ...runs(value, { bold: true, size: 28 })],
+  });
+  return [
+    head('ỦY BAN NHÂN DÂN THÀNH PHỐ HỒ CHÍ MINH'),
+    head('TRƯỜNG ĐẠI HỌC SÀI GÒN'),
+    head('KHOA CÔNG NGHỆ THÔNG TIN'),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 360 }, indent: { left: 3200, right: 3200 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '000000', space: 1 } } }),
+    new Paragraph({ children: [new ImageRun({ type: 'png', data: logo, transformation: { width: 174, height: 130 } })], alignment: AlignmentType.CENTER, spacing: { before: 120, after: 480, line: 240, lineRule: LineRuleType.AUTO } }),
+    c(runs('Đề cương tiểu luận học phần Đồ án chuyên ngành', { bold: true, size: 32 }), { after: 300 }),
+    ...titleLines.map((t) => c(runs(t, { bold: true, size: 36 }), { line: 300 })),
+    c(runs(group, { bold: true, size: 28 }), { before: 300, after: 200 }),
+    labelLine('Sinh viên:', students[0]),
+    ...students.slice(1).map((n) => labelLine('', n)),
+    labelLine('GVHD:', gvhd),
+    new Paragraph({ spacing: { after: 2100 } }),
+    c(runs(`Thành phố Hồ Chí Minh, năm ${year}`, { bold: true, size: 24 })),
+    new Paragraph({ children: [new PageBreak()] }),
+  ];
+}
+
 /** Mục lục tĩnh (số trang lấy từ bản PDF dựng thử) — hiện đúng trên mọi trình xem, không cần cập nhật field. */
 function tocStatic(entries) {
   const line = (e) => new Paragraph({
@@ -225,4 +277,4 @@ function tocEntriesFromMarkdown(md) {
   return out;
 }
 
-module.exports = { signatureTable, letterhead, coverPage, tocStatic, tocEntriesFromMarkdown, Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, CM, FONT, SIZE, runs, para, heading, table, markdownToDocx, buildDoc, PLACEHOLDERS };
+module.exports = { signatureTable, letterhead, coverPage, coverDeCuong, tocStatic, tocEntriesFromMarkdown, Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, CM, FONT, SIZE, runs, para, heading, table, markdownToDocx, buildDoc, PLACEHOLDERS };

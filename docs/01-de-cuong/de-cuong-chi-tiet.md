@@ -7,12 +7,12 @@
 **Nhóm thực hiện:** «TV1» (nhóm trưởng), «TV2», «TV3», «TV4», «TV5» — xem `danh-sach-nhom.md`
 **Thời gian thực hiện:** 12 tuần, 11/09/2026 – 27/11/2026
 
-> Phiên bản: **Draft 2 — Tuần 02** — đủ 10 mục; chờ điền họ tên thành viên và góp ý GVHD (Tuần 03).
-> Bản in nộp Tuần 02–03 định dạng theo tiêu chí 10: Times New Roman 13, giãn dòng 1.3–1.5, lề trên/dưới 2.5 cm, trái 3.5 cm, phải 2.0 cm, bìa kiếng.
+> Phiên bản: **Draft 2 — Tuần 02** — đủ 10 mục theo mẫu *Đề cương tiểu luận học phần Đồ án chuyên ngành* của Khoa (`Mau_DeCuong.docx`); chờ điền họ tên thành viên và góp ý GVHD (Tuần 03).
+> Bản in dựng bằng `scripts/docx/build-de-cuong.js`: bìa theo mẫu Khoa, Times New Roman 13, giãn dòng 1.4, thụt đầu dòng 1,27 cm, lề trên/dưới 2,3 – trái 3,0 – phải 1,5 cm như file mẫu.
 
 ---
 
-## 1. Lý do chọn đề tài
+## 1. Lý do chọn đề tài / tính cấp thiết của vấn đề nghiên cứu
 
 Trong các nhóm phát triển phần mềm quy mô nhỏ và vừa (5–30 người) — phòng phát triển của doanh nghiệp, đội dự án thuê ngoài, nhóm khởi nghiệp, nhóm sinh viên làm đồ án — việc phân công công việc phần lớn dựa vào cảm nhận của người quản lý: ai "có vẻ rảnh", ai "làm nhanh". Hệ quả thường thấy là một vài thành viên gánh phần lớn khối lượng trong khi số khác ít việc; yêu cầu lớn không được bóc tách thành các đầu việc đo được nên tiến độ chỉ được nhận ra là chậm khi đã sát hạn. Nghiên cứu của Maslach và Leiter [1] chỉ ra quá tải kéo dài là yếu tố hàng đầu dẫn đến kiệt sức (burnout), làm giảm chất lượng công việc trước khi làm giảm tiến độ; Brooks [2] từ lâu cũng chỉ ra rằng thêm người vào dự án đang trễ không giải quyết được vấn đề nếu việc không được phân rã và phân bổ đúng.
 
@@ -20,7 +20,7 @@ Các công cụ quản lý dự án phổ biến như Jira, Trello, Asana đã s
 
 Về mặt công nghệ, thời điểm hiện tại cho phép làm điều đó với chi phí bằng không: các mô hình ngôn ngữ lớn (Gemini Flash) đã hỗ trợ đầu ra có cấu trúc (JSON schema) đủ tin cậy để tích hợp vào nghiệp vụ [6]; các nền tảng Vercel, Render, Supabase cung cấp gói miễn phí đủ để triển khai một ứng dụng web ba tầng chạy thật trên Internet; NestJS, Next.js, Socket.io là các khung công nghệ trưởng thành, có tài liệu tốt và được dùng rộng rãi trong công nghiệp. Đề tài vì thế vừa giải quyết một vấn đề thực tế có thể quan sát được tại đơn vị khảo sát, vừa cho phép nhóm rèn luyện trọn vẹn chuẩn đầu ra G1–G3 của học phần: khảo sát và xác định yêu cầu, phân tích thiết kế mức 0, hiện thực và triển khai ứng dụng tích hợp AI/Realtime chạy thực tế.
 
-## 2. Tổng quan các giải pháp và nghiên cứu liên quan
+## 2. Lịch sử nghiên cứu vấn đề / tổng quan
 
 ### 2.1. Sản phẩm thương mại
 
@@ -51,7 +51,7 @@ Nguồn: tài liệu chính thức của các sản phẩm [3]–[5], [7], [8], 
 
 (1) Không có sản phẩm miễn phí nào gắn kỹ năng cá nhân với khối lượng công việc để cảnh báo quá tải; (2) các tính năng AI hiện có phân rã việc nhưng không kết nối với tải và kỹ năng của người nhận; (3) dự báo trễ hạn thường là "hộp đen" — đề tài tách phần tính toán xác định (có thể kiểm thử) khỏi phần giải thích bằng AI.
 
-## 3. Mục tiêu đề tài
+## 3. Mục đích nghiên cứu
 
 **Mục tiêu tổng quát:** xây dựng và triển khai trên Cloud một ứng dụng web quản trị dự án Agile/Kanban thời gian thực, tích hợp AI Agent phân rã yêu cầu thành công việc và mô hình cân bằng tải nhân sự theo ma trận kỹ năng, chạy được với người dùng thật.
 
@@ -62,9 +62,28 @@ Nguồn: tài liệu chính thức của các sản phẩm [3]–[5], [7], [8], 
 3. AI phân rã một yêu cầu 3–5 câu thành 5–15 công việc có ước lượng, kỹ năng yêu cầu và phụ thuộc trong ≤ 15 giây, tỷ lệ phản hồi hợp lệ theo schema ≥ 95%, luôn qua bước người xác nhận.
 4. Mô hình tải: tính giờ hiệu dụng theo tuần cho từng người, cảnh báo Cao/Đầy/Quá tải và điểm nguy cơ burnout; có bộ kiểm thử đơn vị ≥ 12 ca cho thuật toán; thời gian tính ≤ 200 ms cho 200 task / 10 người.
 5. Burn-down và dự báo ngày hoàn thành sprint bằng vận tốc, kèm giải thích và khuyến nghị do AI sinh.
-6. Bộ hồ sơ phân tích thiết kế mức 0 đầy đủ (BFD/BPMN, Use Case, Sequence, ERD 3NF, OpenAPI) và quyển báo cáo 5 chương có số liệu thực nghiệm.
+6. Bộ hồ sơ phân tích thiết kế mức 0 đầy đủ (BFD/BPMN, Use Case, Sequence, ERD 3NF, OpenAPI) và quyển báo cáo 7 chương có số liệu thực nghiệm.
 
-## 4. Đối tượng và phạm vi
+## 4. Nhiệm vụ nghiên cứu
+
+Để đạt các mục đích ở Mục 3, nhóm xác định bảy nhiệm vụ, mỗi nhiệm vụ có sản phẩm kiểm tra được:
+
+1. **Khảo sát hiện trạng và xác định yêu cầu:** phỏng vấn đơn vị khảo sát, mô hình hoá quy trình giao việc hiện tại (AS-IS) và mong muốn (TO-BE); lập danh sách yêu cầu chức năng và phi chức năng theo ISO/IEC/IEEE 29148 [20]. Sản phẩm: bản mô tả hiện trạng, BFD, BPMN, bảng FR/NFR.
+2. **Tổng hợp cơ sở lý thuyết:** Agile/Kanban, ước lượng Use Case Points, xếp lịch có ràng buộc tài nguyên, mô hình burnout, đầu ra có cấu trúc của mô hình ngôn ngữ lớn (Mục 2). Sản phẩm: Chương 2 của báo cáo.
+3. **Phân tích và thiết kế hệ thống mức 0:** sơ đồ Use Case, đặc tả use case cốt lõi, Sequence, kiến trúc, ERD chuẩn 3NF, đặc tả API theo OpenAPI 3, wireframe. Sản phẩm: hồ sơ thiết kế (Tuần 06).
+4. **Xây dựng phần mềm:** backend NestJS + Prisma + PostgreSQL, frontend Next.js + shadcn/ui, đồng bộ thời gian thực bằng Socket.io; 24 use case bắt buộc. Sản phẩm: mã nguồn GitHub có CI, tài liệu Swagger.
+5. **Hiện thực giải thuật lõi:** mô hình tải hiệu dụng theo kỹ năng và lịch sử làm việc, điểm nguy cơ burnout, thuật toán ghép người – việc – thời gian, dự báo ngày hoàn thành; kèm bộ kiểm thử đơn vị. Sản phẩm: mô-đun thuật toán có test.
+6. **Tích hợp AI Agent:** lớp trừu tượng nhà cung cấp (Gemini/Ollama), xây dựng ngữ cảnh, schema đầu ra, lớp kiểm tra hợp lệ, bước xác nhận của người dùng, nhật ký token. Sản phẩm: chức năng phân rã yêu cầu và giải thích dự báo.
+7. **Kiểm thử, đo đạc, triển khai và viết báo cáo:** kiểm thử đơn vị/tích hợp/đầu cuối/tải; đo số liệu thực nghiệm; triển khai Vercel + Render + Supabase; viết quyển báo cáo, slide và video demo. Sản phẩm: liên kết chạy thật, báo cáo kiểm thử, quyển báo cáo.
+
+**Kết quả dự kiến khi hoàn thành các nhiệm vụ:**
+
+- **Sản phẩm phần mềm:** ứng dụng web SmartTask chạy công khai (Vercel + Render + Supabase) gồm 24 use case bắt buộc; mã nguồn GitHub có README cài đặt, CI, tag `v1.0.0`; tài liệu API Swagger; script dữ liệu mẫu (2 dự án, 6 người, ~80 task, 3 tuần lịch sử).
+- **Hồ sơ phân tích thiết kế:** bản mô tả hiện trạng; BFD, BPMN; sơ đồ Use Case tổng quát và phân hệ; đặc tả 5 use case cốt lõi; 6 sequence diagram; ERD chuẩn 3NF và từ điển dữ liệu; đặc tả OpenAPI 3; wireframe 8 màn hình; kế hoạch và báo cáo kiểm thử.
+- **Số liệu thực nghiệm (Chương 6):** độ trễ đồng bộ realtime; thời gian phản hồi API (p95); thời gian phản hồi và tỷ lệ hợp lệ của AI phân rã; sai số ước lượng AI so với ước lượng của người trên tập task mẫu; độ chính xác cảnh báo quá tải trên kịch bản dựng sẵn; kết quả kiểm thử tải 20 người dùng ảo và 20 kết nối socket.
+- **Quyển báo cáo** 60–120 trang, 7 chương, kèm đề cương đã duyệt; slide 15–20 trang; video demo dự phòng.
+
+## 5. Đối tượng nghiên cứu và phạm vi nghiên cứu
 
 **Đối tượng nghiên cứu:** quy trình giao việc, theo dõi tiến độ và phân bổ khối lượng công việc trong nhóm phát triển phần mềm quy mô nhỏ và vừa; phương pháp ước lượng, đo tải và phân rã yêu cầu bằng mô hình ngôn ngữ lớn.
 
@@ -78,7 +97,7 @@ Nguồn: tài liệu chính thức của các sản phẩm [3]–[5], [7], [8], 
 
 **Phạm vi kỹ thuật:** ứng dụng web tiếng Việt, tối ưu Chrome desktop; kiến trúc API-First ba tầng; hạ tầng miễn phí (Vercel, Render, Supabase, Gemini API free tier); dữ liệu mẫu do nhóm tạo cộng dữ liệu khảo sát ẩn danh; không xử lý dữ liệu cá nhân nhạy cảm.
 
-## 5. Phương pháp nghiên cứu và triển khai
+## 6. Phương pháp nghiên cứu
 
 1. **Nghiên cứu tài liệu:** tài liệu chính thức của các sản phẩm và thư viện; các công trình về Agile, Use Case Points, RCPSP, burnout, LLM structured output (Mục 2).
 2. **Khảo sát hiện trạng (Tuần 04):** phỏng vấn bán cấu trúc 2–3 người quản lý và 4–6 thành viên tại đơn vị khảo sát theo bảng câu hỏi; mô hình hoá quy trình hiện tại (AS-IS) và mong muốn (TO-BE) bằng BFD và BPMN; rút ra yêu cầu chức năng (FR) và phi chức năng (NFR).
@@ -88,7 +107,15 @@ Nguồn: tài liệu chính thức của các sản phẩm [3]–[5], [7], [8], 
 6. **Kiểm thử và đánh giá thực nghiệm (Tuần 09–10):** kiểm thử đơn vị cho thuật toán (Jest), kiểm thử tích hợp API (Supertest), kiểm thử đầu cuối một luồng vàng (Playwright), kiểm thử tải (k6, 20 người dùng ảo; 20 kết nối socket); đo trên dữ liệu mẫu: độ trễ realtime, thời gian phản hồi API, thời gian và tỷ lệ hợp lệ của AI, sai số ước lượng AI so với ước lượng của người, độ chính xác cảnh báo quá tải trên kịch bản dựng sẵn.
 7. **Công cụ:** Next.js 15 + TypeScript + shadcn/ui; NestJS 11 + Prisma 6; PostgreSQL (Supabase); Socket.io; Gemini API (Ollama cục bộ khi phát triển); Docker Compose; GitHub Actions; draw.io / Mermaid cho sơ đồ; Figma cho mockup.
 
-## 6. Điểm mới do nhóm thực hiện
+## 7. Giả thuyết khoa học / Những đóng góp mới của đề tài
+
+**Giả thuyết khoa học:**
+
+- **H1.** Mô hình tải hiệu dụng có tính đến kỹ năng, hệ số ước lượng cá nhân và lịch họp/nghỉ phát hiện quá tải sớm hơn và ít cảnh báo sai hơn cách so sánh giờ ước lượng với 40 giờ/tuần; kiểm chứng trên các kịch bản dựng sẵn có nhãn (quá tải thật / không quá tải).
+- **H2.** Mô hình ngôn ngữ lớn được ràng buộc bằng schema đầu ra, lớp kiểm tra hợp lệ và bước xác nhận của người dùng cho tỷ lệ phản hồi hợp lệ ≥ 95% và sai số ước lượng giờ trong khoảng ±30% so với ước lượng của người trên tập yêu cầu mẫu.
+- **H3.** Tách phần tính toán xác định (có kiểm thử đơn vị) khỏi phần giải thích bằng AI vẫn giữ được tính đúng đắn có thể kiểm chứng, đồng thời cho người dùng lời giải thích dễ hiểu hơn so với chỉ hiển thị số liệu.
+
+**Những đóng góp mới của đề tài:**
 
 1. **Ma trận kỹ năng gắn với khối lượng công việc.** Mỗi thành viên khai báo kỹ năng mức 1–5 (PM xác nhận); mỗi task khai kỹ năng yêu cầu. Tải được tính bằng *giờ hiệu dụng*: giờ còn lại × hệ số ước lượng cá nhân (EAR = giờ thực tế ÷ giờ ước lượng, làm mượt Bayes) × hệ số độ khó × hệ số thiếu kỹ năng × phạt chuyển ngữ cảnh, so với *năng lực hiệu dụng* (giờ chuẩn trừ giờ họp và ngày nghỉ). Các sản phẩm phổ biến chỉ so giờ ước lượng với 40 giờ.
 2. **Điểm nguy cơ burnout nhiều tuần.** Tổng hợp mức sử dụng tuần hiện tại, số tuần liên tiếp quá 90%, tỷ lệ việc quá hạn, xu hướng chậm dần so với chính mình và tỷ lệ việc khẩn — cảnh báo trước khi tiến độ lộ ra chậm; mọi hệ số hiển thị được cho người bị gắn nhãn.
@@ -98,17 +125,7 @@ Nguồn: tài liệu chính thức của các sản phẩm [3]–[5], [7], [8], 
 6. **Ba chế độ xem trên cùng một dữ liệu, đồng bộ thời gian thực.** Kanban, Gantt, Eisenhower đọc cùng một truy vấn task; mọi thay đổi đi qua REST rồi phát qua Socket.io với số phiên bản để phát hiện xung đột; cập nhật lạc quan có hoàn tác.
 7. **Toàn bộ chạy trên hạ tầng miễn phí, API-First**, có Swagger, CI, kiểm thử tự động và số liệu thực nghiệm — theo đúng triết lý "không làm phần mềm đồ chơi" của học phần.
 
-## 7. Kết quả dự kiến
-
-**Sản phẩm phần mềm:** ứng dụng web SmartTask chạy công khai (Vercel + Render + Supabase) gồm 24 use case bắt buộc; mã nguồn GitHub có README cài đặt, CI, tag `v1.0.0`; tài liệu API Swagger; script dữ liệu mẫu (2 dự án, 6 người, ~80 task, 3 tuần lịch sử).
-
-**Hồ sơ phân tích thiết kế:** bản mô tả hiện trạng; BFD, BPMN; sơ đồ Use Case tổng quát và phân hệ; đặc tả 5 use case cốt lõi; 6 sequence diagram; ERD chuẩn 3NF và từ điển dữ liệu; đặc tả OpenAPI 3; wireframe 8 màn hình; kế hoạch và báo cáo kiểm thử.
-
-**Số liệu thực nghiệm (Chương 3–4):** độ trễ đồng bộ realtime; thời gian phản hồi API (p95); thời gian phản hồi và tỷ lệ hợp lệ của AI phân rã; sai số ước lượng AI so với ước lượng của người trên tập task mẫu; độ chính xác cảnh báo quá tải trên kịch bản dựng sẵn; kết quả kiểm thử tải 20 người dùng ảo và 20 kết nối socket.
-
-**Quyển báo cáo** 60–120 trang, 5 chương, kèm đề cương đã duyệt; slide 15–20 trang; video demo dự phòng.
-
-## 8. Kế hoạch thực hiện chi tiết 12 tuần
+## 8. Dự kiến kế hoạch nghiên cứu (tuần / thực hiện công việc gì)
 
 Bảng WBS đầy đủ (mã việc, người thực hiện, ngày bắt đầu/kết thúc, sản phẩm, phụ thuộc) tại `wbs-12-tuan.md`; tóm tắt theo tuần:
 
@@ -129,21 +146,27 @@ Bảng WBS đầy đủ (mã việc, người thực hiện, ngày bắt đầu/
 
 Nhịp làm việc: sprint 1 tuần; họp kế hoạch thứ Hai, demo nội bộ và gửi tiến độ GVHD thứ Sáu; commit Git theo tài khoản cá nhân hằng ngày.
 
-## 9. Bố cục dự kiến của quyển báo cáo
+## 9. Dự kiến nội dung của tiểu luận
 
-**Chương 1. Tổng quan** — 1.1 Lý do chọn đề tài; 1.2 Khảo sát hiện trạng tại đơn vị (AS-IS, pain point); 1.3 Các giải pháp và nghiên cứu liên quan; 1.4 Mục tiêu, đối tượng, phạm vi; 1.5 Phương pháp thực hiện; 1.6 Cơ sở lý thuyết và công nghệ sử dụng (Agile/Kanban, Use Case Points, RCPSP, LLM structured output; Next.js, NestJS, Prisma, PostgreSQL, Socket.io, Gemini API).
+Quyển báo cáo dự kiến 60–120 trang, bố cục theo mẫu của Khoa gồm 7 chương:
 
-**Chương 2. Phân tích và thiết kế hệ thống** — 2.1 Mô hình nghiệp vụ (BFD, BPMN TO-BE); 2.2 Yêu cầu chức năng và phi chức năng; 2.3 Tác nhân và sơ đồ Use Case; 2.4 Đặc tả use case cốt lõi; 2.5 Sequence diagram; 2.6 Kiến trúc hệ thống và quyết định công nghệ; 2.7 Thiết kế cơ sở dữ liệu (ERD 3NF, từ điển dữ liệu); 2.8 Đặc tả API (OpenAPI) và sự kiện realtime; 2.9 Thiết kế giao diện (wireframe).
+**Chương 1: Mở đầu** — 1. Lý do chọn đề tài; 2. Mục tiêu nghiên cứu; 3. Đối tượng và phạm vi nghiên cứu; 4. Giả thuyết khoa học / Những đóng góp mới của đề tài; 5. Phương pháp nghiên cứu; 6. Bố cục báo cáo.
 
-**Chương 3. Hiện thực và kết quả** — 3.1 Tổ chức mã nguồn monorepo; 3.2 Hiện thực backend (xác thực, phân quyền, module nghiệp vụ); 3.3 Hiện thực realtime; 3.4 Hiện thực giải thuật lõi (mô hình tải, burnout, ghép người–việc–thời gian, dự báo); 3.5 Tích hợp AI Agent (prompt, schema, validator, nhật ký); 3.6 Hiện thực frontend (Kanban, Gantt, Eisenhower, workload, trợ lý AI); 3.7 Kết quả: ảnh màn hình các luồng chính và số liệu thực nghiệm.
+**Chương 2: Cơ sở lý thuyết và tổng quan tài liệu** — 1. Khái niệm quản trị dự án Agile, Kanban, sprint, burn-down; 2. Khối lượng công việc, năng lực, quá tải và kiệt sức (burnout); 3. Ước lượng phần mềm (Use Case Points) và bài toán xếp lịch có ràng buộc tài nguyên; 4. Mô hình ngôn ngữ lớn, đầu ra có cấu trúc và tác nhân AI; 5. Khảo sát các sản phẩm hiện có (Jira, Trello, Asana, Linear, ClickUp); 6. Công nghệ sử dụng (Next.js, NestJS, Prisma, PostgreSQL, Socket.io, Gemini API).
 
-**Chương 4. Kiểm thử và triển khai** — 4.1 Kế hoạch và test cases theo use case; 4.2 Kiểm thử đơn vị, tích hợp, đầu cuối; 4.3 Kiểm thử tải và hiệu năng; 4.4 Triển khai Cloud (Vercel, Render, Supabase), CI/CD, vận hành; 4.5 Đánh giá theo mục tiêu đo được ở Mục 3.
+**Chương 3: Phân tích yêu cầu hệ thống** — 1. Khảo sát hiện trạng tại đơn vị (AS-IS) và quy trình mong muốn (TO-BE); 2. Sơ đồ chức năng nghiệp vụ (BFD), BPMN; 3. Yêu cầu chức năng và phi chức năng; 4. Tác nhân và sơ đồ Use Case tổng quát, phân hệ; 5. Đặc tả các use case cốt lõi.
 
-**Chương 5. Kết luận và hướng phát triển** — 5.1 Kết quả đạt được so với mục tiêu; 5.2 Hạn chế; 5.3 Hướng phát triển (gợi ý phân công học từ phản hồi, tích hợp lịch doanh nghiệp, ứng dụng di động, SSO); 5.4 Bài học kinh nghiệm.
+**Chương 4: Thiết kế hệ thống** — 1. Kiến trúc tổng thể ba tầng, API-First và quyết định công nghệ; 2. Sequence diagram các luồng phức tạp (kéo thả realtime, AI phân rã, tính tải, dự báo); 3. Thiết kế cơ sở dữ liệu (ERD 3NF, từ điển dữ liệu); 4. Đặc tả API (OpenAPI 3) và sự kiện thời gian thực; 5. Thiết kế giải thuật lõi (mô hình tải, burnout, ghép người – việc – thời gian, dự báo); 6. Thiết kế lớp AI Agent (ngữ cảnh, prompt, schema, kiểm tra hợp lệ); 7. Thiết kế giao diện (wireframe).
+
+**Chương 5: Triển khai và thực hiện** — 1. Môi trường phát triển và công cụ sử dụng; 2. Xây dựng chức năng xác thực, workspace, dự án và công việc; 3. Xây dựng chức năng Kanban, Gantt, Eisenhower đồng bộ thời gian thực; 4. Xây dựng chức năng cộng tác (bình luận @mention, đính kèm, thông báo); 5. Xây dựng chức năng kỹ năng, tính tải và cảnh báo quá tải; 6. Xây dựng chức năng AI phân rã yêu cầu, burn-down và dự báo rủi ro; 7. Kiểm thử và triển khai Cloud (Vercel, Render, Supabase, CI/CD).
+
+**Chương 6: Kết quả thực hiện** — 1. Ảnh màn hình các luồng chính; 2. Số liệu thực nghiệm (độ trễ realtime, thời gian phản hồi API, tỷ lệ hợp lệ và sai số của AI, độ chính xác cảnh báo quá tải, kiểm thử tải); 3. Đánh giá theo mục đích đo được ở Mục 3 và kiểm chứng các giả thuyết ở Mục 7.
+
+**Chương 7: Kết luận và đề xuất** — 1. Kết quả đạt được; 2. Hạn chế; 3. Hướng phát triển (gợi ý phân công học từ phản hồi, tích hợp lịch doanh nghiệp, ứng dụng di động, SSO); 4. Bài học kinh nghiệm.
 
 Tài liệu tham khảo (IEEE). Phụ lục: bảng chức năng → use case đầy đủ; đặc tả API; từ điển dữ liệu; biên bản khảo sát; biên bản họp và % đóng góp.
 
-## 10. Tài liệu tham khảo
+## 10. Danh mục tài liệu tham khảo
 
 [1] C. Maslach and M. P. Leiter, "Understanding the burnout experience: recent research and its implications for psychiatry," *World Psychiatry*, vol. 15, no. 2, pp. 103–111, 2016.
 [2] F. P. Brooks, *The Mythical Man-Month: Essays on Software Engineering*, Anniversary ed. Reading, MA, USA: Addison-Wesley, 1995.
