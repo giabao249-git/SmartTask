@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AtSign, Download, FileText, History, Loader2, MessageSquare, Paperclip, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { ActivityList } from "@/features/activity/ActivityList";
+import { useTasks } from "@/features/board/hooks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,8 @@ import { ErrorState } from "@/components/app/ErrorState";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
 import { describeError } from "@/lib/api";
-import type { ProjectDetail, TaskDetail, TaskPriority } from "@/lib/types";
+import type { ProjectDetail, SkillView, TaskDetail, TaskListItem, TaskPriority } from "@/lib/types";
+import { useSkills } from "@/lib/hooks/queries";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -85,7 +87,7 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
   };
   const patch = (fields: Record<string, unknown>, what = "Cập nhật") =>
     m.update.mutate({ id: task.id, version: task.version, patch: fields }, { onSuccess: () => toast.success(`${what} xong`), onError: (e) => fail(e, what) });
-  const busy = m.update.isPending || m.assignees.isPending || m.move.isPending || m.progress.isPending;
+  const busy = m.update.isPending || m.assignees.isPending || m.move.isPending || m.progress.isPending || m.labels.isPending || m.skills.isPending || m.dependencies.isPending;
   const doneColumn = project.columns.find((c) => c.isDone);
 
   return (
@@ -234,16 +236,45 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
           </Field>
         </div>
 
-        {task.requiredSkills.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] text-muted-foreground uppercase font-semibold">Kỹ năng</span>
-            {task.requiredSkills.map((s) => (
-              <Badge key={s.id} variant="outline" className="text-[10px]">
-                {s.name} ≥ {s.minLevel}
-              </Badge>
-            ))}
-          </div>
-        )}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Nhãn">
+            <LabelPicker
+              value={task.labels.map((l) => l.id)}
+              labels={project.labels}
+              disabled={!project.canEdit || busy}
+              onChange={(labelIds) => m.labels.mutate({ id: task.id, version: task.version, labelIds }, { onSuccess: () => toast.success("Đã đổi nhãn"), onError: (e) => fail(e, "Đổi nhãn") })}
+            />
+          </Field>
+          <Field label="Kỹ năng yêu cầu">
+            <SkillPicker
+              value={task.requiredSkills.map((s) => ({ skillId: s.id, minLevel: s.minLevel }))}
+              workspaceId={project.workspaceId}
+              disabled={!project.canEdit || busy}
+              onChange={(skills) => m.skills.mutate({ id: task.id, version: task.version, skills }, { onSuccess: () => toast.success("Đã đổi kỹ năng"), onError: (e) => fail(e, "Đổi kỹ năng") })}
+            />
+          </Field>
+          <Field label="Phụ thuộc (xong trước)">
+            <DependencyPicker
+              taskId={task.id}
+              value={task.dependsOnIds}
+              projectId={project.id}
+              projectKey={project.key}
+              disabled={!project.canEdit || busy}
+              onChange={(dependsOnIds) =>
+                m.dependencies.mutate(
+                  { id: task.id, version: task.version, dependsOnIds },
+                  { onSuccess: () => toast.success("Đã đổi phụ thuộc"), onError: (e) => (describeError(e).code === "DEPENDENCY_CYCLE" ? toast.error("Phụ thuộc tạo thành vòng — bỏ chọn task đang chờ task này", { description: "422 DEPENDENCY_CYCLE" }) : fail(e, "Đổi phụ thuộc")) },
+                )
+              }
+            />
+          </Field>
+          <Field label="Cờ khẩn">
+            <label className="flex items-center gap-2 h-8 text-xs">
+              <Checkbox checked={task.isUrgent} disabled={!project.canEdit || busy} onCheckedChange={(c) => patch({ isUrgent: c === true }, "Đổi cờ khẩn")} />
+              Khẩn (Eisenhower xếp vào ô &quot;Làm ngay&quot;)
+            </label>
+          </Field>
+        </div>
 
         <Field label="Mô tả">
           <Textarea
@@ -583,3 +614,135 @@ function AttachmentsPanel({ taskId, canEdit }: { taskId: string; canEdit: boolea
   );
 }
 
+
+/** Chọn nhãn dự án; đóng Popover mới lưu (PUT /tasks/:id/labels). */
+function LabelPicker({ value, labels, disabled, onChange }: { value: string[]; labels: ProjectDetail["labels"]; disabled: boolean; onChange: (ids: string[]) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const [draft, setDraft] = React.useState<string[]>(value);
+  React.useEffect(() => setDraft(value), [value]);
+  const selected = labels.filter((l) => value.includes(l.id));
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o && JSON.stringify([...draft].sort()) !== JSON.stringify([...value].sort())) onChange(draft);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" disabled={disabled} className="h-8 w-full justify-start gap-1 text-xs font-normal overflow-hidden">
+          {selected.length === 0 ? <span className="text-muted-foreground">Không nhãn</span> : selected.map((l) => <Badge key={l.id} variant="secondary" className="text-[10px] px-1 py-0 font-normal">#{l.name}</Badge>)}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-2 space-y-1" align="start">
+        {labels.length === 0 && <p className="text-[11px] text-muted-foreground px-1">Dự án chưa có nhãn — thêm ở Cấu hình dự án.</p>}
+        {labels.map((l) => (
+          <label key={l.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-muted cursor-pointer text-xs">
+            <Checkbox checked={draft.includes(l.id)} onCheckedChange={(c) => setDraft((d) => (c ? [...d, l.id] : d.filter((x) => x !== l.id)))} />
+            <span className="h-2.5 w-2.5 rounded-full border border-border/40" style={{ backgroundColor: l.color }} />
+            <span className="flex-1 truncate">{l.name}</span>
+          </label>
+        ))}
+        <p className="text-[10px] text-muted-foreground px-1 pt-1">Đóng để lưu</p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Kỹ năng yêu cầu + mức tối thiểu 1–5 (PUT /tasks/:id/skills) — danh mục kỹ năng workspace. */
+function SkillPicker({ value, workspaceId, disabled, onChange }: { value: { skillId: string; minLevel: number }[]; workspaceId: string; disabled: boolean; onChange: (skills: { skillId: string; minLevel: number }[]) => void }) {
+  const skills = useSkills(workspaceId);
+  const [open, setOpen] = React.useState(false);
+  const [draft, setDraft] = React.useState(value);
+  const [q, setQ] = React.useState("");
+  React.useEffect(() => setDraft(value), [value]);
+  const byId = new Map((skills.data ?? []).map((s) => [s.id, s]));
+  const same = JSON.stringify([...draft].sort((a, b) => a.skillId.localeCompare(b.skillId))) === JSON.stringify([...value].sort((a, b) => a.skillId.localeCompare(b.skillId)));
+  const list = (skills.data ?? []).filter((s: SkillView) => !q || s.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o && !same) onChange(draft);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" disabled={disabled} className="h-8 w-full justify-start gap-1 text-xs font-normal overflow-hidden">
+          {value.length === 0 ? <span className="text-muted-foreground">Không yêu cầu</span> : value.map((s) => <Badge key={s.skillId} variant="outline" className="text-[10px] px-1 py-0 font-normal">{byId.get(s.skillId)?.name ?? "…"} ≥ {s.minLevel}</Badge>)}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-2 space-y-1" align="start">
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Lọc kỹ năng…" className="h-7 text-xs" />
+        <div className="max-h-56 overflow-y-auto space-y-0.5">
+          {list.slice(0, 40).map((s) => {
+            const cur = draft.find((d) => d.skillId === s.id);
+            return (
+              <div key={s.id} className="flex items-center gap-2 p-1 rounded hover:bg-muted text-xs">
+                <Checkbox checked={!!cur} onCheckedChange={(c) => setDraft((d) => (c ? [...d, { skillId: s.id, minLevel: 2 }] : d.filter((x) => x.skillId !== s.id)))} />
+                <span className="flex-1 truncate">{s.name}</span>
+                {cur && (
+                  <Select value={String(cur.minLevel)} onValueChange={(v) => setDraft((d) => d.map((x) => (x.skillId === s.id ? { ...x, minLevel: Number(v) } : x)))}>
+                    <SelectTrigger className="h-6 w-14 text-[10px] px-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5].map((l) => (
+                        <SelectItem key={l} value={String(l)} className="text-xs">
+                          ≥ {l}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-[10px] text-muted-foreground px-1 pt-1">Đóng để lưu · Trợ lý AI và bảng năng lực dùng mức này</p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Phụ thuộc: chọn task cùng dự án phải xong trước (PUT /tasks/:id/dependencies; 422 khi tạo vòng). */
+function DependencyPicker({ taskId, value, projectId, projectKey, disabled, onChange }: { taskId: string; value: string[]; projectId: string; projectKey: string; disabled: boolean; onChange: (ids: string[]) => void }) {
+  const tasks = useTasks(projectId, {});
+  const [open, setOpen] = React.useState(false);
+  const [draft, setDraft] = React.useState<string[]>(value);
+  const [q, setQ] = React.useState("");
+  React.useEffect(() => setDraft(value), [value]);
+  const all = (tasks.data ?? []).filter((t: TaskListItem) => t.id !== taskId);
+  const byId = new Map(all.map((t) => [t.id, t]));
+  const list = all.filter((t) => !q || `${projectKey}-${t.number} ${t.title}`.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o && JSON.stringify([...draft].sort()) !== JSON.stringify([...value].sort())) onChange(draft);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" disabled={disabled} className="h-8 w-full justify-start gap-1 text-xs font-normal overflow-hidden">
+          {value.length === 0 ? <span className="text-muted-foreground">Không phụ thuộc</span> : value.map((id) => <Badge key={id} variant="outline" className="text-[10px] px-1 py-0 font-mono font-normal">{byId.get(id) ? `${projectKey}-${byId.get(id)!.number}` : "…"}</Badge>)}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-2 space-y-1" align="start">
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm ST-… hoặc tiêu đề" className="h-7 text-xs" />
+        <div className="max-h-56 overflow-y-auto space-y-0.5">
+          {list.slice(0, 50).map((t) => (
+            <label key={t.id} className="flex items-center gap-2 p-1 rounded hover:bg-muted cursor-pointer text-xs">
+              <Checkbox checked={draft.includes(t.id)} onCheckedChange={(c) => setDraft((d) => (c ? [...d, t.id] : d.filter((x) => x !== t.id)))} />
+              <span className="font-mono text-muted-foreground">
+                {projectKey}-{t.number}
+              </span>
+              <span className={cn("flex-1 truncate", t.completedAt && "line-through text-muted-foreground")}>{t.title}</span>
+            </label>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted-foreground px-1 pt-1">Đóng để lưu · Gantt vẽ mũi tên theo phụ thuộc</p>
+      </PopoverContent>
+    </Popover>
+  );
+}

@@ -297,6 +297,30 @@ describe('Dự án, sprint, task (e2e)', () => {
     expect(list.body.items).toHaveLength(2); // subtask không nằm trong danh sách phẳng mặc định
   });
 
+  it('phụ thuộc: PUT thay toàn bộ, version +1; tự trỏ bị lọc; vòng t1→t2→t1 → 422 DEPENDENCY_CYCLE', async () => {
+    const cur1 = await api().get(`/api/v1/tasks/${t1.id}`).set(auth(pm));
+    const r = await api()
+      .put(`/api/v1/tasks/${t2.id}/dependencies`)
+      .set(auth(pm))
+      .send({ version: t2.version, dependsOnIds: [t1.id, t2.id] })
+      .expect(200);
+    expect(r.body.dependsOnIds).toEqual([t1.id]);
+    expect(r.body.version).toBe(t2.version + 1);
+    t2.version = r.body.version;
+    const cyc = await api()
+      .put(`/api/v1/tasks/${t1.id}/dependencies`)
+      .set(auth(pm))
+      .send({ version: cur1.body.version, dependsOnIds: [t2.id] })
+      .expect(422);
+    expect(cyc.body.code).toBe('DEPENDENCY_CYCLE');
+    await api()
+      .put(`/api/v1/tasks/${t2.id}/dependencies`)
+      .set(auth(pm))
+      .send({ version: t2.version, dependsOnIds: [] })
+      .expect(200);
+    t2.version += 1;
+  });
+
   it('since: chỉ trả task đổi sau mốc + deletedIds', async () => {
     const mark = new Date().toISOString();
     await new Promise((r) => setTimeout(r, 20));

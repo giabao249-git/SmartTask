@@ -103,6 +103,18 @@ export function useTaskMutations(projectId: string) {
     mutationFn: (v: { id: string; version: number; userIds: string[] }) => api.put<TaskDetail>(`/tasks/${v.id}/assignees`, { version: v.version, userIds: v.userIds }),
     onSuccess: done,
   });
+  const labels = useMutation({
+    mutationFn: (v: { id: string; version: number; labelIds: string[] }) => api.put<TaskDetail>(`/tasks/${v.id}/labels`, { version: v.version, labelIds: v.labelIds }),
+    onSuccess: done,
+  });
+  const skills = useMutation({
+    mutationFn: (v: { id: string; version: number; skills: { skillId: string; minLevel: number }[] }) => api.put<TaskDetail>(`/tasks/${v.id}/skills`, { version: v.version, skills: v.skills }),
+    onSuccess: done,
+  });
+  const dependencies = useMutation({
+    mutationFn: (v: { id: string; version: number; dependsOnIds: string[] }) => api.put<TaskDetail>(`/tasks/${v.id}/dependencies`, { version: v.version, dependsOnIds: v.dependsOnIds }),
+    onSuccess: done,
+  });
   const subtask = useMutation({
     mutationFn: (v: { parentId: string; title: string; estimateHours?: number }) => api.post<TaskDetail>(`/tasks/${v.parentId}/subtasks`, { title: v.title, estimateHours: v.estimateHours }),
     onSuccess: (t) => {
@@ -121,7 +133,7 @@ export function useTaskMutations(projectId: string) {
       qc.removeQueries({ queryKey: taskKeys.detail(id) });
     },
   });
-  return { create, update, progress, assignees, subtask, move, remove };
+  return { create, update, progress, assignees, labels, skills, dependencies, subtask, move, remove };
 }
 
 export function useComments(taskId: string | null) {

@@ -206,6 +206,18 @@ export class TaskLabelsDto extends VersionedDto {
   labelIds!: string[];
 }
 
+export class TaskDependenciesDto extends VersionedDto {
+  @ApiProperty({
+    type: [String],
+    description:
+      'Task phải xong trước (cùng dự án, không tự trỏ, không tạo vòng)',
+  })
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('4', { each: true })
+  dependsOnIds!: string[];
+}
+
 export class CreateSubtaskDto {
   @ApiProperty()
   @Transform(trim)

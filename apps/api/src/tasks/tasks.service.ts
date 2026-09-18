@@ -4,6 +4,7 @@ import { Prisma, TaskSource } from '@prisma/client';
 import { ProjectAccessService } from '../common/access/project-access.service';
 import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 import { AppError } from '../common/app-error';
+import { findCycle } from '../ai/validator/graph';
 import {
   TASK_EVENTS,
   type TaskEventPayload,
@@ -23,6 +24,7 @@ import type {
   MoveTaskDto,
   MyTasksQueryDto,
   ProgressDto,
+  TaskDependenciesDto,
   TaskLabelsDto,
   TaskSkillsDto,
   UpdateTaskDto,
@@ -709,6 +711,65 @@ export class TasksService {
     return this.toDetailView(updated);
   }
 
+  /** Phụ thuộc thủ công (Gantt/Sheet): thay toàn bộ; kiểm cùng dự án, không tự trỏ, không vòng (findCycle của Validator). */
+  async setDependencies(
+    userId: string,
+    taskId: string,
+    dto: TaskDependenciesDto,
+  ) {
+    const { projectId, current } = await this.loadForEdit(userId, taskId);
+    const ids = [...new Set(dto.dependsOnIds)].filter((id) => id !== taskId);
+    if (ids.length) {
+      const n = await this.prisma.task.count({
+        where: { projectId, id: { in: ids }, deletedAt: null },
+      });
+      if (n !== ids.length)
+        throw AppError.notFound({ reason: 'task phụ thuộc không thuộc dự án' });
+    }
+    const all = await this.prisma.taskDependency.findMany({
+      where: { task: { projectId } },
+      select: { taskId: true, dependsOnId: true },
+    });
+    const edges = new Map<string, string[]>();
+    for (const d of all) {
+      if (d.taskId === taskId) continue;
+      edges.set(d.taskId, [...(edges.get(d.taskId) ?? []), d.dependsOnId]);
+    }
+    edges.set(taskId, ids);
+    const cycle = findCycle(edges);
+    if (cycle) throw AppError.unprocessable('DEPENDENCY_CYCLE', { cycle });
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await this.assertVersion(tx, taskId, dto.version);
+      await tx.taskDependency.deleteMany({ where: { taskId } });
+      if (ids.length)
+        await tx.taskDependency.createMany({
+          data: ids.map((dependsOnId) => ({ taskId, dependsOnId })),
+          skipDuplicates: true,
+        });
+      return tx.task.update({
+        where: { id: taskId },
+        data: { version: { increment: 1 } },
+        select: TASK_DETAIL_SELECT,
+      });
+    });
+    this.emit(TASK_EVENTS.updated, {
+      projectId,
+      taskId,
+      actorId: userId,
+      affectedUserIds: current.assignees.map((a) => a.userId),
+      diff: {
+        dependsOn: {
+          from: current.dependsOn.map((d) => d.dependsOnId),
+          to: ids,
+        },
+      },
+      version: updated.version,
+      source: 'MANUAL',
+      at: new Date(),
+    });
+    return this.toDetailView(updated);
+  }
+
   async duplicate(userId: string, taskId: string, dto: DuplicateTaskDto) {
     const { projectId, current } = await this.loadForEdit(userId, taskId);
     const src = await this.prisma.task.findUniqueOrThrow({
@@ -841,6 +902,7 @@ export class TasksService {
         createdById: true,
         assignees: { select: { userId: true } },
         skills: { select: { minLevel: true, skill: { select: { id: true } } } },
+        dependsOn: { select: { dependsOnId: true } },
       },
     });
     return { projectId, access, current };

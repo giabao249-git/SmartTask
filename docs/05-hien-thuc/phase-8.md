@@ -61,6 +61,7 @@ Không đổi logic API. Hai chỉnh nhỏ phục vụ chạy web thật:
 
 - `prisma/seed.ts` mở rộng và idempotent: 3 người dùng (lan/minh/huy@smarttask.local, `Demo@1234`), workspace **SmartTask Demo** (Lan OWNER, Minh/Huy MEMBER có phòng ban/chức danh/quản lý), 30 kỹ năng mặc định + alias ("chị Lan", "Minh BE", "Huy FE"), kỹ năng thành viên, dự án **ST – SmartTask v1** (cột mặc định, 3 nhãn, `taskCounter = 8`), Sprint 1 ACTIVE (−7…+4 ngày) và Sprint 2 PLANNED, 8 task có ngày/giờ/phụ thuộc để các màn Kanban, Gantt, tải, dashboard có dữ liệu ngay. Chạy lại không tạo trùng.
 - `.env` dev: `AI_PROVIDER=fake` (khoá Gemini vẫn giữ; bật `gemini` khi cần thử thật — hỏi trước).
+- **API thiếu → thêm tối thiểu:** `PUT /tasks/:id/dependencies {version, dependsOnIds}` (`TasksService.setDependencies`): trước đây phụ thuộc chỉ tạo được qua Executor AI, web (Sheet task, Gantt) không có cách sửa tay. Kiểm cùng dự án, lọc tự trỏ, phát hiện vòng bằng `findCycle` của Validator → `422 DEPENDENCY_CYCLE`, version +1, sự kiện `task.updated` diff `dependsOn`. E2E `test/projects-tasks.e2e-spec.ts` thêm ca (11 ca).
 
 Bảng màn ↔ endpoint và các mục "chờ backend": `docs/05-hien-thuc/web-tich-hop.md`.
 

@@ -31,6 +31,7 @@ import {
   MoveTaskDto,
   MyTasksQueryDto,
   ProgressDto,
+  TaskDependenciesDto,
   TaskLabelsDto,
   TaskSkillsDto,
   UpdateTaskDto,
@@ -187,6 +188,19 @@ export class TasksController {
     @Body() dto: TaskLabelsDto,
   ) {
     return this.tasks.setLabels(user.id, id, dto);
+  }
+
+  @Put('tasks/:id/dependencies')
+  @ApiOperation({
+    summary:
+      'Phụ thuộc (task phải xong trước) — thay toàn bộ; 422 DEPENDENCY_CYCLE khi tạo vòng',
+  })
+  dependencies(
+    @CurrentUser() user: JwtUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: TaskDependenciesDto,
+  ) {
+    return this.tasks.setDependencies(user.id, id, dto);
   }
 
   @Post('tasks/:id/subtasks')
