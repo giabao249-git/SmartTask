@@ -6,6 +6,11 @@ export interface Member {
   avatar: string;
   initials: string;
   color: string;
+  department?: string;
+  title?: string;
+  managerUserId?: string;
+  managerName?: string;
+  aliases?: string[];
   utilization: number; // % (e.g. 62, 96, 118, 45, 30)
   burnoutScore: number; // 0-100
   burnoutLevel: "NORMAL" | "MONITOR" | "WARNING";
@@ -63,6 +68,10 @@ export const MEMBERS: Member[] = [
     avatar: "",
     initials: "LN",
     color: "bg-blue-600",
+    department: "Phòng Phát triển",
+    title: "Project Manager",
+    managerName: "Ban Giám đốc",
+    aliases: ["chị Lan", "Lan PM"],
     utilization: 62,
     burnoutScore: 34,
     burnoutLevel: "NORMAL",
@@ -88,6 +97,11 @@ export const MEMBERS: Member[] = [
     avatar: "",
     initials: "MH",
     color: "bg-emerald-600",
+    department: "Phòng Phát triển",
+    title: "Tech Lead / Backend",
+    managerUserId: "user-lan",
+    managerName: "Lan",
+    aliases: ["Minh BE", "anh Minh"],
     utilization: 96,
     burnoutScore: 52,
     burnoutLevel: "MONITOR",
@@ -113,6 +127,11 @@ export const MEMBERS: Member[] = [
     avatar: "",
     initials: "HY",
     color: "bg-amber-600",
+    department: "Phòng Phát triển",
+    title: "Frontend Developer",
+    managerUserId: "user-lan",
+    managerName: "Lan",
+    aliases: ["Huy FE"],
     utilization: 118,
     burnoutScore: 74,
     burnoutLevel: "WARNING",
@@ -138,6 +157,10 @@ export const MEMBERS: Member[] = [
     avatar: "",
     initials: "TH",
     color: "bg-purple-600",
+    department: "Phòng Kiểm thử",
+    title: "QA Automation Lead",
+    managerName: "Trưởng phòng QA",
+    aliases: ["Thảo QA"],
     utilization: 45,
     burnoutScore: 28,
     burnoutLevel: "NORMAL",
@@ -163,6 +186,11 @@ export const MEMBERS: Member[] = [
     avatar: "",
     initials: "AN",
     color: "bg-rose-600",
+    department: "Phòng Phát triển",
+    title: "Junior Fullstack Developer",
+    managerUserId: "user-minh",
+    managerName: "Minh",
+    aliases: ["An FS", "em An"],
     utilization: 30,
     burnoutScore: 22,
     burnoutLevel: "NORMAL",
@@ -181,3 +209,74 @@ export const MEMBERS: Member[] = [
     ],
   },
 ];
+
+export interface MemberAlias {
+  id: string;
+  alias: string;
+  userId: string;
+  userName: string;
+  department: string;
+  role: string;
+  createdBy: string;
+}
+
+export const INITIAL_MEMBER_ALIASES: MemberAlias[] = [
+  {
+    id: "alias-1",
+    alias: "chị Lan",
+    userId: "user-lan",
+    userName: "Nguyễn Thị Lan",
+    department: "Phòng Phát triển",
+    role: "PM",
+    createdBy: "Admin",
+  },
+  {
+    id: "alias-2",
+    alias: "Lan PM",
+    userId: "user-lan",
+    userName: "Nguyễn Thị Lan",
+    department: "Phòng Phát triển",
+    role: "PM",
+    createdBy: "Admin",
+  },
+  {
+    id: "alias-3",
+    alias: "Minh BE",
+    userId: "user-minh",
+    userName: "Trần Văn Minh",
+    department: "Phòng Phát triển",
+    role: "Backend",
+    createdBy: "Lan",
+  },
+  {
+    id: "alias-4",
+    alias: "Huy FE",
+    userId: "user-huy",
+    userName: "Nguyễn Quang Huy",
+    department: "Phòng Phát triển",
+    role: "Frontend",
+    createdBy: "Lan",
+  },
+  {
+    id: "alias-5",
+    alias: "Bảo QA",
+    userId: "user-bao-qa",
+    userName: "Phạm Bảo",
+    department: "Phòng Kiểm thử",
+    role: "QA",
+    createdBy: "Admin",
+  },
+  {
+    id: "alias-6",
+    alias: "Bảo Fullstack",
+    userId: "user-bao-fs",
+    userName: "Lê Bảo",
+    department: "Phòng Phát triển",
+    role: "Fullstack",
+    createdBy: "Admin",
+  },
+];
+
+export const WORKSPACE_AI_POLICY =
+  "Khi tên trùng, ưu tiên người cùng phòng ban với người đang chat; khi giao việc ưu tiên cấp dưới trực tiếp của người chat; nếu vẫn không chắc thì hỏi lại.";
+

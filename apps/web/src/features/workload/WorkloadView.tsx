@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   Users2,
   Calendar,
@@ -14,9 +15,11 @@ import {
   Flame,
   CheckCircle2,
   FileText,
+  Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
   TableBody,
@@ -77,10 +80,16 @@ export function WorkloadView() {
           { label: "Tải nhân sự" },
         ]}
       >
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="outline" className="text-xs hidden md:inline-flex">
             Ngưỡng tải: &lt;70% Bình thường · 70–90% Cao · 90–110% Đầy · &gt;110% Quá tải
           </Badge>
+          <Button asChild size="sm" className="gap-1.5 text-xs">
+            <Link href="/projects/ST/assistant?initialPrompt=G%E1%BB%A1+b%E1%BB%9Bt+cho+Huy">
+              <Scale className="h-3.5 w-3.5 text-warning" />
+              <span>Xem đề xuất cân bằng (AI)</span>
+            </Link>
+          </Button>
         </div>
       </PageHeader>
 
@@ -156,8 +165,8 @@ export function WorkloadView() {
               </div>
             </CardHeader>
 
-            <div className="overflow-x-auto">
-              <Table>
+            <ScrollArea className="w-full">
+              <Table className="min-w-[1020px]">
                 <TableHeader className="bg-muted/40 text-xs">
                   <TableRow>
                     <TableHead className="min-w-[180px]">Thành viên</TableHead>
@@ -299,7 +308,7 @@ export function WorkloadView() {
                   })}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollArea>
           </Card>
         </div>
       )}

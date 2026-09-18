@@ -66,7 +66,19 @@ export function AppShell({ children }: AppShellProps) {
   const currentUser = MEMBERS[0]; // Lan (PM)
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  // Keyboard shortcuts: ⌘K for search, ⌘J for AI drawer
+  // Auto-collapse sidebar below 1024px
+  React.useEffect(() => {
+    const handleResize = () => {
+      if (typeof window !== "undefined" && window.innerWidth < 1024) {
+        setSidebarCollapsed(true);
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Keyboard shortcuts: ⌘K for search, ⌘J for AI Assistant
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -75,13 +87,13 @@ export function AppShell({ children }: AppShellProps) {
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "j") {
         e.preventDefault();
-        setAiDrawerOpen((open) => !open);
+        router.push("/projects/ST/assistant");
       }
     };
 
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-  }, []);
+  }, [router]);
 
   const toggleTheme = () => {
     const root = document.documentElement;
@@ -135,10 +147,10 @@ export function AppShell({ children }: AppShellProps) {
       icon: Award,
     },
     {
-      title: "AI Phân rã yêu cầu",
-      href: "/projects/ST/ai-decompose",
-      icon: Sparkles,
-      badge: "WBS",
+      title: "Trợ lý AI",
+      href: "/projects/ST/assistant",
+      icon: Bot,
+      badge: "Chat & Nháp",
       badgeVariant: "info" as const,
     },
     {
@@ -196,7 +208,7 @@ export function AppShell({ children }: AppShellProps) {
             <CommandItem
               onSelect={() => {
                 setCommandOpen(false);
-                setAiDrawerOpen(true);
+                router.push("/projects/ST/assistant");
               }}
               className="cursor-pointer"
             >
@@ -205,7 +217,7 @@ export function AppShell({ children }: AppShellProps) {
             </CommandItem>
             <CommandItem
               onSelect={() => {
-                router.push("/projects/ST/ai-decompose");
+                router.push("/projects/ST/assistant");
                 setCommandOpen(false);
               }}
               className="cursor-pointer"
@@ -365,7 +377,7 @@ export function AppShell({ children }: AppShellProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setAiDrawerOpen(true)}
+            onClick={() => router.push("/projects/ST/assistant")}
             className={cn(
               "w-full justify-start gap-2 text-xs h-8 border-info/40 bg-info/5 hover:bg-info/10 text-info font-medium",
               sidebarCollapsed && "justify-center px-0"

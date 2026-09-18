@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
   TableBody,
@@ -323,8 +324,8 @@ export function SkillsMatrixView() {
           </CardHeader>
 
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
+            <ScrollArea className="w-full">
+              <Table className="min-w-[960px]">
                 <TableHeader className="bg-muted/40 text-xs">
                   <TableRow>
                     <TableHead className="min-w-[180px]">Thành viên</TableHead>
@@ -407,7 +408,7 @@ export function SkillsMatrixView() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollArea>
           </CardContent>
         </Card>
       )}

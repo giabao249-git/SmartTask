@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { PageHeader } from "@/components/app/PageHeader";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -124,8 +125,8 @@ export function TimelineGanttView() {
           </CardHeader>
 
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <div className="min-w-[800px]">
+            <ScrollArea className="w-full">
+              <div className="min-w-[900px]">
                 {/* Timeline Grid Header (Days) */}
                 <div className="grid grid-cols-12 border-b border-border/60 bg-muted/40 text-xs font-semibold py-2.5 px-4">
                   <div className="col-span-4 text-muted-foreground">Công việc / Người nhận</div>
@@ -239,7 +240,7 @@ export function TimelineGanttView() {
                   ))}
                 </div>
               </div>
-            </div>
+            </ScrollArea>
           </CardContent>
         </Card>
       )}
