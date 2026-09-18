@@ -391,32 +391,40 @@ export class ContextBuilderService {
       today,
     });
     let sprintFree = 0;
-    const rows = cap.members.map((m) => {
-      const free = m.freeByDay.reduce((s, d) => s + d.freeHours, 0);
-      sprintFree += free;
-      const days = m.freeByDay
-        .filter((d) => d.isWorkday)
-        .map(
-          (d) => `${d.date.slice(5)}:${d.freeHours}${d.focusBlocks ? '*' : ''}`,
-        )
-        .join(' ');
-      return [
-        codes.codeOf('u', m.userId),
-        m.utilizationBefore.toFixed(2),
-        m.levelBefore,
-        `${m.metrics.ear.toFixed(2)} (n=${m.metrics.sampleSize})`,
-        m.metrics.sampleSize && m.metrics.onTimeRate !== null
-          ? `${Math.round(m.metrics.onTimeRate * 100)}%`
-          : '—',
-        m.projectsOpen,
-        Math.round(free * 10) / 10,
-        days || '—',
-      ];
-    });
+    const rows = [...cap.members]
+      .sort(
+        (a, b) =>
+          codeNum(codes.codeOf('u', a.userId)) -
+          codeNum(codes.codeOf('u', b.userId)),
+      )
+      .map((m) => {
+        const free = m.freeByDay.reduce((s, d) => s + d.freeHours, 0);
+        sprintFree += free;
+        const days = m.freeByDay
+          .filter((d) => d.isWorkday)
+          .map(
+            (d) =>
+              `${d.date.slice(5)}:${d.freeHours}${d.focusBlocks ? '*' : ''}`,
+          )
+          .join(' ');
+        return [
+          codes.codeOf('u', m.userId),
+          m.utilizationBefore.toFixed(2),
+          m.levelBefore,
+          `${m.metrics.ear.toFixed(2)} (n=${m.metrics.sampleSize})`,
+          m.metrics.sampleSize && m.metrics.onTimeRate !== null
+            ? `${Math.round(m.metrics.onTimeRate * 100)}%`
+            : '—',
+          m.projectsOpen,
+          Math.round(free * 10) / 10,
+          days || '—',
+        ];
+      });
     facts.sprintFreeHours = Math.round(sprintFree * 10) / 10;
     out.push({
-      title: `BẢNG NĂNG LỰC (cửa sổ ${cap.window.from} + ${cap.window.days} ngày; * = có khối tập trung ≥ 2h)`,
+      title: 'BẢNG NĂNG LỰC (backend tính — sự thật)',
       body: [
+        `Cửa sổ ${cap.window.from} + ${cap.window.days} ngày; * = ngày có khối tập trung ≥ 2 h; U = mức sử dụng tuần này`,
         bang(
           [
             'mã',
@@ -598,4 +606,9 @@ function num(
 ): number | null {
   if (v === null || v === undefined) return null;
   return typeof v === 'number' ? v : v.toNumber();
+}
+
+/** Số trong mã ngắn (u12 → 12) để sắp hàng ổn định theo mã. */
+function codeNum(code: string | undefined): number {
+  return code ? Number(code.slice(1)) : Number.MAX_SAFE_INTEGER;
 }
