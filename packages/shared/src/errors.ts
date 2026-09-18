@@ -49,6 +49,10 @@ export const ERROR_CODES = {
   AI_KEY_ENCRYPTION_MISSING: 'Máy chủ chưa đặt APP_KEY nên không lưu được khoá API',
   PROPOSAL_NOT_DRAFT: 'Đề xuất không còn ở trạng thái nháp',
   PROPOSAL_VALIDATION_FAILED: 'Đề xuất chưa qua kiểm tra, hãy sửa các dòng lỗi',
+  AI_TURN_IN_PROGRESS: 'Phiên này đang có một lượt chưa xong, hãy đợi',
+  PROPOSAL_VERSION_CONFLICT: 'Bản nháp đã đổi ở nơi khác, hãy tải lại',
+  UNKNOWN_DRAFT_KEY: 'Mã bản nháp không thuộc phiên này',
+  DRAFT_ALREADY_APPLIED: 'Mục này đã được duyệt thành công việc thật',
   CALENDAR_SYNC_FAILED: 'Đồng bộ lịch thất bại',
 } as const;
 

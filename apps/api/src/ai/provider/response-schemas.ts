@@ -79,7 +79,107 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
     ['type', 'reply', 'riskLevel'],
   ),
   ASSIGN: obj({ type: str(), reply: str() }, ['type', 'reply']),
-  CHAT: obj({ type: str(), reply: str() }, ['type', 'reply']),
+  // Chat: một schema PHẲNG gộp mọi trường của 10 loại action — Gemini không có oneOf; zod kiểm chặt sau
+  CHAT: obj(
+    {
+      type: {
+        type: 'string',
+        enum: [
+          'DECOMPOSE_PROPOSAL',
+          'CREATE_TASK_DRAFT',
+          'UPDATE_TASK_DRAFT',
+          'DISCARD_DRAFT',
+          'ASSIGN_PROPOSAL',
+          'REBALANCE_PROPOSAL',
+          'RISK_EXPLANATION',
+          'MEMORY_PROPOSAL',
+          'ASK_CLARIFICATION',
+          'CHAT_RESPONSE',
+        ],
+      },
+      reply: str('văn bản hiển thị ≤ 600 ký tự'),
+      sprint: str('mã s'),
+      tasks: arr(draftTask),
+      drafts: arr(
+        obj(
+          {
+            ...(draftTask.properties as Record<string, JsonSchema>),
+            assignee: str('mã u'),
+            start: str('YYYY-MM-DD'),
+            due: str('YYYY-MM-DD'),
+          },
+          ['draftKey', 'title'],
+        ),
+      ),
+      assumptions: arr(str()),
+      targetTask: str('mã t (sửa task thật)'),
+      targetDraftKeys: arr(str('draftKey đang mở')),
+      all: { type: 'boolean', description: 'DISCARD_DRAFT: bỏ mọi nháp' },
+      patch: obj({
+        title: str(),
+        description: { type: 'string', nullable: true },
+        estimateHours: { type: 'number', nullable: true },
+        priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] },
+        difficulty: int(),
+        requiredSkills: arr(obj({ skill: str(), minLevel: int() }, ['skill'])),
+        dependsOn: arr(str()),
+        suggestedAssignee: {
+          type: 'string',
+          nullable: true,
+          description: 'mã u; null = bỏ giao',
+        },
+        start: { type: 'string', nullable: true, description: 'YYYY-MM-DD' },
+        due: { type: 'string', nullable: true, description: 'YYYY-MM-DD' },
+        sprint: { type: 'string', nullable: true, description: 'mã s' },
+      }),
+      resolutionReason: str(),
+      assignments: arr(
+        obj(
+          {
+            task: str('mã t'),
+            assignee: str('mã u'),
+            start: str(),
+            due: str(),
+            reason: str(),
+            alternatives: arr(
+              obj({ assignee: str(), tradeoff: str() }, [
+                'assignee',
+                'tradeoff',
+              ]),
+            ),
+          },
+          ['task', 'assignee'],
+        ),
+      ),
+      unassigned: arr(obj({ task: str(), why: str() }, ['task', 'why'])),
+      warnings: arr(str()),
+      moves: arr(
+        obj({ task: str(), from: str(), to: str(), reason: str() }, [
+          'task',
+          'from',
+          'to',
+        ]),
+      ),
+      riskLevel: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'UNKNOWN'] },
+      causes: arr(obj({ code: str(), text: str() }, ['text'])),
+      recommendations: arr(str()),
+      memory: obj(
+        {
+          kind: {
+            type: 'string',
+            enum: ['PERSONAL', 'SCHEDULE', 'ASSIGNMENT', 'CAPACITY', 'PROJECT'],
+          },
+          content: str(),
+        },
+        ['kind', 'content'],
+      ),
+      question: str(),
+      options: arr(obj({ code: str(), label: str() }, ['code', 'label'])),
+      dataRef: str(),
+      suggestApply: { type: 'boolean' },
+    },
+    ['type', 'reply'],
+  ),
   GENERAL: obj({ type: str(), reply: str() }, ['type', 'reply']),
 };
 

@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -23,6 +24,7 @@ import { AiService } from './ai.service';
 import {
   ApplyProposalDto,
   DecomposeDto,
+  PatchItemDto,
   QuotaQueryDto,
   RejectProposalDto,
 } from './dto/ai.dto';
@@ -88,13 +90,30 @@ export class AiController {
 
   @Post('ai/proposals/:id/reject')
   @HttpCode(204)
-  @ApiOperation({ summary: 'Từ chối đề xuất (ghi ai_feedback)' })
+  @ApiOperation({
+    summary:
+      'Từ chối đề xuất toàn bộ hoặc một phần (draftKeys) — ghi ai_feedback',
+  })
   async reject(
     @CurrentUser() user: JwtUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RejectProposalDto,
   ): Promise<void> {
-    await this.ai.reject(user.id, id, dto.reason);
+    await this.ai.reject(user.id, id, dto.reason, dto.draftKeys);
+  }
+
+  @Patch('ai/proposals/:id/items/:draftKey')
+  @ApiOperation({
+    summary:
+      'Người sửa tay một item trên panel (không qua LLM) — kèm version; 409 khi lệch',
+  })
+  patchItem(
+    @CurrentUser() user: JwtUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('draftKey') draftKey: string,
+    @Body() dto: PatchItemDto,
+  ) {
+    return this.ai.patchItem(user.id, id, draftKey, dto);
   }
 
   @Get('ai/quota')

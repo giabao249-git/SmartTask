@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  CreateTaskDraft,
   DecomposeProposal,
   RiskExplanation,
+  UpdateTaskDraft,
   ValidationIssue,
   ValidationResult,
 } from '@smarttask/shared';
+import type { ProposalAction } from '../proposals/draft-items';
 import { PrismaService } from '../../prisma/prisma.service';
 import { addDays, isoDate, toDate } from '../../workload/domain/calendar';
 import { WorkloadService } from '../../workload/workload.service';
@@ -22,17 +25,20 @@ export interface DecomposeContext {
 }
 
 /** Ánh xạ mã → UUID mà Validator đã đối chiếu — Executor dùng, action gốc KHÔNG bị sửa. */
+export interface ItemResolution {
+  assigneeId: string | null;
+  skills: { skillId: string; minLevel: number }[];
+  /** Tên kỹ năng LLM sinh không khớp danh mục — bị bỏ, đã ghi cảnh báo */
+  droppedSkills: string[];
+  /** Task thật (TASK_UPDATE / ASSIGN / REBALANCE) đã đối chiếu mã t → UUID */
+  taskId?: string;
+  /** Sprint riêng của item (patch.sprint) — null = bỏ khỏi sprint */
+  sprintId?: string | null;
+}
+
 export interface DecomposeResolution {
   sprintId: string | null;
-  tasks: Record<
-    string,
-    {
-      assigneeId: string | null;
-      skills: { skillId: string; minLevel: number }[];
-      /** Tên kỹ năng LLM sinh không khớp danh mục — bị bỏ, đã ghi cảnh báo */
-      droppedSkills: string[];
-    }
-  >;
+  tasks: Record<string, ItemResolution>;
 }
 
 export interface DecomposeValidation extends ValidationResult {
@@ -452,6 +458,357 @@ export class ActionValidatorService {
       errors,
       warnings,
       facts,
+      checkedAt: new Date().toISOString(),
+      resolution,
+    };
+  }
+
+  // ── Phase 8: mọi loại action có item (docs 12 §1) ──────────
+
+  /** Điều phối theo `type`; kết quả luôn có `resolution` (mã → UUID đã đối chiếu) cho Executor. */
+  async validateAction(
+    action: ProposalAction,
+    ctx: DecomposeContext,
+  ): Promise<DecomposeValidation> {
+    switch (action.type) {
+      case 'DECOMPOSE_PROPOSAL':
+        return this.validateDecompose(action, ctx);
+      case 'CREATE_TASK_DRAFT':
+        return this.validateTaskDrafts(action, ctx);
+      case 'UPDATE_TASK_DRAFT':
+        return this.validateTaskUpdate(action, ctx);
+      case 'ASSIGN_PROPOSAL':
+        return this.validateAssignments(
+          action.assignments.map((a) => ({
+            draftKey: a.draftKey ?? '',
+            task: a.task,
+            assignee: a.assignee,
+            start: a.start,
+            due: a.due,
+          })),
+          ctx,
+        );
+      case 'REBALANCE_PROPOSAL':
+        return this.validateAssignments(
+          action.moves.map((m) => ({
+            draftKey: m.draftKey ?? '',
+            task: m.task,
+            assignee: m.to,
+          })),
+          ctx,
+        );
+    }
+  }
+
+  /** CREATE_TASK_DRAFT = DECOMPOSE + ngày bắt đầu/hạn từng bản nháp (start ≤ due; hạn đã qua → cảnh báo). */
+  async validateTaskDrafts(
+    action: CreateTaskDraft,
+    ctx: DecomposeContext,
+  ): Promise<DecomposeValidation> {
+    const asDecompose: DecomposeProposal = {
+      type: 'DECOMPOSE_PROPOSAL',
+      schemaVersion: action.schemaVersion,
+      reply: action.reply,
+      sprint: action.sprint,
+      assumptions: [],
+      tasks: action.drafts.map((d) => ({
+        ...d,
+        suggestedAssignee: d.assignee ?? d.suggestedAssignee,
+      })),
+    };
+    const r = await this.validateDecompose(asDecompose, ctx);
+    const rename = (i: ValidationIssue) => ({
+      ...i,
+      path: i.path.replace(/^tasks\[/, 'drafts['),
+    });
+    const errors = r.errors.map(rename);
+    const warnings = r.warnings.map(rename);
+    const today = isoDate(toDate(ctx.today ?? new Date()));
+    action.drafts.forEach((d, i) => {
+      if (d.start && d.due && d.start > d.due)
+        errors.push(
+          issue(
+            `drafts[${i}].due`,
+            'VALIDATION_FAILED',
+            `Hạn ${d.due} trước ngày bắt đầu ${d.start}`,
+          ),
+        );
+      if (d.due && d.due < today)
+        warnings.push(
+          issue(
+            `drafts[${i}].due`,
+            'DUE_IN_PAST',
+            `Hạn ${d.due} đã qua (hôm nay ${today})`,
+          ),
+        );
+    });
+    return { ...r, ok: errors.length === 0, errors, warnings };
+  }
+
+  /** UPDATE_TASK_DRAFT{targetTask}: task thật còn sống trong dự án, người/sprint hợp lệ, ngày hợp lệ. */
+  async validateTaskUpdate(
+    action: UpdateTaskDraft,
+    ctx: DecomposeContext,
+  ): Promise<DecomposeValidation> {
+    const errors: ValidationIssue[] = [];
+    const warnings: ValidationIssue[] = [];
+    const draftKey = action.draftKey ?? 'd0';
+    const resolution: DecomposeResolution = {
+      sprintId: ctx.sprintId,
+      tasks: {},
+    };
+    const item = {
+      assigneeId: null as string | null,
+      skills: [],
+      droppedSkills: [] as string[],
+      taskId: undefined as string | undefined,
+      sprintId: undefined as string | null | undefined,
+    };
+    const taskId = ctx.codes.idOf('t', action.targetTask);
+    if (!taskId)
+      errors.push(
+        issue(
+          'targetTask',
+          'UNKNOWN_CODE',
+          `Mã task ${action.targetTask ?? '(trống)'} không có trong ngữ cảnh`,
+        ),
+      );
+    else {
+      const t = await this.prisma.task.findFirst({
+        where: { id: taskId, projectId: ctx.projectId, deletedAt: null },
+        select: {
+          id: true,
+          startDate: true,
+          dueDate: true,
+          completedAt: true,
+          number: true,
+        },
+      });
+      if (!t)
+        errors.push(
+          issue(
+            'targetTask',
+            'NOT_FOUND',
+            'Task không còn tồn tại trong dự án',
+          ),
+        );
+      else {
+        item.taskId = t.id;
+        if (t.completedAt)
+          warnings.push(
+            issue(
+              'targetTask',
+              'TASK_DONE',
+              `Task ${ctx.codes.codeOf('t', t.id)} đã hoàn thành`,
+            ),
+          );
+        const p = action.patch;
+        const start =
+          p.start === undefined
+            ? t.startDate
+              ? isoDate(toDate(t.startDate))
+              : null
+            : p.start;
+        const due =
+          p.due === undefined
+            ? t.dueDate
+              ? isoDate(toDate(t.dueDate))
+              : null
+            : p.due;
+        if (start && due && start > due)
+          errors.push(
+            issue(
+              'patch.due',
+              'VALIDATION_FAILED',
+              `Hạn ${due} trước ngày bắt đầu ${start}`,
+            ),
+          );
+      }
+    }
+    const p = action.patch;
+    if (p.suggestedAssignee) {
+      const uid = ctx.codes.idOf('u', p.suggestedAssignee);
+      if (!uid)
+        errors.push(
+          issue(
+            'patch.suggestedAssignee',
+            'UNKNOWN_CODE',
+            `Mã ${p.suggestedAssignee} không có trong ngữ cảnh`,
+          ),
+        );
+      else {
+        const m = await this.prisma.projectMember.findUnique({
+          where: {
+            projectId_userId: { projectId: ctx.projectId, userId: uid },
+          },
+          select: { userId: true },
+        });
+        if (!m)
+          errors.push(
+            issue(
+              'patch.suggestedAssignee',
+              'ASSIGN_NOT_MEMBER',
+              `${p.suggestedAssignee} không là thành viên dự án`,
+            ),
+          );
+        else item.assigneeId = uid;
+      }
+    }
+    if (p.sprint !== undefined) {
+      if (p.sprint === null) item.sprintId = null;
+      else {
+        const sid = ctx.codes.idOf('s', p.sprint);
+        const sp = sid
+          ? await this.prisma.sprint.findFirst({
+              where: {
+                id: sid,
+                projectId: ctx.projectId,
+                status: { not: 'CLOSED' },
+              },
+              select: { id: true },
+            })
+          : null;
+        if (!sid)
+          errors.push(
+            issue(
+              'patch.sprint',
+              'UNKNOWN_CODE',
+              `Mã sprint ${p.sprint} không có trong ngữ cảnh`,
+            ),
+          );
+        else if (!sp)
+          errors.push(
+            issue(
+              'patch.sprint',
+              'NOT_FOUND',
+              'Sprint không còn tồn tại hoặc đã đóng',
+            ),
+          );
+        else item.sprintId = sid;
+      }
+    }
+    if (
+      p.estimateHours !== undefined &&
+      p.estimateHours !== null &&
+      (p.estimateHours < MIN_ESTIMATE || p.estimateHours > MAX_ESTIMATE)
+    )
+      errors.push(
+        issue(
+          'patch.estimateHours',
+          'VALIDATION_FAILED',
+          `Ước lượng phải trong ${MIN_ESTIMATE}–${MAX_ESTIMATE} h`,
+          { value: p.estimateHours },
+        ),
+      );
+    if (p.status !== undefined)
+      warnings.push(
+        issue(
+          'patch.status',
+          'UNSUPPORTED',
+          'Đổi cột/trạng thái qua chat chưa hỗ trợ — kéo thẻ trên bảng',
+        ),
+      );
+    if (!Object.keys(p).length)
+      errors.push(
+        issue('patch', 'VALIDATION_FAILED', 'Patch rỗng — không có gì để sửa'),
+      );
+    resolution.tasks[draftKey] = item;
+    return {
+      ok: errors.length === 0,
+      errors,
+      warnings,
+      facts: {},
+      checkedAt: new Date().toISOString(),
+      resolution,
+    };
+  }
+
+  /** ASSIGN/REBALANCE: từng dòng — task thật còn sống, người là thành viên, không nghỉ trọn tới hạn. */
+  async validateAssignments(
+    items: {
+      draftKey: string;
+      task: string;
+      assignee: string;
+      start?: string;
+      due?: string;
+    }[],
+    ctx: DecomposeContext,
+  ): Promise<DecomposeValidation> {
+    const errors: ValidationIssue[] = [];
+    const warnings: ValidationIssue[] = [];
+    const resolution: DecomposeResolution = {
+      sprintId: ctx.sprintId,
+      tasks: {},
+    };
+    const members = new Set(
+      (
+        await this.prisma.projectMember.findMany({
+          where: { projectId: ctx.projectId },
+          select: { userId: true },
+        })
+      ).map((m) => m.userId),
+    );
+    for (const [i, it] of items.entries()) {
+      const p = `items[${i}]`;
+      const item = {
+        assigneeId: null as string | null,
+        skills: [],
+        droppedSkills: [] as string[],
+        taskId: undefined as string | undefined,
+      };
+      const taskId = ctx.codes.idOf('t', it.task);
+      const t = taskId
+        ? await this.prisma.task.findFirst({
+            where: { id: taskId, projectId: ctx.projectId, deletedAt: null },
+            select: { id: true },
+          })
+        : null;
+      if (!taskId)
+        errors.push(
+          issue(
+            `${p}.task`,
+            'UNKNOWN_CODE',
+            `Mã task ${it.task} không có trong ngữ cảnh`,
+          ),
+        );
+      else if (!t)
+        errors.push(
+          issue(`${p}.task`, 'NOT_FOUND', 'Task không còn tồn tại trong dự án'),
+        );
+      else item.taskId = t.id;
+      const uid = ctx.codes.idOf('u', it.assignee);
+      if (!uid)
+        errors.push(
+          issue(
+            `${p}.assignee`,
+            'UNKNOWN_CODE',
+            `Mã ${it.assignee} không có trong ngữ cảnh`,
+          ),
+        );
+      else if (!members.has(uid))
+        errors.push(
+          issue(
+            `${p}.assignee`,
+            'ASSIGN_NOT_MEMBER',
+            `${it.assignee} không là thành viên dự án`,
+          ),
+        );
+      else item.assigneeId = uid;
+      if (it.start && it.due && it.start > it.due)
+        errors.push(
+          issue(
+            `${p}.due`,
+            'VALIDATION_FAILED',
+            `Hạn ${it.due} trước ngày bắt đầu ${it.start}`,
+          ),
+        );
+      resolution.tasks[it.draftKey] = item;
+    }
+    return {
+      ok: errors.length === 0,
+      errors,
+      warnings,
+      facts: {},
       checkedAt: new Date().toISOString(),
       resolution,
     };

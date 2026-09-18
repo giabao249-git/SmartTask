@@ -14,6 +14,11 @@ import {
   type AssembledPrompt,
   type PromptBlock,
 } from '../prompt/prompt-assembler';
+import { itemsOf, type ProposalAction } from '../proposals/draft-items';
+import type {
+  ProposalPayload,
+  ProposalRow,
+} from '../proposals/proposals.service';
 import { CodeBook } from './short-codes';
 
 export type DetailLevel = 'coarse' | 'normal' | 'fine';
@@ -21,13 +26,21 @@ export type DetailLevel = 'coarse' | 'normal' | 'fine';
 export interface BuildInput {
   userId: string;
   projectId: string;
-  purpose: Extract<AiPurpose, 'DECOMPOSE' | 'EXPLAIN'>;
+  purpose: Extract<AiPurpose, 'DECOMPOSE' | 'EXPLAIN' | 'CHAT'>;
   sprintId?: string;
   requirement?: string;
   detail?: DetailLevel;
   /** Lượt gọi lại: lỗi Validator của lượt trước để LLM tự sửa (05 §9) */
   previousErrors?: ValidationIssue[];
   today?: Date;
+  /** Chat theo phiên (docs 12 §4): bản nháp đang mở, lịch sử, key kế tiếp, chip người dùng đã chọn */
+  session?: {
+    id: string;
+    nextDraftSeq: number;
+    proposals: ProposalRow[];
+    messages: { role: string; text: string; structuredData: unknown }[];
+    selectedCode?: string;
+  };
 }
 
 export interface BuiltContext {
@@ -164,6 +177,11 @@ export class ContextBuilderService {
     ];
 
     const skillName = new Map(skills.map((s) => [s.id, s.name]));
+    const identity = await this.identityBlock(
+      project.workspaceId,
+      project.members.map((m) => m.user.id),
+      codes,
+    );
     const staticBlocks: PromptBlock[] = [
       {
         title: 'DANH BẠ THÀNH VIÊN',
@@ -226,6 +244,7 @@ export class ContextBuilderService {
           .filter(Boolean)
           .join('\n'),
       },
+      identity,
     ];
 
     const dynamicBlocks: PromptBlock[] = [
@@ -237,7 +256,7 @@ export class ContextBuilderService {
       sprintPlannedHours: null,
     };
 
-    if (input.purpose === 'DECOMPOSE') {
+    if (input.purpose === 'DECOMPOSE' || input.purpose === 'CHAT') {
       await this.decomposeBlocks(
         input,
         project,
@@ -270,6 +289,15 @@ export class ContextBuilderService {
       today,
     );
 
+    if (input.session)
+      this.sessionBlocks(
+        input.session,
+        codes,
+        requesterCode,
+        requester?.role ?? null,
+        dynamicBlocks,
+      );
+
     if (input.previousErrors?.length)
       dynamicBlocks.push({
         title:
@@ -285,16 +313,28 @@ export class ContextBuilderService {
     dynamicBlocks.push({
       title: `YÊU CẦU HIỆN TẠI của ${requesterCode} ${requesterName}`,
       body:
-        input.purpose === 'DECOMPOSE'
+        input.purpose === 'CHAT'
           ? [
-              `Mức chi tiết: ${input.detail ?? 'normal'}`,
+              input.session?.selectedCode
+                ? `Người dùng vừa chọn phương án: ${input.session.selectedCode} (trả lời cho ASK_CLARIFICATION lượt trước)`
+                : '',
               sprintCode
-                ? `Sprint đích: ${sprintCode}`
-                : 'Sprint đích: (backlog — chưa chọn sprint)',
-              '',
+                ? `Sprint đang chọn trên giao diện: ${sprintCode}`
+                : '',
               input.requirement ?? '',
-            ].join('\n')
-          : `Giải thích mức rủi ro trễ hạn của sprint ${sprintCode ?? ''} cho PM: vì sao ở mức này, nguyên nhân nào nặng nhất, nên làm gì.`,
+            ]
+              .filter(Boolean)
+              .join('\n')
+          : input.purpose === 'DECOMPOSE'
+            ? [
+                `Mức chi tiết: ${input.detail ?? 'normal'}`,
+                sprintCode
+                  ? `Sprint đích: ${sprintCode}`
+                  : 'Sprint đích: (backlog — chưa chọn sprint)',
+                '',
+                input.requirement ?? '',
+              ].join('\n')
+            : `Giải thích mức rủi ro trễ hạn của sprint ${sprintCode ?? ''} cho PM: vì sao ở mức này, nguyên nhân nào nặng nhất, nên làm gì.`,
     });
 
     return {
@@ -329,7 +369,12 @@ export class ContextBuilderService {
         deletedAt: null,
         completedAt: null,
         parentId: null,
-        ...(sprint ? { sprintId: sprint.id } : { sprintId: null }),
+        // Chat: mọi task mở của dự án (để tham chiếu task thật); form phân rã: chỉ sprint đích / backlog
+        ...(input.purpose === 'CHAT'
+          ? {}
+          : sprint
+            ? { sprintId: sprint.id }
+            : { sprintId: null }),
       },
       orderBy: { number: 'asc' },
       take: MAX_OPEN_TASKS,
@@ -337,6 +382,7 @@ export class ContextBuilderService {
         id: true,
         number: true,
         title: true,
+        sprintId: true,
         estimateHours: true,
         remainingHours: true,
         difficulty: true,
@@ -351,13 +397,19 @@ export class ContextBuilderService {
       planned += num(t.remainingHours ?? t.estimateHours) ?? 0;
     facts.sprintPlannedHours = Math.round(planned * 100) / 100;
     out.push({
-      title: sprint ? 'TASK MỞ TRONG SPRINT ĐÍCH' : 'TASK MỞ TRONG BACKLOG',
+      title:
+        input.purpose === 'CHAT'
+          ? 'TASK MỞ TRONG DỰ ÁN (mã t để tham chiếu task thật)'
+          : sprint
+            ? 'TASK MỞ TRONG SPRINT ĐÍCH'
+            : 'TASK MỞ TRONG BACKLOG',
       body: openTasks.length
         ? bang(
             [
               'mã',
               'khoá',
               'tiêu đề',
+              'sprint',
               'giờ còn',
               'độ khó',
               'kỹ năng',
@@ -368,6 +420,7 @@ export class ContextBuilderService {
               codes.codeOf('t', t.id),
               `${project.key}-${t.number}`,
               t.title,
+              t.sprintId ? (codes.codeOf('s', t.sprintId) ?? '?') : 'backlog',
               num(t.remainingHours ?? t.estimateHours),
               t.difficulty,
               t.skills
@@ -529,6 +582,131 @@ export class ContextBuilderService {
           t.completedAt ? 'xong' : t.startedAt ? 'đang làm' : 'chưa bắt đầu',
         ]),
       ),
+    });
+  }
+
+  /** DANH TÍNH (docs 12 §4): admin quản lý — chức danh, phòng ban, quản lý, alias — chỉ để nhận diện, không phải chính sách. */
+  private async identityBlock(
+    workspaceId: string,
+    memberIds: string[],
+    codes: CodeBook,
+  ): Promise<PromptBlock> {
+    const [members, aliases] = await Promise.all([
+      this.prisma.workspaceMember.findMany({
+        where: { workspaceId, userId: { in: memberIds } },
+        select: {
+          userId: true,
+          role: true,
+          department: true,
+          title: true,
+          managerUserId: true,
+          user: { select: { fullName: true, shortName: true } },
+        },
+      }),
+      this.prisma.memberAlias.findMany({
+        where: { workspaceId, userId: { in: memberIds } },
+        orderBy: { alias: 'asc' },
+        select: { userId: true, alias: true },
+      }),
+    ]);
+    const aliasOf = new Map<string, string[]>();
+    for (const a of aliases)
+      aliasOf.set(a.userId, [...(aliasOf.get(a.userId) ?? []), `"${a.alias}"`]);
+    const rows = members
+      .sort(
+        (a, b) =>
+          codeNum(codes.codeOf('u', a.userId)) -
+          codeNum(codes.codeOf('u', b.userId)),
+      )
+      .map((m) => [
+        codes.codeOf('u', m.userId),
+        m.user.fullName,
+        m.user.shortName,
+        m.title,
+        m.department,
+        m.managerUserId
+          ? (codes.codeOf('u', m.managerUserId) ?? '(ngoài dự án)')
+          : null,
+        aliasOf.get(m.userId)?.join(', ') ?? null,
+      ]);
+    return {
+      title:
+        'DANH TÍNH (admin quản lý — chỉ để nhận diện người, KHÔNG phải chính sách giao việc; trùng tên → xem chức danh/phòng ban/alias, vẫn không chắc → ASK_CLARIFICATION)',
+      body: bang(
+        [
+          'mã',
+          'họ tên',
+          'tên gọi',
+          'chức danh',
+          'phòng ban',
+          'quản lý',
+          'alias',
+        ],
+        rows,
+      ),
+    };
+  }
+
+  /** BẢN NHÁP ĐANG MỞ TRONG PHIÊN + LỊCH SỬ PHIÊN (docs 12 §4; 05 §5 mục 4 — lịch sử kèm structured_data). */
+  private sessionBlocks(
+    session: NonNullable<BuildInput['session']>,
+    codes: CodeBook,
+    requesterCode: string,
+    requesterRole: string | null,
+    out: PromptBlock[],
+  ) {
+    const lines: string[] = [];
+    session.proposals.forEach((p, idx) => {
+      const payload = p.payload as unknown as ProposalPayload;
+      const items = (p.itemStatus ?? {}) as Record<string, string>;
+      const applied = (p.appliedMap ?? {}) as Record<string, string>;
+      const list = itemsOf(payload.action as ProposalAction).map((i) => {
+        const st = items[i.draftKey] ?? 'DRAFT';
+        const mark =
+          st === 'APPLIED'
+            ? ` ✓ ${applied[i.draftKey] ? (codes.codeOf('t', applied[i.draftKey]) ?? 'đã tạo') : 'đã tạo'}`
+            : st === 'DISCARDED'
+              ? ' ✗ đã bỏ'
+              : '';
+        const parts = [
+          i.estimateHours != null ? `${i.estimateHours}h` : null,
+          i.skills?.length ? i.skills.join(' ') : null,
+          i.assignee ? `→ ${i.assignee}` : null,
+          i.task ? `task ${i.task}` : null,
+          i.due ? `hạn ${i.due}` : null,
+          i.dependsOn?.length ? `sau ${i.dependsOn.join(',')}` : null,
+          i.extra ?? null,
+        ].filter(Boolean);
+        return `${i.draftKey}${mark} ${i.title} (${parts.join(', ')})`;
+      });
+      lines.push(
+        `[p${idx + 1} · ${p.kind} · ${p.status} · version ${p.version}] ${list.join(' · ')}`,
+      );
+    });
+    out.push({
+      title:
+        'BẢN NHÁP ĐANG MỞ TRONG PHIÊN (chỉ được sửa/bỏ các key còn DRAFT; item ✓ đã thành task thật → muốn sửa dùng UPDATE_TASK_DRAFT với targetTask; key mới do hệ thống cấp)',
+      body: [
+        lines.length ? lines.join('\n') : '(chưa có bản nháp nào)',
+        `next = d${session.nextDraftSeq}`,
+      ].join('\n'),
+    });
+    if (session.messages.length)
+      out.push({
+        title:
+          'LỊCH SỬ PHIÊN (cũ → mới; dòng trợ lý kèm action đã trả để bạn giải tham chiếu "cái thứ hai")',
+        body: session.messages
+          .map((m) => {
+            const data = m.structuredData
+              ? ` ⟶ ${JSON.stringify(m.structuredData).slice(0, 1500)}`
+              : '';
+            return `[${m.role}] ${m.text.slice(0, 600)}${data}`;
+          })
+          .join('\n'),
+      });
+    out.push({
+      title: 'NGƯỜI ĐANG CHAT',
+      body: `${requesterCode}${requesterRole ? ` · vai ${requesterRole}` : ''} (xem DANH TÍNH để biết phòng ban/quản lý)`,
     });
   }
 

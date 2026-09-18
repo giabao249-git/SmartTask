@@ -219,11 +219,13 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 |---|---|---|---|---|---|
 | `POST /projects/:id/ai/decompose` | pj:PM | `{ requirement, sprintId?, detail: "coarse" \| "normal" \| "fine" }` | `{ proposalId, action: DECOMPOSE_PROPOSAL, validation, cached }` (503 khi AI lỗi, 429 hạn mức) | M | 28 |
 | `GET /ai/proposals/:id` | pj:PM | — | `proposal` (payload, validation, status) | M | 28 |
-| `POST /ai/proposals/:id/apply` | pj:PM | `{ edits: {...} }` + `Idempotency-Key?` | `201 { createdTaskIds[] \| updatedTaskIds[] }` | M | 28, 39 |
-| `POST /ai/proposals/:id/reject` | pj:PM | `{ reason? }` | `204` (ghi ai_feedback) | M | 28 |
+| `POST /ai/proposals/:id/apply` | pj:PM · người tạo (thành viên) | `{ draftKeys?[], version?, edits? }` + `Idempotency-Key?` | `201 { proposal, createdTasks[{draftKey, taskId, key}], createdTaskIds[] }` — duyệt toàn bộ hoặc một phần; 409 `PROPOSAL_VERSION_CONFLICT` / `PROPOSAL_ALREADY_APPLIED` / `DRAFT_ALREADY_APPLIED`; 422 `PROPOSAL_VALIDATION_FAILED` | M (Phase 8: một phần) | 28, 39 |
+| `POST /ai/proposals/:id/reject` | pj:PM · người tạo | `{ draftKeys?[], reason? }` | `204` (item → DISCARDED, ghi ai_feedback) | M | 28 |
+| `PATCH /ai/proposals/:id/items/:draftKey` | pj:PM · người tạo | `{ patch, version }` (patch theo `draftPatchSchema`) | `proposal` (version + 1; 409 lệch; 422 key lạ) | S9 | 38 |
 | `GET /ai/quota` | auth | — | `{ used, limit, resetsAt }` | M | 32 |
-| `POST /ai/chat` | pj:MEMBER | `{ projectId, sessionId?, text, selectedCode? }` | `{ sessionId, messageId, action, validation? }` | S9 | 38, 39 |
-| `GET /ai/sessions?projectId=` · `GET /ai/sessions/:id/messages` · `DELETE /ai/sessions/:id` | self | — | `session[]` / `message[]` (structuredData) | S9 | 38 |
+| `POST /ai/chat` | pj:MEMBER | `{ projectId, sessionId?, text, selectedCode?, sprintId? }` | `{ sessionId, session, message, action, validation?, proposals[] (toàn bộ của phiên), usage }` — 409 `AI_TURN_IN_PROGRESS` khi chồng lượt | S9 (Phase 8) | 38, 39 |
+| `GET /ai/sessions?projectId=&includeArchived=` · `POST /ai/sessions` · `GET /ai/sessions/:id` · `GET /ai/sessions/:id/proposals` · `PATCH /ai/sessions/:id` · `DELETE /ai/sessions/:id` | self | `{ projectId, title? }` · `{ title?, archived? }` | `session[]` (kèm openDrafts) / `{ session, messages[], proposals[] }` / `proposal[]`; xoá → DRAFT của phiên REJECTED, task đã tạo giữ | S9 (Phase 8) | 38 |
+| `GET · PUT /workspaces/:wsId/ai/prompt` · `GET · POST · DELETE /workspaces/:wsId/member-aliases[/:id]` · `PATCH /workspaces/:wsId/members/:userId/identity` | ws:ADMIN | `{ content }` · `{ userId, alias }` · `{ department?, title?, managerUserId? }` | WORKSPACE prompt (chính sách chọn người) · alias · danh tính — dữ liệu DANH TÍNH cho LLM nhận diện, không phải chính sách (docs 12 §4) | S9 (Phase 8) | 40 |
 | `GET · POST · PATCH · DELETE /me/ai/memories[/:id]` · `POST /me/ai/memories/:id/structure` | self | xem 06 | `memory[]` | S9 | 38 |
 | `GET /me/ai/habits` · `PATCH /me/ai/habits/:id` | self | `{ isVisible? , promote? }` | `habit[]` | S9 | 39 |
 | `GET · PUT /me/ai/personal-prompt` | self | `{ content }` | `{ content }` | S9 | 38 |
@@ -261,12 +263,14 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 | S→C | `notification:new` | `{ notification }` | `user:{id}` |
 | S→C | `presence:update` | `{ projectId, users[{ userId, view }] }` | `project:{id}` |
 | S→C | `ai:proposal:applied` | `{ proposalId, taskIds[] }` | `project:{id}` |
+| S→C | `ai:proposal:updated` | `{ sessionId, projectId, proposal }` — bản nháp vá/bỏ/duyệt một phần (tab thứ hai thấy thẻ đổi màu) | `user:{id}` |
+| S→C | `ai:session:updated` | `{ sessionId, projectId, change }` | `user:{id}` |
 
 Client ghi qua REST; socket chỉ nhận. Sự kiện có `version` nhỏ hơn bản đang giữ thì bỏ qua.
 
 ## 5. Mã lỗi nghiệp vụ (packages/shared/errors.ts)
 
-`TASK_VERSION_CONFLICT`, `WIP_LIMIT_EXCEEDED`, `DEPENDENCY_CYCLE`, `SPRINT_ALREADY_ACTIVE`, `SPRINT_NOT_ACTIVE`, `PROJECT_PM_REQUIRED`, `INVITATION_EXPIRED`, `ATTACHMENT_TOO_LARGE`, `SKILL_MERGE_SAME`, `AI_QUOTA_EXCEEDED`, `AI_PROVIDER_UNAVAILABLE`, `AI_RESPONSE_INVALID`, `PROPOSAL_EXPIRED`, `PROPOSAL_ALREADY_APPLIED`, `ASSIGN_NOT_MEMBER`, `ASSIGN_ON_LEAVE`, `ASSIGN_SKILL_GAP`, `ASSIGN_CAPACITY_EXCEEDED`, `ASSIGN_OVERLOAD`, `UNKNOWN_CODE`, `CALENDAR_SYNC_FAILED`.
+`TASK_VERSION_CONFLICT`, `WIP_LIMIT_EXCEEDED`, `DEPENDENCY_CYCLE`, `SPRINT_ALREADY_ACTIVE`, `SPRINT_NOT_ACTIVE`, `PROJECT_PM_REQUIRED`, `INVITATION_EXPIRED`, `ATTACHMENT_TOO_LARGE`, `SKILL_MERGE_SAME`, `AI_QUOTA_EXCEEDED`, `AI_PROVIDER_UNAVAILABLE`, `AI_RESPONSE_INVALID`, `PROPOSAL_EXPIRED`, `PROPOSAL_ALREADY_APPLIED`, `ASSIGN_NOT_MEMBER`, `ASSIGN_ON_LEAVE`, `ASSIGN_SKILL_GAP`, `ASSIGN_CAPACITY_EXCEEDED`, `ASSIGN_OVERLOAD`, `UNKNOWN_CODE`, `CALENDAR_SYNC_FAILED`, `AI_PURPOSE_DISABLED`, `AI_IN_PROGRESS`, `AI_CONFIG_INVALID`, `PROPOSAL_NOT_DRAFT`, `PROPOSAL_VALIDATION_FAILED`, `AI_TURN_IN_PROGRESS`, `PROPOSAL_VERSION_CONFLICT`, `UNKNOWN_DRAFT_KEY`, `DRAFT_ALREADY_APPLIED`.
 
 ## 6. Việc tiếp theo
 

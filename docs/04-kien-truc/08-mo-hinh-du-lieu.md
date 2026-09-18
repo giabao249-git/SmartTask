@@ -154,6 +154,9 @@ Các bảng còn lại của lõi có thuộc tính hiển nhiên: `invitations(
 | `calendar_connections`, `calendar_events` | mới | chỉ khung giờ bận |
 | `time_entries`, `task_reviews`, `user_metrics_weekly` | mới | nguồn EAR, rating, vận tốc; check-in tuần (UC-41) không làm nên không có bảng |
 | `user_time_off` | (đã ở lõi) | |
+| `member_aliases` (Phase 8) | Table_Calendar `UserAlias` | `workspace_id, user_id, alias citext`, unique `(workspace_id, alias)` — admin quản, chỉ để LLM nhận diện ([12 §2](12-chat-phien-va-ban-nhap.md)) |
+| `workspace_members` + `department`, `title`, `manager_user_id` (Phase 8) | mới | dữ liệu DANH TÍNH cho prompt; chính sách chọn người ở `ai_prompt_configs` WORKSPACE |
+| `chat_sessions` + `next_draft_seq`, `last_turn_at`, `archived_at`; `ai_proposals` + `session_id`, `version`, `item_status`, `applied_map`, kind `TASK_UPDATE` (Phase 8) | mới | bản nháp sửa nhiều lượt sống ở server; partial unique `ai_proposals_one_draft` chỉ còn áp cho `session_id IS NULL` |
 
 Không lấy `AiRuntimeConfig` (singleton) của Table_Calendar: các tuỳ chọn `dataSources`/`promptCache` đặt trong `ai_configs.advanced_params` theo từng cấu hình, vì SmartTask đa workspace.
 
@@ -232,7 +235,10 @@ erDiagram
                   uuid user_id FK
                   uuid workspace_id FK
                   uuid project_id FK
-                  string title }
+                  string title
+                  int next_draft_seq "cấp draftKey duy nhất trong phiên"
+                  datetime last_turn_at
+                  datetime archived_at }
   chat_messages { uuid id PK
                   uuid session_id FK
                   enum role "USER ASSISTANT SYSTEM"
@@ -249,7 +255,11 @@ erDiagram
                  json validation_result
                  enum status "DRAFT APPLIED REJECTED EXPIRED"
                  uuid applied_by FK
-                 datetime applied_at }
+                 datetime applied_at
+                 uuid session_id FK "NULL = từ form"
+                 int version "khoá lạc quan"
+                 json item_status "{d1: DRAFT|APPLIED|DISCARDED}"
+                 json applied_map "{d1: task uuid}"}
   ai_feedback { uuid id PK
                 uuid proposal_id FK
                 uuid task_id FK

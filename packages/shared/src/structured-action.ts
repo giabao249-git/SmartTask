@@ -80,15 +80,63 @@ export const createTaskDraftSchema = z.object({
     .max(25),
   sprint: shortCode('s').optional(),
 });
+export type CreateTaskDraft = z.infer<typeof createTaskDraftSchema>;
 
+const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
+
+/**
+ * Phần vá cho một bản nháp hoặc task thật (docs 12 §1 #3, #5). Trường nào không gửi = giữ nguyên;
+ * `null` = xoá giá trị (bỏ người, bỏ hạn). Mã u/s/k như trong ngữ cảnh.
+ */
+export const draftPatchSchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    description: z.string().max(4000).nullable(),
+    estimateHours: z.number().min(0).max(400).nullable(),
+    priority: prioritySchema,
+    difficulty: z.number().int().min(1).max(5),
+    requiredSkills: z.array(requiredSkillRefSchema).max(10),
+    subtasks: z
+      .array(z.object({ title: z.string().min(1).max(200), estimateHours: z.number().min(0).max(400).optional() }))
+      .max(20),
+    dependsOn: z.array(draftKeySchema).max(20),
+    /** Người thực hiện — với task thật là thay toàn bộ danh sách bằng một người; null = bỏ giao */
+    suggestedAssignee: shortCode('u').nullable(),
+    start: isoDay.nullable(),
+    due: isoDay.nullable(),
+    sprint: shortCode('s').nullable(),
+    /** Chỉ cho task thật: mã cột đích theo statusKey (todo/doing/done…) */
+    status: z.string().max(40),
+  })
+  .partial();
+export type DraftPatch = z.infer<typeof draftPatchSchema>;
+
+/**
+ * Sửa bản nháp đang mở trong phiên (`targetDraftKey` / `targetDraftKeys`) hoặc đề xuất sửa TASK THẬT
+ * (`targetTask` — tạo proposal kind TASK_UPDATE, chỉ ghi khi người duyệt).
+ */
 export const updateTaskDraftSchema = z.object({
   type: z.literal('UPDATE_TASK_DRAFT'),
   ...base,
+  /** Server cấp khi lưu đề xuất sửa task thật vào phiên (kind TASK_UPDATE) */
+  draftKey: draftKeySchema.optional(),
   targetTask: shortCode('t').optional(),
   targetDraftKey: draftKeySchema.optional(),
-  patch: z.record(z.unknown()),
+  targetDraftKeys: z.array(draftKeySchema).max(25).optional(),
+  patch: draftPatchSchema,
   resolutionReason: z.string().max(600).optional(),
 });
+export type UpdateTaskDraft = z.infer<typeof updateTaskDraftSchema>;
+
+/** "bỏ cái thứ năm", "xoá hết nháp" — item → DISCARDED (docs 12 §1 #4). */
+export const discardDraftSchema = z.object({
+  type: z.literal('DISCARD_DRAFT'),
+  ...base,
+  targetDraftKeys: z.array(draftKeySchema).max(50).default([]),
+  all: z.boolean().default(false),
+  resolutionReason: z.string().max(600).optional(),
+});
+export type DiscardDraft = z.infer<typeof discardDraftSchema>;
 
 export const assignProposalSchema = z.object({
   type: z.literal('ASSIGN_PROPOSAL'),
@@ -96,6 +144,8 @@ export const assignProposalSchema = z.object({
   assignments: z
     .array(
       z.object({
+        /** Server cấp khi lưu vào phiên (d{seq}); LLM không cần gửi */
+        draftKey: draftKeySchema.optional(),
         task: z.string().min(1),
         assignee: shortCode('u'),
         start: z.string().optional(),
@@ -117,12 +167,15 @@ export const assignProposalSchema = z.object({
   warnings: z.array(z.string().max(300)).default([]),
 });
 
+export type AssignProposal = z.infer<typeof assignProposalSchema>;
+
 export const rebalanceProposalSchema = z.object({
   type: z.literal('REBALANCE_PROPOSAL'),
   ...base,
   moves: z
     .array(
       z.object({
+        draftKey: draftKeySchema.optional(),
         task: shortCode('t'),
         from: shortCode('u'),
         to: shortCode('u'),
@@ -131,6 +184,8 @@ export const rebalanceProposalSchema = z.object({
     )
     .max(100),
 });
+
+export type RebalanceProposal = z.infer<typeof rebalanceProposalSchema>;
 
 export const riskExplanationSchema = z.object({
   type: z.literal('RISK_EXPLANATION'),
@@ -178,6 +233,8 @@ export const chatResponseSchema = z.object({
   dataRef: z.string().max(120).optional(),
   /** Đặt bởi ResponseParser khi JSON/zod thất bại — không phải LLM. */
   parseFailed: z.boolean().optional(),
+  /** "Duyệt đi", "ok tạo hết": KHÔNG ghi gì — UI chỉ nhấp nháy nút Duyệt (docs 12 §1 #12). */
+  suggestApply: z.boolean().optional(),
 });
 export type ChatResponse = z.infer<typeof chatResponseSchema>;
 
@@ -185,6 +242,7 @@ export const structuredActionSchema = z.discriminatedUnion('type', [
   decomposeProposalSchema,
   createTaskDraftSchema,
   updateTaskDraftSchema,
+  discardDraftSchema,
   assignProposalSchema,
   rebalanceProposalSchema,
   riskExplanationSchema,
@@ -211,3 +269,7 @@ export interface ValidationResult {
   facts?: Record<string, unknown>;
   checkedAt: string;
 }
+
+/** Trạng thái từng item trong `ai_proposals.item_status` (docs 12 §2). */
+export const DRAFT_ITEM_STATUSES = ['DRAFT', 'APPLIED', 'DISCARDED'] as const;
+export type DraftItemStatus = (typeof DRAFT_ITEM_STATUSES)[number];

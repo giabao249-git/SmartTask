@@ -173,7 +173,8 @@ describe('AI MVP (e2e)', () => {
       expect(
         res.body.validation.warnings.map((w: { code: string }) => w.code),
       ).toContain('SKILL_UNKNOWN');
-      expect(res.body.usage).toMatchObject({ attempts: 1, model: 'fake' });
+      expect(res.body.usage).toMatchObject({ attempts: 1 });
+      expect(['fake', 'mock']).toContain(res.body.usage.model);
       proposalId = res.body.proposalId;
 
       const row = await prisma.aiProposal.findUniqueOrThrow({

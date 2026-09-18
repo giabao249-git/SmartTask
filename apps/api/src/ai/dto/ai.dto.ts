@@ -8,6 +8,7 @@ import {
   IsEnum,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -127,11 +128,30 @@ export class ProposalEditsDto {
 }
 
 export class ApplyProposalDto {
-  @ApiPropertyOptional({ type: ProposalEditsDto })
+  @ApiPropertyOptional({
+    type: ProposalEditsDto,
+    description: 'Sửa tay kiểu form Phase 7 (chỉ DECOMPOSE)',
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => ProposalEditsDto)
   edits?: ProposalEditsDto;
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Duyệt một phần; bỏ trống = mọi item còn DRAFT',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @Matches(/^d\d{1,3}$/, { each: true })
+  draftKeys?: string[];
+  @ApiPropertyOptional({
+    description: 'Khoá lạc quan — lệch → 409 PROPOSAL_VERSION_CONFLICT',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  version?: number;
 }
 
 export class RejectProposalDto {
@@ -140,6 +160,116 @@ export class RejectProposalDto {
   @IsString()
   @MaxLength(1000)
   reason?: string;
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Huỷ một phần; bỏ trống = toàn bộ',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @Matches(/^d\d{1,3}$/, { each: true })
+  draftKeys?: string[];
+}
+
+/** Người sửa tay một item trên panel (docs 12 §5); `patch` theo zod `draftPatchSchema` của shared. */
+export class PatchItemDto {
+  @ApiProperty({
+    example: { estimateHours: 6, suggestedAssignee: 'u2', due: '2026-10-24' },
+    description:
+      'Trường cần đổi; null = xoá giá trị; mã u/s/k theo code_map của proposal',
+  })
+  @IsObject()
+  patch!: Record<string, unknown>;
+  @ApiProperty({ example: 1 }) @IsInt() @Min(1) version!: number;
+}
+
+export class ChatDto {
+  @ApiProperty() @IsUUID() projectId!: string;
+  @ApiPropertyOptional({ description: 'Bỏ trống = tạo phiên mới' })
+  @IsOptional()
+  @IsUUID()
+  sessionId?: string;
+  @ApiProperty({ example: 'Cái thứ hai đổi thành 6 giờ, giao Lan' })
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4000)
+  text!: string;
+  @ApiPropertyOptional({
+    description: 'Chip người dùng chọn sau ASK_CLARIFICATION',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  selectedCode?: string;
+  @ApiPropertyOptional({
+    description: 'Sprint đang chọn trên giao diện (ngữ cảnh)',
+  })
+  @IsOptional()
+  @IsUUID()
+  sprintId?: string;
+}
+
+export class CreateSessionDto {
+  @ApiProperty() @IsUUID() projectId!: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(120)
+  title?: string;
+}
+
+export class PatchSessionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  title?: string;
+  @ApiPropertyOptional({ description: 'true = lưu trữ, false = mở lại' })
+  @IsOptional()
+  @IsBoolean()
+  archived?: boolean;
+}
+
+export class SessionsQueryDto {
+  @ApiPropertyOptional() @IsOptional() @IsUUID() projectId?: string;
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  includeArchived?: boolean;
+}
+
+export class CreateAliasDto {
+  @ApiProperty() @IsUUID() userId!: string;
+  @ApiProperty({ example: 'chị Lan' })
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  alias!: string;
+}
+
+export class MemberIdentityDto {
+  @ApiPropertyOptional({ example: 'Phòng Phát triển' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  department?: string | null;
+  @ApiPropertyOptional({ example: 'Backend' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  title?: string | null;
+  @ApiPropertyOptional({
+    description: 'Quản lý trực tiếp (thành viên workspace); null = bỏ',
+  })
+  @IsOptional()
+  @IsUUID()
+  managerUserId?: string | null;
 }
 
 export class QuotaQueryDto {
