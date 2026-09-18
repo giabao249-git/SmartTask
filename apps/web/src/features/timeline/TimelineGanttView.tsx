@@ -20,7 +20,9 @@ import { useSprints } from "@/lib/hooks/queries";
 import { priorityToVariant } from "@/lib/status";
 import type { TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useTasks } from "@/features/board/hooks";
+import { useTaskMutations, useTasks } from "@/features/board/hooks";
+import { describeError as errInfo } from "@/lib/api";
+import { toast } from "sonner";
 
 const DAY = 86_400_000;
 const ZOOM = { day: 40, week: 18, month: 7 } as const;
@@ -43,6 +45,48 @@ export function TimelineGanttView() {
   const tasksQuery = useTasks(project.id, { sprintId: sprintFilter !== "__all" ? sprintFilter : undefined });
   const px = ZOOM[zoom];
   const today = Math.floor(Date.now() / DAY);
+  const m = useTaskMutations(project.id);
+  // Kéo thanh (dời cả thanh) / kéo mép phải (đổi hạn): xem trước bằng delta ngày, thả mới PATCH /tasks/:id kèm version
+  const [drag, setDrag] = React.useState<{ id: string; mode: "move" | "resize"; startX: number; delta: number } | null>(null);
+  const dragRef = React.useRef(drag);
+  dragRef.current = drag;
+  const onPointerDown = (e: React.PointerEvent, t: TaskListItem, mode: "move" | "resize") => {
+    if (!project.canEdit || t.completedAt) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    setDrag({ id: t.id, mode, startX: e.clientX, delta: 0 });
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const delta = Math.round((e.clientX - d.startX) / px);
+    if (delta !== d.delta) setDrag({ ...d, delta });
+  };
+  const onPointerUp = (t: TaskListItem) => {
+    const d = dragRef.current;
+    setDrag(null);
+    if (!d || d.id !== t.id) return;
+    if (d.delta === 0) {
+      setSelectedId(t.id);
+      return;
+    }
+    const iso = (day: number) => new Date(day * DAY).toISOString().slice(0, 10);
+    const s0 = toDay(t.startDate ?? t.dueDate!);
+    const e0 = Math.max(s0, toDay(t.dueDate ?? t.startDate!));
+    const patch = d.mode === "move" ? { ...(t.startDate ? { startDate: iso(s0 + d.delta) } : {}), ...(t.dueDate ? { dueDate: iso(e0 + d.delta) } : {}) } : { dueDate: iso(Math.max(s0, e0 + d.delta)) };
+    m.update.mutate(
+      { id: t.id, version: t.version, patch },
+      {
+        onSuccess: () => toast.success(`${taskKeyOf(project.key, t)}: ${d.mode === "move" ? `dời ${d.delta > 0 ? "+" : ""}${d.delta} ngày` : "đổi hạn"}`),
+        onError: (err) => {
+          const { code, message } = errInfo(err);
+          toast.error(code === "TASK_VERSION_CONFLICT" ? "Công việc vừa được người khác sửa — đã tải lại" : message, { description: code });
+          tasksQuery.refetch();
+        },
+      },
+    );
+  };
 
   const rows = React.useMemo(() => (tasksQuery.data ?? []).filter((t) => t.startDate || t.dueDate), [tasksQuery.data]);
   const range = React.useMemo(() => {
@@ -71,8 +115,14 @@ export function TimelineGanttView() {
   const ROW = 32;
 
   const bar = (t: TaskListItem) => {
-    const s = toDay(t.startDate ?? t.dueDate!);
-    const e = Math.max(s, toDay(t.dueDate ?? t.startDate!));
+    let s = toDay(t.startDate ?? t.dueDate!);
+    let e = Math.max(s, toDay(t.dueDate ?? t.startDate!));
+    if (drag && drag.id === t.id) {
+      if (drag.mode === "move") {
+        s += drag.delta;
+        e += drag.delta;
+      } else e = Math.max(s, e + drag.delta);
+    }
     return { left: (s - range.start) * px, width: (e - s + 1) * px, overdue: !t.completedAt && !!t.dueDate && e < today };
   };
 
@@ -80,7 +130,7 @@ export function TimelineGanttView() {
     <div className="space-y-6">
       <PageHeader
         title={`Gantt / Timeline · ${project.key}`}
-        description="Chỉ đọc — kéo giãn thanh là mục 'làm nếu kịp' (docs 11 §1.2 #11). Mở chi tiết bằng cách bấm thanh."
+        description={project.canEdit ? "Kéo thanh để dời ngày, kéo mép phải để đổi hạn (lưu kèm version). Bấm thanh để mở chi tiết." : "Chỉ đọc. Bấm thanh để mở chi tiết."}
         breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Timeline" }]}
       >
         <div className="flex items-center gap-2">
@@ -168,17 +218,29 @@ export function TimelineGanttView() {
                       const b = bar(t);
                       const r = rowIndex.get(t.id) ?? 0;
                       return (
-                        <Button
+                        <div
                           key={t.id}
-                          variant="ghost"
-                          onClick={() => setSelectedId(t.id)}
-                          className={cn("absolute h-6 px-2 justify-start text-[11px] rounded-md border overflow-hidden", b.overdue ? "bg-destructive/15 border-destructive/50 text-destructive" : t.completedAt ? "bg-success/15 border-success/40" : "bg-primary/10 border-primary/40")}
+                          role="button"
+                          tabIndex={0}
+                          onPointerDown={(e) => onPointerDown(e, t, "move")}
+                          onPointerMove={onPointerMove}
+                          onPointerUp={() => onPointerUp(t)}
+                          onKeyDown={(e) => e.key === "Enter" && setSelectedId(t.id)}
+                          className={cn(
+                            "absolute h-6 px-2 flex items-center text-[11px] rounded-md border overflow-hidden select-none",
+                            project.canEdit && !t.completedAt ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+                            drag?.id === t.id && "ring-2 ring-ring z-20",
+                            b.overdue ? "bg-destructive/15 border-destructive/50 text-destructive" : t.completedAt ? "bg-success/15 border-success/40" : "bg-primary/10 border-primary/40",
+                          )}
                           style={{ top: r * ROW + 4, left: b.left, width: Math.max(b.width, px) }}
                           title={`${taskKeyOf(project.key, t)} · ${t.startDate?.slice(0, 10) ?? "?"} → ${t.dueDate?.slice(0, 10) ?? "?"}`}
                         >
                           <span className="truncate">{t.title}</span>
                           {t.progress > 0 && <span className="ml-auto font-mono text-[10px]">{t.progress}%</span>}
-                        </Button>
+                          {project.canEdit && !t.completedAt && t.dueDate && (
+                            <span onPointerDown={(e) => onPointerDown(e, t, "resize")} className="absolute right-0 top-0 h-full w-2 cursor-ew-resize hover:bg-foreground/10" aria-label="Kéo đổi hạn" />
+                          )}
+                        </div>
                       );
                     }),
                   )}
