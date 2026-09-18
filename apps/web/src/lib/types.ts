@@ -256,3 +256,101 @@ export interface SkillView {
   isActive: boolean;
   aliases: string[];
 }
+
+// ── Task (TasksService.toListView / toDetailView) ────────────
+export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+
+export interface TaskUserRef {
+  id: string;
+  fullName: string;
+  shortName: string | null;
+  avatarUrl: string | null;
+}
+
+export interface TaskListItem {
+  id: string;
+  projectId: string;
+  sprintId: string | null;
+  parentId: string | null;
+  columnId: string;
+  number: number;
+  key?: string;
+  title: string;
+  priority: TaskPriority;
+  isUrgent: boolean;
+  difficulty: number;
+  size: "S" | "M" | "L" | "XL" | null;
+  startDate: string | null;
+  dueDate: string | null;
+  estimateHours: number | null;
+  remainingHours: number | null;
+  progress: number;
+  position: number;
+  version: number;
+  source: "MANUAL" | "AI";
+  startedAt: string | null;
+  completedAt: string | null;
+  updatedAt: string;
+  assignees: TaskUserRef[];
+  labels: LabelView[];
+  requiredSkills: { id: string; name: string; minLevel: number }[];
+  dependsOnIds: string[];
+  subtaskCount: number;
+  commentCount: number;
+  attachmentCount: number;
+}
+
+export interface TaskDetail extends TaskListItem {
+  key: string;
+  description: string | null;
+  createdAt: string;
+  createdBy: TaskUserRef;
+  column: { id: string; name: string; statusKey: string; isDone: boolean };
+  sprint: { id: string; name: string; status: string } | null;
+  parent: { id: string; number: number; title: string } | null;
+  subtasks: TaskListItem[];
+  dependentIds: string[];
+}
+
+export interface TaskListResponse {
+  items: TaskListItem[];
+  deletedIds: string[];
+  serverTime: string;
+}
+
+export interface CommentView {
+  id: string;
+  taskId: string;
+  parentId: string | null;
+  body: string;
+  editedAt: string | null;
+  createdAt: string;
+  author: TaskUserRef;
+  mentions: { id: string; fullName: string; shortName: string | null }[];
+}
+
+export interface Paged<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface AttachmentView {
+  id: string;
+  taskId: string;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  storagePath: string;
+  uploader: TaskUserRef;
+  createdAt: string;
+}
+
+export interface SuggestItem {
+  id: string;
+  fullName: string;
+  shortName: string | null;
+  email?: string;
+  avatarUrl?: string | null;
+}

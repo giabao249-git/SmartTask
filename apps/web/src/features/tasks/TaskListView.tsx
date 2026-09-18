@@ -1,412 +1,262 @@
 "use client";
 
 import * as React from "react";
-import {
-  Search,
-  Sparkles,
-  ChevronLeft,
-  ChevronRight,
-  Trash2,
-  CheckCircle2,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowUpDown, Search, Sparkles, ListTodo } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/app/PageHeader";
-import { UserAvatar } from "@/components/app/UserAvatar";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
-import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
+import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
-import { StateToggle, type ScreenState } from "@/components/app/StateToggle";
-import { Skeleton } from "@/components/ui/skeleton";
-import { INITIAL_TASKS, type TaskItem } from "@/mocks/tasks";
-import { MEMBERS } from "@/mocks/members";
+import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
+import { fmtDay, taskKeyOf } from "@/components/app/TaskCard";
+import { describeError } from "@/lib/api";
+import { useCurrentProject } from "@/lib/hooks/use-project";
+import { useSprints } from "@/lib/hooks/queries";
 import { statusToVariant } from "@/lib/status";
-import { toast } from "sonner";
+import type { TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useBoardRealtime, useTasks } from "@/features/board/hooks";
 
+type SortKey = "number" | "title" | "priority" | "dueDate" | "estimateHours" | "progress" | "updatedAt";
+const PRIORITY_RANK: Record<string, number> = { URGENT: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+
+/** Danh sách task (UC-15): bộ lọc lưu trong URL, sắp xếp cột, cùng dữ liệu với Kanban. */
 export function TaskListView() {
-  const [screenState, setScreenState] = React.useState<ScreenState>("data");
-  const [tasks, setTasks] = React.useState<TaskItem[]>(INITIAL_TASKS);
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [assigneeFilter, setAssigneeFilter] = React.useState<string>("all");
-  const [priorityFilter, setPriorityFilter] = React.useState<string>("all");
-  const [statusFilter, setStatusFilter] = React.useState<string>("all");
-  const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-  const [selectedTask, setSelectedTask] = React.useState<TaskItem | null>(null);
-  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const project = useCurrentProject();
+  const router = useRouter();
+  const params = useSearchParams();
+  const sprintsQuery = useSprints(project.id);
+  const get = (k: string, d = "") => params.get(k) ?? d;
+  const setParam = (k: string, v: string) => {
+    const next = new URLSearchParams(params.toString());
+    if (v && v !== "__all") next.set(k, v);
+    else next.delete(k);
+    router.replace(`?${next.toString()}`);
+  };
+  const sprint = get("sprint", "__all");
+  const assignee = get("assignee", "__all");
+  const priority = get("priority", "__all");
+  const column = get("column", "__all");
+  const q = get("q");
+  const sortKey = (get("sort", "number") as SortKey) || "number";
+  const sortDir = get("dir", "asc") === "desc" ? "desc" : "asc";
 
-  // Filter tasks
-  const filteredTasks = tasks.filter((t) => {
-    const matchesSearch =
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.code.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesAssignee =
-      assigneeFilter === "all" || t.assigneeId === assigneeFilter;
-    const matchesPriority =
-      priorityFilter === "all" || t.priority === priorityFilter;
-    const matchesStatus =
-      statusFilter === "all" || t.status === statusFilter;
-
-    return matchesSearch && matchesAssignee && matchesPriority && matchesStatus;
+  const tasksQuery = useTasks(project.id, {
+    sprintId: sprint !== "__all" && sprint !== "__backlog" ? sprint : undefined,
+    backlog: sprint === "__backlog" || undefined,
+    assigneeId: assignee !== "__all" ? assignee : undefined,
+    priority: priority !== "__all" ? priority : undefined,
+    q: q || undefined,
   });
+  useBoardRealtime(project.id);
+  const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
+  const [sheetOpen, setSheetOpen] = React.useState(!!params.get("task"));
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedIds(filteredTasks.map((t) => t.id));
-    } else {
-      setSelectedIds([]);
+  const rows = React.useMemo(() => {
+    const list = (tasksQuery.data ?? []).filter((t) => column === "__all" || t.columnId === column);
+    const cmp = (a: TaskListItem, b: TaskListItem): number => {
+      switch (sortKey) {
+        case "title":
+          return a.title.localeCompare(b.title, "vi");
+        case "priority":
+          return (PRIORITY_RANK[a.priority] ?? 0) - (PRIORITY_RANK[b.priority] ?? 0);
+        case "dueDate":
+          return (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999");
+        case "estimateHours":
+          return (a.estimateHours ?? 0) - (b.estimateHours ?? 0);
+        case "progress":
+          return a.progress - b.progress;
+        case "updatedAt":
+          return a.updatedAt.localeCompare(b.updatedAt);
+        default:
+          return a.number - b.number;
+      }
+    };
+    return [...list].sort((a, b) => (sortDir === "asc" ? cmp(a, b) : cmp(b, a)));
+  }, [tasksQuery.data, column, sortKey, sortDir]);
+
+  const toggleSort = (k: SortKey) => {
+    const next = new URLSearchParams(params.toString());
+    if (sortKey === k) next.set("dir", sortDir === "asc" ? "desc" : "asc");
+    else {
+      next.set("sort", k);
+      next.set("dir", "asc");
     }
+    router.replace(`?${next.toString()}`);
   };
-
-  const handleSelectRow = (id: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleBulkStatusChange = (newStatus: TaskItem["status"]) => {
-    setTasks((prev) =>
-      prev.map((t) => (selectedIds.includes(t.id) ? { ...t, status: newStatus } : t))
-    );
-    toast.success(`Đã cập nhật trạng thái cho ${selectedIds.length} công việc`);
-    setSelectedIds([]);
-  };
-
-  const handleBulkDelete = () => {
-    setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.id)));
-    toast.success(`Đã xoá ${selectedIds.length} công việc đã chọn`);
-    setSelectedIds([]);
-  };
+  const Head = ({ k, children, className }: { k: SortKey; children: React.ReactNode; className?: string }) => (
+    <TableHead className={cn("text-xs cursor-pointer select-none", className)} onClick={() => toggleSort(k)}>
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <ArrowUpDown className={cn("h-3 w-3", sortKey === k ? "text-foreground" : "text-muted-foreground/50")} />
+      </span>
+    </TableHead>
+  );
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Danh sách Công việc Sprint 3"
-        description="Bảng tổng hợp chi tiết toàn bộ các task, lọc nâng cao, cập nhật hàng loạt và phân bổ giờ."
-        breadcrumbs={[
-          { label: "VNPT Dev Team", href: "/workspaces" },
-          { label: "SmartTask v1", href: "/projects/ST/dashboard" },
-          { label: "Danh sách công việc" },
-        ]}
-      >
-        <span className="text-xs text-muted-foreground tabular-nums">
-          Tổng số: <strong className="text-foreground">{filteredTasks.length}</strong> việc
-        </span>
-      </PageHeader>
-
-      {screenState === "loading" && (
-        <div className="space-y-4">
-          <div className="flex gap-3">
-            <Skeleton className="h-9 w-64" />
-            <Skeleton className="h-9 w-36" />
-            <Skeleton className="h-9 w-36" />
-          </div>
-          <Skeleton className="h-96 w-full rounded-xl" />
-        </div>
-      )}
-
-      {screenState === "empty" && (
-        <EmptyState
-          title="Không tìm thấy công việc phù hợp"
-          description="Thử xoá bộ lọc hoặc tạo công việc mới để bắt đầu quản lý."
-          actionLabel="Đặt lại bộ lọc"
-          onAction={() => {
-            setSearchQuery("");
-            setAssigneeFilter("all");
-            setPriorityFilter("all");
-            setStatusFilter("all");
-            setScreenState("data");
-          }}
-        />
-      )}
-
-      {screenState === "error" && (
-        <ErrorState
-          code="TASK_VERSION_CONFLICT"
-          message="Một số hàng trong danh sách vừa bị chỉnh sửa bởi thành viên khác. Hãy tải lại bảng để tránh ghi đè dữ liệu."
-          onRetry={() => setScreenState("data")}
-        />
-      )}
-
-      {screenState === "data" && (
-        <div className="space-y-4">
-          {/* Filters Row */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border/70">
-            <div className="flex items-center gap-2 flex-1 max-w-sm">
-              <div className="relative w-full">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Tìm theo mã ST hoặc tiêu đề..."
-                  className="pl-8 text-xs h-9 bg-background"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Assignee Filter */}
-              <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
-                <SelectTrigger className="h-8 text-xs w-36 bg-background">
-                  <SelectValue placeholder="Người nhận" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tất cả người</SelectItem>
-                  {MEMBERS.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name} ({m.role})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Priority Filter */}
-              <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                <SelectTrigger className="h-8 text-xs w-32 bg-background">
-                  <SelectValue placeholder="Ưu tiên" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tất cả ưu tiên</SelectItem>
-                  <SelectItem value="URGENT">Khẩn</SelectItem>
-                  <SelectItem value="HIGH">Cao</SelectItem>
-                  <SelectItem value="MEDIUM">Trung bình</SelectItem>
-                  <SelectItem value="LOW">Thấp</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Status Filter */}
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-8 text-xs w-32 bg-background">
-                  <SelectValue placeholder="Trạng thái" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tất cả cột</SelectItem>
-                  <SelectItem value="TODO">Cần làm</SelectItem>
-                  <SelectItem value="IN_PROGRESS">Đang làm</SelectItem>
-                  <SelectItem value="REVIEW">Review</SelectItem>
-                  <SelectItem value="DONE">Hoàn thành</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Bulk Action Bar (Hiển thị khi chọn nhiều hàng) */}
-          {selectedIds.length > 0 && (
-            <div className="flex items-center justify-between p-3 rounded-lg bg-primary text-primary-foreground text-xs shadow-md animate-in slide-in-from-top-2">
-              <span className="font-semibold flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4" />
-                Đã chọn {selectedIds.length} công việc
-              </span>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => handleBulkStatusChange("DONE")}
-                  className="h-7 text-xs"
-                >
-                  Chuyển Hoàn thành
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => handleBulkStatusChange("IN_PROGRESS")}
-                  className="h-7 text-xs"
-                >
-                  Chuyển Đang làm
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={handleBulkDelete}
-                  className="h-7 text-xs gap-1"
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Xoá việc
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Task Data Table */}
-          <div className="rounded-xl border border-border/80 overflow-hidden bg-card shadow-xs">
-            <ScrollArea className="w-full">
-              <Table className="min-w-[960px]">
-              <TableHeader className="bg-muted/40 text-xs">
-                <TableRow>
-                  <TableHead className="w-10 text-center">
-                    <Checkbox
-                      checked={
-                        selectedIds.length === filteredTasks.length &&
-                        filteredTasks.length > 0
-                      }
-                      onCheckedChange={handleSelectAll}
-                    />
-                  </TableHead>
-                  <TableHead className="w-24">Mã thẻ</TableHead>
-                  <TableHead className="min-w-[320px]">Tiêu đề công việc</TableHead>
-                  <TableHead className="w-28 text-center">Trạng thái</TableHead>
-                  <TableHead className="w-28 text-center">Mức ưu tiên</TableHead>
-                  <TableHead className="min-w-[150px]">Người thực hiện</TableHead>
-                  <TableHead className="w-24 text-right">Ước lượng</TableHead>
-                  <TableHead className="w-24 text-right">Thực tế</TableHead>
-                  <TableHead className="w-28 text-center">Hạn chót</TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody className="text-xs">
-                {filteredTasks.map((task) => (
-                  <TableRow
-                    key={task.id}
-                    onClick={() => {
-                      setSelectedTask(task);
-                      setSheetOpen(true);
-                    }}
-                    className={cn(
-                      "cursor-pointer hover:bg-muted/50 transition-colors",
-                      selectedIds.includes(task.id) && "bg-muted/40"
-                    )}
-                  >
-                    {/* Checkbox */}
-                    <TableCell
-                      className="text-center"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Checkbox
-                        checked={selectedIds.includes(task.id)}
-                        onCheckedChange={() => handleSelectRow(task.id)}
-                      />
-                    </TableCell>
-
-                    {/* Code */}
-                    <TableCell>
-                      <Badge variant="outline" className="font-mono text-xs font-semibold">
-                        {task.code}
-                      </Badge>
-                    </TableCell>
-
-                    {/* Title & AI / Labels */}
-                    <TableCell className="font-medium text-foreground">
-                      <div className="flex items-center gap-2">
-                        {task.isAiGenerated && (
-                          <Badge variant="info" className="gap-1 text-[10px] px-1 py-0 h-4">
-                            <Sparkles className="h-2.5 w-2.5" />
-                            AI
-                          </Badge>
-                        )}
-                        <span className="line-clamp-1">{task.title}</span>
-                      </div>
-                    </TableCell>
-
-                    {/* Status */}
-                    <TableCell className="text-center">
-                      <Badge variant={statusToVariant(task.status)} className="text-[11px] py-0 px-2 font-normal">
-                        {task.status === "TODO" && "Cần làm"}
-                        {task.status === "IN_PROGRESS" && "Đang làm"}
-                        {task.status === "REVIEW" && "Review"}
-                        {task.status === "DONE" && "Hoàn thành"}
-                      </Badge>
-                    </TableCell>
-
-                    {/* Priority */}
-                    <TableCell className="text-center">
-                      <PriorityBadge priority={task.priority} />
-                    </TableCell>
-
-                    {/* Assignee */}
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <UserAvatar
-                          name={task.assignee.name}
-                          avatar={task.assignee.avatar}
-                          role={task.assignee.role}
-                          initials={task.assignee.initials}
-                          isOnline={task.assignee.isOnline}
-                          size="sm"
-                          showTooltip={false}
-                        />
-                        <span className="text-xs text-foreground font-medium">
-                          {task.assignee.name}
-                        </span>
-                      </div>
-                    </TableCell>
-
-                    {/* Estimate */}
-                    <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-                      {task.estimateHours}h
-                    </TableCell>
-
-                    {/* Actual */}
-                    <TableCell className="text-right font-mono tabular-nums font-medium text-foreground">
-                      {task.actualHours}h
-                    </TableCell>
-
-                    {/* Due Date */}
-                    <TableCell className="text-center">
-                      <span
-                        className={cn(
-                          "font-mono text-xs tabular-nums",
-                          task.isOverdue && "text-destructive font-semibold"
-                        )}
-                      >
-                        {task.dueDate.split("-").slice(1).reverse().join("/")}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-
-          {/* Pagination Footer */}
-            <div className="p-3 border-t border-border/40 flex items-center justify-between text-xs text-muted-foreground bg-muted/10">
-              <span>Hiển thị 1–{filteredTasks.length} trong tổng số {filteredTasks.length} việc</span>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" disabled className="h-7 text-xs px-2">
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </Button>
-                <span className="font-medium text-foreground">Trang 1 / 1</span>
-                <Button variant="outline" size="sm" disabled className="h-7 text-xs px-2">
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Task Detail Sheet */}
-      <TaskDetailSheet
-        task={selectedTask}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        onUpdateTask={(updated) => {
-          setTasks((prev) =>
-            prev.map((t) => (t.id === updated.id ? updated : t))
-          );
-        }}
+        title={`Danh sách công việc · ${project.key}`}
+        description={`${rows.length} công việc theo bộ lọc hiện tại (lưu trong URL)`}
+        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Danh sách task" }]}
       />
 
-      <StateToggle state={screenState} onChange={setScreenState} />
+      <div className="flex items-center gap-2 flex-wrap text-xs">
+        <div className="relative">
+          <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+          <Input defaultValue={q} onChange={(e) => setParam("q", e.target.value)} placeholder="Tìm tiêu đề…" className="h-8 text-xs pl-8 w-56" />
+        </div>
+        <Select value={sprint} onValueChange={(v) => setParam("sprint", v)}>
+          <SelectTrigger className="h-8 text-xs w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all" className="text-xs">
+              Mọi sprint
+            </SelectItem>
+            <SelectItem value="__backlog" className="text-xs">
+              Backlog
+            </SelectItem>
+            {(sprintsQuery.data ?? []).map((s) => (
+              <SelectItem key={s.id} value={s.id} className="text-xs">
+                {s.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={column} onValueChange={(v) => setParam("column", v)}>
+          <SelectTrigger className="h-8 text-xs w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all" className="text-xs">
+              Mọi cột
+            </SelectItem>
+            {project.columns.map((c) => (
+              <SelectItem key={c.id} value={c.id} className="text-xs">
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={assignee} onValueChange={(v) => setParam("assignee", v)}>
+          <SelectTrigger className="h-8 text-xs w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all" className="text-xs">
+              Mọi người
+            </SelectItem>
+            {project.members.map((m) => (
+              <SelectItem key={m.id} value={m.id} className="text-xs">
+                {m.fullName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={priority} onValueChange={(v) => setParam("priority", v)}>
+          <SelectTrigger className="h-8 text-xs w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all" className="text-xs">
+              Mọi ưu tiên
+            </SelectItem>
+            {["URGENT", "HIGH", "MEDIUM", "LOW"].map((p) => (
+              <SelectItem key={p} value={p} className="text-xs">
+                {p}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {tasksQuery.isPending ? (
+        <div className="space-y-2">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
+        </div>
+      ) : tasksQuery.isError ? (
+        <ErrorState code={describeError(tasksQuery.error).code} message={describeError(tasksQuery.error).message} onRetry={() => tasksQuery.refetch()} />
+      ) : rows.length === 0 ? (
+        <EmptyState icon={ListTodo} title="Không có công việc" description="Đổi bộ lọc hoặc tạo công việc mới trên bảng Kanban." actionLabel="Mở bảng Kanban" onAction={() => router.push(`/projects/${project.id}/board`)} />
+      ) : (
+        <div className="rounded-xl border border-border/80 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <Head k="number" className="w-24">
+                  Mã
+                </Head>
+                <Head k="title">Tiêu đề</Head>
+                <TableHead className="text-xs">Cột</TableHead>
+                <Head k="priority">Ưu tiên</Head>
+                <TableHead className="text-xs">Người</TableHead>
+                <Head k="estimateHours" className="text-right">
+                  Giờ
+                </Head>
+                <Head k="progress" className="text-right">
+                  %
+                </Head>
+                <Head k="dueDate">Hạn</Head>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((t) => {
+                const col = project.columns.find((c) => c.id === t.columnId);
+                const overdue = !!t.dueDate && !t.completedAt && t.dueDate.slice(0, 10) < today;
+                return (
+                  <TableRow
+                    key={t.id}
+                    className="cursor-pointer text-xs"
+                    onClick={() => {
+                      setSelectedId(t.id);
+                      setSheetOpen(true);
+                    }}
+                  >
+                    <TableCell className="font-mono">
+                      <span className="inline-flex items-center gap-1">
+                        {taskKeyOf(project.key, t)}
+                        {t.source === "AI" && <Sparkles className="h-3 w-3 text-info" />}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-medium max-w-md truncate">{t.title}</TableCell>
+                    <TableCell>
+                      <Badge variant={statusToVariant(col?.statusKey ?? "")} className="text-[10px]">
+                        {col?.name ?? "—"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <PriorityBadge priority={t.priority} showIcon={false} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        {t.assignees.slice(0, 2).map((a) => (
+                          <UserAvatar key={a.id} name={a.shortName ?? a.fullName} avatar={a.avatarUrl ?? undefined} size="sm" />
+                        ))}
+                        {t.assignees.length === 0 && <span className="text-muted-foreground italic">chưa giao</span>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">{t.estimateHours ?? "—"}</TableCell>
+                    <TableCell className="text-right font-mono">{t.progress}</TableCell>
+                    <TableCell className={cn("font-mono", overdue && "text-destructive font-medium")}>{fmtDay(t.dueDate)}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <TaskDetailSheet taskId={selectedId} project={project} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>
   );
 }
