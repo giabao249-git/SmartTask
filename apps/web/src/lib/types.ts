@@ -354,3 +354,109 @@ export interface SuggestItem {
   email?: string;
   avatarUrl?: string | null;
 }
+
+// ── Dashboard / workload / kỹ năng / dự báo (docs 11 §3.4, 3.5, 3.9; số do backend tính) ──
+export type WorkloadLevelApi = "NORMAL" | "HIGH" | "FULL" | "OVERLOAD";
+
+export interface DashboardView {
+  counts: { total: number; done: number; open: number; overdue: number; unassigned: number };
+  byStatus: { columnId: string; name: string; statusKey: string; count: number }[];
+  byAssignee: { userId: string; openTasks: number }[];
+  workloadWeek: { userId: string; fullName: string; shortName: string | null; avatarUrl: string | null; utilization: number; level: WorkloadLevelApi; riskScore: number; effLoadHours: number; effCapacityHours: number }[];
+  openAlerts: { id: string; userId: string; kind: string; weekStart: string; riskScore: number; user: { fullName: string } }[];
+  burndownMini: { sprintId: string; name: string; startDate: string; endDate: string; scopeInitial: number | null; lastSnapshot: { date: string; remaining: number; scope: number } | null } | null;
+}
+
+export interface WeekLoadView {
+  weekStart: string;
+  loadHours: number;
+  effLoadHours: number;
+  capacityHours: number;
+  effCapacityHours: number;
+  meetingHours: number;
+  timeOffHours: number;
+  utilization: number;
+  level: WorkloadLevelApi;
+  riskScore: number;
+  riskLabel: "NORMAL" | "WATCH" | "BURNOUT_RISK";
+  riskBreakdown: Record<string, number>;
+  switchPenalty: number;
+  projectsOpen: number;
+  tasks: { taskId: string; key: string; title: string; projectId: string; remainingHours: number; share: number; hoursInWeek: number; hoursEff: number; factors: { ear: number; difficulty: number; skillGap: number }; overdue: boolean; dueDate: string | null }[];
+}
+
+export interface WorkloadView {
+  users: { userId: string; fullName: string; shortName: string | null; avatarUrl: string | null; weeks: WeekLoadView[] }[];
+  spread: number;
+  thresholds: { high: number; full: number; overload: number };
+}
+
+export interface CapacityTableView {
+  generatedAt: string;
+  window: { from: string; days: number };
+  members: {
+    userId: string;
+    fullName: string;
+    shortName: string | null;
+    role: string;
+    skills: { skillId: string; name: string; level: number }[];
+    utilizationBefore: number;
+    levelBefore: WorkloadLevelApi;
+    projectsOpen: number;
+    metrics: { ear: number; onTimeRate: number | null; sampleSize: number };
+    freeByDay: { date: string; freeHours: number; busyHours: number; plannedHours: number; focusBlocks: number; isWorkday: boolean }[];
+  }[];
+  tasks: {
+    taskId: string;
+    key: string;
+    title: string;
+    remainingHours: number;
+    difficulty: number;
+    dueDate: string | null;
+    dependsOnIds: string[];
+    requiredSkills: { skillId: string; name: string; minLevel: number }[];
+    perUser: { userId: string; hoursEff: number; skillMatch: { avg: number; missing: string[] }; freeBeforeDue: number | null }[];
+  }[];
+  spread: number;
+}
+
+export interface SkillMatrixView {
+  users: { id: string; fullName: string; shortName: string | null; avatarUrl: string | null }[];
+  skills: { id: string; name: string; category: string }[];
+  cells: { userId: string; skillId: string; level: number; verified: boolean }[];
+  busFactor: { skillId: string; name: string; holders: number }[];
+  minLevel: number;
+}
+
+export interface BurndownView {
+  sprintId: string;
+  status: string;
+  startDate: string;
+  endDate: string;
+  scopeInitial: number;
+  ideal: { date: string; ideal: number }[];
+  actual: { date: string; scope: number; remaining: number; completed: number }[];
+  velocity: number;
+  scopeCreepDays: string[];
+}
+
+export interface ForecastView {
+  sprintId: string;
+  status: string;
+  endDate: string;
+  remainingHours: number;
+  velocity: number;
+  eta: string | null;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+  sprintAgeWorkdays: number;
+  causes: { code: string; count: number; taskIds?: string[]; userIds?: string[] }[];
+}
+
+export interface ExplainView {
+  action: import("@smarttask/shared").StructuredAction;
+  validation: import("@smarttask/shared").ValidationResult;
+  usage: TurnUsage;
+  forecast: ForecastView;
+  cached: boolean;
+  cachedUntil: string | null;
+}

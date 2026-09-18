@@ -1,435 +1,338 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import {
-  Calendar,
-  AlertTriangle,
-  Clock,
-  Briefcase,
-  Coffee,
-  ChevronRight,
-  TrendingUp,
-  Flame,
-  Scale,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw, Scale, Users2, Table2, CalendarDays } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/app/PageHeader";
-import { UserAvatar } from "@/components/app/UserAvatar";
-import { WorkloadBadge } from "@/components/app/WorkloadBadge";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
-import { StateToggle, type ScreenState } from "@/components/app/StateToggle";
-import { WORKLOAD_DETAILS, type MemberWorkloadDetail } from "@/mocks/workload";
-import { burnoutToVariant } from "@/lib/status";
+import { UserAvatar } from "@/components/app/UserAvatar";
+import { WorkloadBadge } from "@/components/app/WorkloadBadge";
+import { api, describeError } from "@/lib/api";
+import { useCapacityTable, useProjectWorkload, useWorkloadDetails } from "@/lib/hooks/analytics";
+import { useCurrentProject } from "@/lib/hooks/use-project";
+import { levelToVariant } from "@/lib/status";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
+const fmtWeek = (iso: string) => {
+  const d = new Date(iso);
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+};
+
+/** Tải nhân sự (UC-24/25): GET /projects/:id/workload (người × tuần), chi tiết cấu thành, bảng năng lực (UC-26, không xếp hạng). */
 export function WorkloadView() {
-  const [screenState, setScreenState] = React.useState<ScreenState>("data");
-  const [selectedMember, setSelectedMember] = React.useState<MemberWorkloadDetail | null>(null);
-  const [truthSheetOpen, setTruthSheetOpen] = React.useState(false);
-
-  const handleRowClick = (detail: MemberWorkloadDetail) => {
-    setSelectedMember(detail);
-    setTruthSheetOpen(true);
-  };
-
-  const getHeatmapBg = (percent: number) => {
-    if (percent < 70) return "bg-success/10 text-success border-success/30";
-    if (percent <= 90) return "bg-warning/10 text-warning-foreground border-warning/30";
-    if (percent <= 110) return "bg-warning/20 text-warning-foreground font-semibold border-warning/50";
-    return "bg-destructive/20 text-destructive font-bold border-destructive/60 animate-pulse";
-  };
+  const project = useCurrentProject();
+  const router = useRouter();
+  const qc = useQueryClient();
+  const wl = useProjectWorkload(project.id, 4);
+  const [detail, setDetail] = React.useState<{ userId: string; week: string } | null>(null);
+  const recompute = useMutation({
+    mutationFn: () => api.post<unknown>(`/projects/${project.id}/workload/recompute`),
+    onSuccess: () => {
+      toast.success("Đã tính lại tải — snapshot & cảnh báo cập nhật");
+      void qc.invalidateQueries({ queryKey: ["projects", project.id] });
+    },
+    onError: (e) => toast.error(describeError(e).message),
+  });
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Ma trận Tải nhân sự & Dự báo Burnout"
-        description="Theo dõi giờ hiệu dụng, năng lực, lịch họp và phát hiện sớm nguy cơ kiệt sức của từng thành viên."
-        breadcrumbs={[
-          { label: "VNPT Dev Team", href: "/workspaces" },
-          { label: "SmartTask v1", href: "/projects/ST/dashboard" },
-          { label: "Tải nhân sự" },
-        ]}
+        title={`Tải nhân sự · ${project.key}`}
+        description="Giờ còn lại theo tuần × năng lực hiệu dụng (trừ họp, nghỉ) → mức sử dụng; số do backend tính, không xếp hạng ai."
+        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Tải nhân sự" }]}
       >
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="outline" className="text-xs hidden md:inline-flex">
-            Ngưỡng tải: &lt;70% Bình thường · 70–90% Cao · 90–110% Đầy · &gt;110% Quá tải
-          </Badge>
-          <Button asChild size="sm" className="gap-1.5 text-xs">
-            <Link href="/projects/ST/assistant?initialPrompt=G%E1%BB%A1+b%E1%BB%9Bt+cho+Huy">
-              <Scale className="h-3.5 w-3.5 text-warning" />
-              <span>Xem đề xuất cân bằng (AI)</span>
-            </Link>
+        <div className="flex items-center gap-2">
+          {project.canManage && (
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs" disabled={recompute.isPending} onClick={() => recompute.mutate()}>
+              <RefreshCw className={cn("h-3.5 w-3.5", recompute.isPending && "animate-spin")} /> Tính lại
+            </Button>
+          )}
+          <Button size="sm" className="gap-1.5 text-xs" onClick={() => router.push(`/projects/${project.id}/assistant?prompt=${encodeURIComponent("Ai đang quá tải tuần này? Đề xuất cân bằng lại tải cho nhóm.")}`)}>
+            <Scale className="h-3.5 w-3.5" /> Xem đề xuất cân bằng
           </Button>
         </div>
       </PageHeader>
 
-      {screenState === "loading" && (
-        <div className="space-y-4">
-          <Skeleton className="h-24 w-full rounded-xl" />
-          <Skeleton className="h-80 w-full rounded-xl" />
-        </div>
-      )}
+      <Tabs defaultValue="weeks">
+        <TabsList className="h-8">
+          <TabsTrigger value="weeks" className="text-xs gap-1">
+            <Users2 className="h-3.5 w-3.5" /> Người × tuần
+          </TabsTrigger>
+          <TabsTrigger value="capacity" className="text-xs gap-1">
+            <Table2 className="h-3.5 w-3.5" /> Bảng năng lực
+          </TabsTrigger>
+        </TabsList>
 
-      {screenState === "empty" && (
-        <EmptyState
-          title="Chưa có dữ liệu tải tuần"
-          description="Chưa có thông tin phân bổ công việc hoặc snapshot tải nhân sự cho sprint này."
-          actionLabel="Đồng bộ dữ liệu"
-          onAction={() => setScreenState("data")}
-        />
-      )}
-
-      {screenState === "error" && (
-        <ErrorState
-          code="CALENDAR_SYNC_FAILED"
-          message="Không thể đồng bộ lịch bận từ máy chủ nội bộ VNPT. Vui lòng kiểm tra kết nối API Google Calendar / Outlook."
-          onRetry={() => setScreenState("data")}
-        />
-      )}
-
-      {screenState === "data" && (
-        <div className="space-y-6">
-          {/* Top Summary Banner */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card className="p-4 border-destructive/40 bg-destructive/5 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/20 text-destructive shrink-0">
-                <AlertTriangle className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Nhân sự quá tải</p>
-                <p className="text-lg font-semibold text-destructive">1 thành viên (Huy 118%)</p>
-              </div>
-            </Card>
-
-            <Card className="p-4 border-warning/40 bg-warning/5 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/20 text-warning shrink-0">
-                <Flame className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Điểm Burnout cao nhất</p>
-                <p className="text-lg font-semibold text-warning-foreground">Huy: 74 · Cảnh báo</p>
-              </div>
-            </Card>
-
-            <Card className="p-4 border-border flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
-                <TrendingUp className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Độ lệch Spread tải</p>
-                <p className="text-lg font-semibold text-foreground">41% (Mục tiêu: ≤ 20%)</p>
-              </div>
-            </Card>
-          </div>
-
-          {/* Main Workload Heatmap Table */}
-          <Card className="shadow-xs overflow-hidden">
-            <CardHeader className="p-4 border-b border-border/60 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-semibold">
-                  Bảng tải nhân sự theo tuần (Heatmap %)
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Click vào hàng bất kỳ để mở &quot;Bảng sự thật&quot; chi tiết giờ trống và khối tập trung focus blocks.
-                </CardDescription>
-              </div>
-            </CardHeader>
-
-            <ScrollArea className="w-full">
-              <Table className="min-w-[1020px]">
-                <TableHeader className="bg-muted/40 text-xs">
-                  <TableRow>
-                    <TableHead className="min-w-[180px]">Thành viên</TableHead>
-                    <TableHead className="w-24 text-center">Tải tuần này (W43)</TableHead>
-                    <TableHead className="w-24 text-center">W44 (27/10)</TableHead>
-                    <TableHead className="w-24 text-center">W45 (03/11)</TableHead>
-                    <TableHead className="w-24 text-center">W46 (10/11)</TableHead>
-                    <TableHead className="w-24 text-right">Giờ hiệu dụng</TableHead>
-                    <TableHead className="w-20 text-right">Năng lực</TableHead>
-                    <TableHead className="w-20 text-right">Lịch họp</TableHead>
-                    <TableHead className="w-20 text-right">Nghỉ phép</TableHead>
-                    <TableHead className="w-32 text-center">Mức tải</TableHead>
-                    <TableHead className="w-36 text-center">Điểm Burnout</TableHead>
-                    <TableHead className="w-10"></TableHead>
-                  </TableRow>
-                </TableHeader>
-
-                <TableBody className="text-xs">
-                  {WORKLOAD_DETAILS.map((row) => {
-                    const burnoutInfo = burnoutToVariant(row.member.burnoutScore);
-                    const currentWeek = row.weeks[0];
-
-                    return (
-                      <TableRow
-                        key={row.memberId}
-                        onClick={() => handleRowClick(row)}
-                        className="cursor-pointer hover:bg-muted/60 transition-colors group"
-                      >
-                        {/* Member column */}
-                        <TableCell>
-                          <div className="flex items-center gap-2.5">
-                            <UserAvatar
-                              name={row.member.name}
-                              avatar={row.member.avatar}
-                              role={row.member.role}
-                              initials={row.member.initials}
-                              isOnline={row.member.isOnline}
-                              showTooltip={false}
-                              size="sm"
-                            />
-                            <div>
-                              <p className="font-semibold text-foreground">{row.member.name}</p>
-                              <p className="text-[10px] text-muted-foreground">{row.member.role}</p>
-                            </div>
+        <TabsContent value="weeks" className="pt-3">
+          {wl.isPending ? (
+            <Skeleton className="h-64 w-full" />
+          ) : wl.isError ? (
+            <ErrorState code={describeError(wl.error).code} message={describeError(wl.error).message} onRetry={() => wl.refetch()} />
+          ) : wl.data.users.length === 0 ? (
+            <EmptyState icon={Users2} title="Chưa có thành viên" description="Thêm thành viên vào dự án để tính tải." />
+          ) : (
+            <Card className="border-border/80">
+              <CardHeader className="p-4 pb-2 flex-row items-center justify-between space-y-0">
+                <div>
+                  <CardTitle className="text-sm">Mức sử dụng 4 tuần</CardTitle>
+                  <CardDescription className="text-xs">
+                    Ngưỡng: cao {Math.round(wl.data.thresholds.high * 100)}% · đầy {Math.round(wl.data.thresholds.full * 100)}% · quá tải {Math.round(wl.data.thresholds.overload * 100)}% · Spread nhóm {Math.round(wl.data.spread * 100)}%
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="text-[10px]">
+                  bấm ô để xem cấu thành
+                </Badge>
+              </CardHeader>
+              <CardContent className="p-4 pt-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs w-48">Thành viên</TableHead>
+                      {wl.data.users[0].weeks.map((w) => (
+                        <TableHead key={w.weekStart} className="text-xs text-center">
+                          <CalendarDays className="h-3 w-3 inline mr-1" />
+                          Tuần {fmtWeek(w.weekStart)}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {wl.data.users.map((u) => (
+                      <TableRow key={u.userId}>
+                        <TableCell className="text-xs">
+                          <div className="flex items-center gap-2">
+                            <UserAvatar name={u.fullName} avatar={u.avatarUrl ?? undefined} size="sm" />
+                            <span className="font-medium">{u.fullName}</span>
                           </div>
                         </TableCell>
-
-                        {/* 4 Weeks Heatmap */}
-                        {row.weeks.map((w) => (
-                          <TableCell key={w.weekKey} className="text-center p-2">
-                            <div
-                              className={cn(
-                                "py-1 px-2 rounded-md border text-xs font-mono tabular-nums transition-transform group-hover:scale-105",
-                                getHeatmapBg(w.utilization)
-                              )}
-                              title={`${w.weekLabel}: ${w.utilization}% (${w.effectiveLoad}h / ${w.effectiveCapacity}h)`}
+                        {u.weeks.map((w) => (
+                          <TableCell key={w.weekStart} className="p-1.5">
+                            <Button
+                              variant="ghost"
+                              onClick={() => setDetail({ userId: u.userId, week: w.weekStart })}
+                              className={cn("w-full h-auto flex flex-col items-center gap-1 py-2 rounded-md border", levelBg(w.level))}
                             >
-                              {w.utilization}%
-                            </div>
+                              <span className="font-mono text-sm font-semibold">{Math.round(w.utilization * 100)}%</span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {w.effLoadHours}/{w.effCapacityHours}h
+                              </span>
+                              <WorkloadBadge level={w.level} className="text-[9px] px-1.5 py-0" />
+                            </Button>
                           </TableCell>
                         ))}
-
-                        {/* Hours breakdown */}
-                        <TableCell className="text-right font-mono tabular-nums font-medium">
-                          {currentWeek.effectiveLoad}h
-                        </TableCell>
-
-                        <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-                          {currentWeek.effectiveCapacity}h
-                        </TableCell>
-
-                        <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-                          {currentWeek.meetingHours}h
-                        </TableCell>
-
-                        <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-                          {currentWeek.timeOffHours}h
-                        </TableCell>
-
-                        {/* Workload Badge */}
-                        <TableCell className="text-center">
-                          <WorkloadBadge percent={currentWeek.utilization} showPercent={false} />
-                        </TableCell>
-
-                        {/* Burnout Score with 6-Factor Tooltip */}
-                        <TableCell className="text-center">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="inline-flex items-center gap-1.5 cursor-help">
-                                <Badge
-                                  variant={burnoutInfo.variant}
-                                  className="font-mono tabular-nums text-xs px-2 py-0.5 gap-1"
-                                >
-                                  <Flame className="h-3 w-3" />
-                                  <span>{row.member.burnoutScore}</span>
-                                </Badge>
-                                <span className="text-[11px] text-muted-foreground">
-                                  {burnoutInfo.label}
-                                </span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="left" className="w-80 p-3 space-y-2 bg-popover text-popover-foreground border shadow-xl">
-                              <div className="border-b pb-1.5">
-                                <p className="font-semibold text-xs text-foreground flex items-center justify-between">
-                                  <span>Phân rã 6 yếu tố Burnout: {row.member.name}</span>
-                                  <Badge variant={burnoutInfo.variant} className="text-[10px] py-0">
-                                    Tổng: {row.member.burnoutScore}/100
-                                  </Badge>
-                                </p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5">
-                                  Theo công thức chuẩn doc-04 kiến trúc SmartTask
-                                </p>
-                              </div>
-                              <div className="space-y-1.5 text-[11px]">
-                                {row.burnoutBreakdown.map((f, idx) => (
-                                  <div key={idx} className="flex flex-col gap-0.5 border-b border-border/30 pb-1">
-                                    <div className="flex justify-between font-medium">
-                                      <span className="text-foreground">{f.name}</span>
-                                      <span className="font-mono tabular-nums text-primary">
-                                        +{f.score.toFixed(1)} / {f.weight}đ
-                                      </span>
-                                    </div>
-                                    <span className="text-[10px] text-muted-foreground leading-tight">
-                                      {f.explanation}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TableCell>
-
-                        {/* Arrow hint */}
-                        <TableCell className="text-right">
-                          <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </TableCell>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          </Card>
-        </div>
-      )}
-
-      {/* Truth Sheet: Click row opens right sheet (Bảng sự thật) */}
-      <Sheet open={truthSheetOpen} onOpenChange={setTruthSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-xl p-0 flex flex-col h-full bg-background border-l">
-          {selectedMember && (
-            <>
-              <div className="p-6 border-b border-border/60 bg-muted/20">
-                <div className="flex items-center gap-3">
-                  <UserAvatar
-                    name={selectedMember.member.name}
-                    avatar={selectedMember.member.avatar}
-                    role={selectedMember.member.role}
-                    initials={selectedMember.member.initials}
-                    isOnline={selectedMember.member.isOnline}
-                    size="lg"
-                    showTooltip={false}
-                  />
-                  <div>
-                    <SheetTitle className="text-base font-semibold">
-                      Bảng sự thật khả dụng: {selectedMember.member.name}
-                    </SheetTitle>
-                    <SheetDescription className="text-xs">
-                      {selectedMember.member.role} · Năng lực chuẩn: 40h/tuần · Tải hiện tại:{" "}
-                      <span className="font-semibold text-foreground">{selectedMember.member.utilization}%</span>
-                    </SheetDescription>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                <div className="space-y-1">
-                  <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Lịch trình làm việc & Giờ trống theo ngày
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Công thức: Free = max(0, Định mức 8h − Họp − Việc đã giao).
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  {selectedMember.truthSheet.map((day, idx) => (
-                    <Card key={idx} className="p-4 border-border/80 space-y-3">
-                      <div className="flex items-center justify-between border-b pb-2">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-primary" />
-                          <span className="text-xs font-semibold text-foreground">
-                            {day.dayOfWeek} ({day.date})
-                          </span>
-                        </div>
-                        <Badge
-                          variant={day.freeHours > 0 ? "success" : "secondary"}
-                          className="font-mono tabular-nums text-xs"
-                        >
-                          Giờ trống: {day.freeHours}h
-                        </Badge>
-                      </div>
-
-                      {/* Busy Meetings */}
-                      {day.busyMeetings.length > 0 && (
-                        <div className="space-y-1 text-xs">
-                          <span className="text-muted-foreground text-[11px] font-medium flex items-center gap-1">
-                            <Coffee className="h-3 w-3" />
-                            Lịch họp & bận ({day.busyMeetings.reduce((a, c) => a + c.duration, 0)}h):
-                          </span>
-                          <div className="space-y-1 pl-4">
-                            {day.busyMeetings.map((m, i) => (
-                              <div key={i} className="flex justify-between text-[11px] text-foreground">
-                                <span>{m.title}</span>
-                                <span className="font-mono text-muted-foreground">{m.time} ({m.duration}h)</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Planned Tasks */}
-                      {day.plannedTasks.length > 0 && (
-                        <div className="space-y-1 text-xs">
-                          <span className="text-muted-foreground text-[11px] font-medium flex items-center gap-1">
-                            <Briefcase className="h-3 w-3" />
-                            Công việc đã giao ({day.plannedTasks.reduce((a, c) => a + c.hours, 0)}h):
-                          </span>
-                          <div className="space-y-1 pl-4">
-                            {day.plannedTasks.map((t, i) => (
-                              <div key={i} className="flex justify-between text-[11px] text-foreground">
-                                <span className="font-medium text-primary">{t.code}: {t.title}</span>
-                                <span className="font-mono text-muted-foreground">{t.hours}h</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Focus Blocks */}
-                      <div className="pt-2 border-t text-xs">
-                        <span className="text-muted-foreground text-[11px] font-medium flex items-center gap-1 mb-1">
-                          <Clock className="h-3 w-3 text-info" />
-                          Khối tập trung (Focus Blocks ≥ 2h liên tục):
-                        </span>
-                        {day.focusBlocks.length > 0 ? (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {day.focusBlocks.map((fb, i) => (
-                              <Badge key={i} variant="info" className="font-mono text-[10px] px-2 py-0.5">
-                                {fb.start}–{fb.end} ({fb.duration}h)
-                              </Badge>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground italic">
-                            Không có khối tập trung nào ≥ 2h không gián đoạn
-                          </span>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            </>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="capacity" className="pt-3">
+          <CapacityTable projectId={project.id} sprintId={project.activeSprint?.id} canView={project.canManage} />
+        </TabsContent>
+      </Tabs>
+
+      <Sheet open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          {detail && <WeekDetail userId={detail.userId} week={detail.week} name={wl.data?.users.find((u) => u.userId === detail.userId)?.fullName ?? ""} />}
         </SheetContent>
       </Sheet>
-
-      <StateToggle state={screenState} onChange={setScreenState} />
     </div>
+  );
+}
+
+function levelBg(level: string): string {
+  switch (level) {
+    case "OVERLOAD":
+      return "border-destructive/40 bg-destructive/10";
+    case "FULL":
+    case "HIGH":
+      return "border-warning/40 bg-warning/10";
+    default:
+      return "border-success/30 bg-success/5";
+  }
+}
+
+function WeekDetail({ userId, week, name }: { userId: string; week: string; name: string }) {
+  const q = useWorkloadDetails(userId, week);
+  return (
+    <>
+      <SheetHeader>
+        <SheetTitle className="text-base">
+          {name} · tuần {fmtWeek(week)}
+        </SheetTitle>
+        <SheetDescription className="text-xs">Cấu thành tải: task × share tuần × hệ số (EAR, độ khó, thiếu kỹ năng) — docs 04 §1–3.</SheetDescription>
+      </SheetHeader>
+      {q.isPending ? (
+        <Skeleton className="h-40 mt-4" />
+      ) : q.isError ? (
+        <div className="mt-4">
+          <ErrorState code={describeError(q.error).code} message={describeError(q.error).message} onRetry={() => q.refetch()} />
+        </div>
+      ) : (
+        <div className="mt-4 space-y-4 text-xs">
+          <div className="grid grid-cols-3 gap-2">
+            <Stat label="Mức sử dụng" value={`${Math.round(q.data.utilization * 100)}%`} variant={levelToVariant(q.data.level)} />
+            <Stat label="Tải hiệu dụng" value={`${q.data.effLoadHours}h`} />
+            <Stat label="Năng lực hiệu dụng" value={`${q.data.effCapacityHours}h`} />
+            <Stat label="Họp" value={`${q.data.meetingHours}h`} />
+            <Stat label="Nghỉ" value={`${q.data.timeOffHours}h`} />
+            <Stat label="Điểm burnout" value={`${q.data.riskScore}`} variant={q.data.riskLabel === "BURNOUT_RISK" ? "destructive" : q.data.riskLabel === "WATCH" ? "warning" : "success"} />
+          </div>
+          {Object.keys(q.data.riskBreakdown).length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(q.data.riskBreakdown).map(([k, v]) => (
+                <Badge key={k} variant="outline" className="text-[10px] font-mono">
+                  {k}: {v}
+                </Badge>
+              ))}
+            </div>
+          )}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Task</TableHead>
+                <TableHead className="text-xs text-right">Share</TableHead>
+                <TableHead className="text-xs text-right">Giờ tuần</TableHead>
+                <TableHead className="text-xs text-right">Hiệu dụng</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {q.data.tasks.map((t) => (
+                <TableRow key={t.taskId} className={cn(t.overdue && "text-destructive")}>
+                  <TableCell className="text-xs">
+                    <span className="font-mono mr-1">{t.key}</span>
+                    {t.title}
+                  </TableCell>
+                  <TableCell className="text-right font-mono">{Math.round(t.share * 100)}%</TableCell>
+                  <TableCell className="text-right font-mono">{t.hoursInWeek}</TableCell>
+                  <TableCell className="text-right font-mono" title={`EAR ${t.factors.ear} · khó ${t.factors.difficulty} · kỹ năng ${t.factors.skillGap}`}>
+                    {t.hoursEff}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </>
+  );
+}
+
+function Stat({ label, value, variant }: { label: string; value: string; variant?: "success" | "warning" | "destructive" | "secondary" | "default" | "outline" | "info" }) {
+  return (
+    <div className="p-2 rounded-md border border-border/60 bg-muted/20">
+      <span className="block text-[10px] text-muted-foreground">{label}</span>
+      {variant ? (
+        <Badge variant={variant} className="font-mono mt-0.5">
+          {value}
+        </Badge>
+      ) : (
+        <span className="font-mono font-semibold">{value}</span>
+      )}
+    </div>
+  );
+}
+
+/** Bảng sự thật cho giao việc (UC-26/39): thành viên × task chưa giao — khớp kỹ năng, giờ trống trước hạn; KHÔNG xếp hạng. */
+function CapacityTable({ projectId, sprintId, canView }: { projectId: string; sprintId?: string; canView: boolean }) {
+  const q = useCapacityTable(projectId, sprintId, canView);
+  if (!canView) return <EmptyState icon={Table2} title="Chỉ PM xem bảng năng lực" description="Bảng này phục vụ giao việc và Trợ lý AI; cần vai PM hoặc quản trị workspace." />;
+  if (q.isPending) return <Skeleton className="h-64 w-full" />;
+  if (q.isError) return <ErrorState code={describeError(q.error).code} message={describeError(q.error).message} onRetry={() => q.refetch()} />;
+  const d = q.data;
+  return (
+    <Card className="border-border/80">
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="text-sm">Bảng năng lực · cửa sổ {d.window.from} + {d.window.days} ngày</CardTitle>
+        <CardDescription className="text-xs">{d.tasks.length} task chưa giao × {d.members.length} thành viên · Spread hiện tại {Math.round(d.spread * 100)}% · số để LLM/PM cân nhắc, không có cột &quot;điểm phù hợp&quot;.</CardDescription>
+      </CardHeader>
+      <CardContent className="p-4 pt-0 overflow-x-auto space-y-4">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="text-xs">Thành viên</TableHead>
+              <TableHead className="text-xs">U trước</TableHead>
+              <TableHead className="text-xs">EAR</TableHead>
+              <TableHead className="text-xs">Đúng hạn</TableHead>
+              <TableHead className="text-xs">Giờ trống cửa sổ</TableHead>
+              <TableHead className="text-xs">Kỹ năng</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {d.members.map((m) => (
+              <TableRow key={m.userId} className="text-xs">
+                <TableCell className="font-medium">
+                  {m.fullName} <span className="text-muted-foreground">· {m.role}</span>
+                </TableCell>
+                <TableCell>
+                  <WorkloadBadge percent={Math.round(m.utilizationBefore * 100)} />
+                </TableCell>
+                <TableCell className="font-mono">
+                  {m.metrics.ear.toFixed(2)} <span className="text-muted-foreground">(n={m.metrics.sampleSize})</span>
+                </TableCell>
+                <TableCell className="font-mono">{m.metrics.onTimeRate != null ? `${Math.round(m.metrics.onTimeRate * 100)}%` : "—"}</TableCell>
+                <TableCell className="font-mono">{Math.round(m.freeByDay.reduce((s, x) => s + x.freeHours, 0) * 10) / 10}h</TableCell>
+                <TableCell className="max-w-xs truncate">{m.skills.map((s) => `${s.name} ${s.level}`).join(", ") || "chưa khai"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        {d.tasks.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Không có task chưa giao trong cửa sổ này.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Task chưa giao</TableHead>
+                {d.members.map((m) => (
+                  <TableHead key={m.userId} className="text-xs text-center">
+                    {m.shortName ?? m.fullName}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {d.tasks.map((t) => (
+                <TableRow key={t.taskId} className="text-xs">
+                  <TableCell>
+                    <span className="font-mono mr-1">{t.key}</span>
+                    {t.title}
+                    <span className="block text-[10px] text-muted-foreground">
+                      {t.remainingHours}h · khó {t.difficulty} · hạn {t.dueDate ?? "—"} · {t.requiredSkills.map((s) => `${s.name}≥${s.minLevel}`).join(", ") || "không yêu cầu kỹ năng"}
+                    </span>
+                  </TableCell>
+                  {t.perUser.map((u) => (
+                    <TableCell key={u.userId} className="text-center">
+                      <div className="font-mono">{u.hoursEff}h</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        khớp {Math.round(u.skillMatch.avg * 100)}%{u.freeBeforeDue != null ? ` · trống ${u.freeBeforeDue}h` : ""}
+                      </div>
+                      {u.skillMatch.missing.length > 0 && (
+                        <Badge variant="warning" className="text-[9px] px-1 py-0 mt-0.5">
+                          thiếu {u.skillMatch.missing.join(", ")}
+                        </Badge>
+                      )}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
