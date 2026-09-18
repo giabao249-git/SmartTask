@@ -51,12 +51,23 @@ export const envSchema = z.object({
   API_PUBLIC_URL: z.string().url().optional(),
   UPLOAD_DIR: z.string().default('uploads'),
   // AI (dùng từ Phase 7)
-  AI_PROVIDER: z.enum(['gemini', 'ollama']).default('gemini'),
+  /** Cấu hình dự phòng khi workspace chưa có ai_configs trong DB; `fake` chỉ cho dev/test (trả JSON mẫu, không gọi mạng) */
+  AI_PROVIDER: z.enum(['gemini', 'ollama', 'fake']).default('gemini'),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
   OLLAMA_MODEL: z.string().default('qwen2.5:7b'),
   AI_DAILY_LIMIT_PER_USER: z.coerce.number().int().positive().default(20),
+  /** Email (phân cách dấu phẩy) được sửa danh mục model toàn hệ thống — tạm thời cho tới Phase 7b (phân quyền động) */
+  SYSTEM_ADMIN_EMAILS: z
+    .string()
+    .default('')
+    .transform((v) =>
+      v
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    ),
 });
 
 export type Env = z.infer<typeof envSchema>;

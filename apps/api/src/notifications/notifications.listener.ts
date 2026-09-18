@@ -9,6 +9,7 @@ import {
   type SprintEventPayload,
   type TaskEventPayload,
 } from '../common/events/task.events';
+import { AI_EVENTS, type AiProposalAppliedPayload } from '../ai/ai.events';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   WORKLOAD_EVENTS,
@@ -204,5 +205,37 @@ export class NotificationsListener {
     this.logger.warn(
       `Không tạo được thông báo (${ctx}): ${e instanceof Error ? e.message : String(e)}`,
     );
+  }
+
+  /** AI áp dụng đề xuất (11 §1.1 #13): báo thành viên dự án; người được giao từng task đã có TASK_ASSIGNED riêng. */
+  @OnEvent(AI_EVENTS.proposalApplied, { async: true })
+  async onProposalApplied(p: AiProposalAppliedPayload): Promise<void> {
+    try {
+      const [members, project] = await Promise.all([
+        this.prisma.projectMember.findMany({
+          where: { projectId: p.projectId },
+          select: { userId: true },
+        }),
+        this.prisma.project.findUnique({
+          where: { id: p.projectId },
+          select: { key: true, name: true },
+        }),
+      ]);
+      await this.notifications.notify({
+        userIds: members.map((m) => m.userId),
+        excludeUserId: p.actorId,
+        type: NotificationType.AI_PROPOSAL_APPLIED,
+        title: `AI đã tạo ${p.taskIds.length} công việc trong ${project?.key ?? 'dự án'}`,
+        body: project?.name,
+        link: `/projects/${p.projectId}`,
+        data: {
+          proposalId: p.proposalId,
+          taskIds: p.taskIds,
+          projectId: p.projectId,
+        },
+      });
+    } catch (e) {
+      this.warn('ai.proposal.applied', e);
+    }
   }
 }

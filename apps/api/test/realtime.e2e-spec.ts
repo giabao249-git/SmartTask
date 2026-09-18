@@ -5,6 +5,14 @@ import type { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp, uniqueEmail } from './helpers';
 
 /** Phase 6: handshake JWT, join phòng theo quyền, presence, task:* / comment:* / notification:new / workload:updated. */
+/** YYYY-MM-DD của ngày thứ `offset` (0 = Thứ Hai) trong tuần hiện tại, theo UTC. */
+function weekDay(offset: number): string {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7) + offset);
+  return d.toISOString().slice(0, 10);
+}
+
 describe('Realtime Socket.io (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -226,7 +234,15 @@ describe('Realtime Socket.io (e2e)', () => {
     await api()
       .post(`/api/v1/projects/${projectId}/tasks`)
       .set(auth(pm))
-      .send({ title: 'Việc nặng', estimateHours: 60, assigneeIds: [dev.id] })
+      // Đặt hẳn khung Thứ Hai–Chủ nhật tuần này để 60 h rơi trọn vào tuần hiện tại dù test chạy ngày nào
+      // (không ghi ngày thì start* = hôm nay, due* = +5 ngày làm việc → chạy ngày Thứ Sáu chỉ còn 1/6 tải trong tuần)
+      .send({
+        title: 'Việc nặng',
+        estimateHours: 60,
+        startDate: weekDay(0),
+        dueDate: weekDay(6),
+        assigneeIds: [dev.id],
+      })
       .expect(201);
     const p = await wl;
     expect(p.userId).toBe(dev.id);

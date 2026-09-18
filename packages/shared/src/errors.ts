@@ -43,6 +43,12 @@ export const ERROR_CODES = {
   ASSIGN_CAPACITY_EXCEEDED: 'Không đủ giờ trống trước hạn',
   ASSIGN_OVERLOAD: 'Người được giao sẽ vượt ngưỡng quá tải',
   UNKNOWN_CODE: 'Mã tham chiếu không có trong ngữ cảnh',
+  AI_PURPOSE_DISABLED: 'Workspace đã tắt tính năng AI này',
+  AI_IN_PROGRESS: 'Đang có một lượt AI cùng loại chưa xong, hãy đợi',
+  AI_CONFIG_INVALID: 'Cấu hình AI không hợp lệ',
+  AI_KEY_ENCRYPTION_MISSING: 'Máy chủ chưa đặt APP_KEY nên không lưu được khoá API',
+  PROPOSAL_NOT_DRAFT: 'Đề xuất không còn ở trạng thái nháp',
+  PROPOSAL_VALIDATION_FAILED: 'Đề xuất chưa qua kiểm tra, hãy sửa các dòng lỗi',
   CALENDAR_SYNC_FAILED: 'Đồng bộ lịch thất bại',
 } as const;
 
