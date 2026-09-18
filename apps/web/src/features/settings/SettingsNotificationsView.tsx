@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
-import { Bell, Bot, Settings, Users } from "lucide-react";
+import { Bell, Bot, Settings, UserCircle, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -13,6 +13,7 @@ import { useProject } from "@/lib/hooks/queries";
 import { NotificationsPanel, useBellCount } from "@/features/notifications/NotificationsPanel";
 import { AiPolicyView } from "./AiPolicyView";
 import { MembersTab } from "./MembersTab";
+import { ProfileTab } from "./ProfileTab";
 import { WorkspaceSettingsTab } from "./WorkspaceSettingsTab";
 
 const LAST_WS_KEY = "st.lastWorkspace";
@@ -48,7 +49,7 @@ export function SettingsNotificationsView() {
     <div className="space-y-6">
       <PageHeader
         title="Thông báo & Cài đặt Workspace"
-        description="Thông báo realtime, chính sách chọn người của Trợ lý AI, thành viên & lời mời, tham số công thức tải."
+        description="Thông báo realtime, chính sách chọn người của Trợ lý AI, thành viên & lời mời, tham số công thức tải, tài khoản."
         breadcrumbs={[{ label: ws?.name ?? "Workspace", href: "/workspaces" }, { label: "Cài đặt & Thông báo" }]}
       >
         {auth.workspaces.length > 0 && effective && (
@@ -71,7 +72,7 @@ export function SettingsNotificationsView() {
       </PageHeader>
 
       <Tabs defaultValue={params.get("tab") ?? "notifications"} className="w-full space-y-4">
-        <TabsList className="grid w-full sm:w-[640px] grid-cols-4">
+        <TabsList className="grid w-full lg:w-[800px] grid-cols-5">
           <TabsTrigger value="notifications" className="text-xs gap-1.5">
             <Bell className="h-3.5 w-3.5" />
             Thông báo{unread > 0 ? ` (${unread})` : ""}
@@ -88,6 +89,10 @@ export function SettingsNotificationsView() {
             <Settings className="h-3.5 w-3.5" />
             Tham số
           </TabsTrigger>
+          <TabsTrigger value="profile" className="text-xs gap-1.5">
+            <UserCircle className="h-3.5 w-3.5" />
+            Tài khoản
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="notifications">
@@ -96,6 +101,9 @@ export function SettingsNotificationsView() {
         <TabsContent value="ai">{effective && ws ? <AiPolicyView workspaceId={effective} canEdit={canEdit} /> : <NoWorkspace />}</TabsContent>
         <TabsContent value="members">{effective && ws ? <MembersTab workspaceId={effective} canEdit={canEdit} /> : <NoWorkspace />}</TabsContent>
         <TabsContent value="settings">{effective && ws ? <WorkspaceSettingsTab workspaceId={effective} canEdit={canEdit} /> : <NoWorkspace />}</TabsContent>
+        <TabsContent value="profile">
+          <ProfileTab />
+        </TabsContent>
       </Tabs>
     </div>
   );

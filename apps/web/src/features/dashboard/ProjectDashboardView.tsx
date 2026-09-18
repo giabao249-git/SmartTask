@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Clock, Sparkles, TrendingDown, UserX, Users2 } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Clock, Settings2, Sparkles, TrendingDown, UserX, Users2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,9 +77,14 @@ export function ProjectDashboardView() {
         description={project.activeSprint ? `${project.activeSprint.name} · ${project.activeSprint.startDate.slice(0, 10)} → ${project.activeSprint.endDate.slice(0, 10)}` : "Chưa có sprint đang chạy"}
         breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name }, { label: "Dashboard" }]}
       >
-        <Button size="sm" className="gap-1.5" onClick={() => router.push(`/projects/${project.id}/assistant`)}>
-          <Bot className="h-4 w-4" /> Trợ lý AI
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => router.push(`/projects/${project.id}/settings`)}>
+            <Settings2 className="h-4 w-4" /> Cấu hình dự án
+          </Button>
+          <Button size="sm" className="gap-1.5" onClick={() => router.push(`/projects/${project.id}/assistant`)}>
+            <Bot className="h-4 w-4" /> Trợ lý AI
+          </Button>
+        </div>
       </PageHeader>
 
       {d.counts.total === 0 ? (

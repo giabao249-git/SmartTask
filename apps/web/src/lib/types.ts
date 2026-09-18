@@ -15,6 +15,22 @@ export interface UserView {
   avatarUrl: string | null;
   timezone: string;
   weeklyCapacityHours: number | null;
+  notificationPrefs?: NotificationPrefs | null;
+}
+
+export type NotificationPrefKey = "taskAssigned" | "mentioned" | "taskDue" | "workloadAlert" | "sprint";
+export interface NotificationPrefs {
+  inApp?: Partial<Record<NotificationPrefKey, boolean>>;
+  push?: Partial<Record<NotificationPrefKey, boolean>>;
+}
+
+export interface InvitationPreview {
+  workspaceName: string;
+  workspaceSlug: string;
+  role: WorkspaceRole;
+  inviter: string;
+  email: string | null;
+  expiresAt: string;
 }
 
 export interface WorkspaceSummary {
