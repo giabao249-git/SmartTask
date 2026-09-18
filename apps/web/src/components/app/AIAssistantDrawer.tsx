@@ -4,7 +4,6 @@ import * as React from "react";
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
@@ -22,7 +21,6 @@ import {
   Calendar,
   Shuffle,
   HelpCircle,
-  Clock,
   User,
 } from "lucide-react";
 import { INITIAL_CHAT_MESSAGES, CHAT_COMMAND_SUGGESTIONS, type ChatMessage } from "@/mocks/chat";

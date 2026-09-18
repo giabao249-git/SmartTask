@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { Providers } from "./providers";
 
 const inter = Inter({ subsets: ["latin", "vietnamese"] });
 
@@ -20,10 +21,12 @@ export default function RootLayout({
   return (
     <html lang="vi" suppressHydrationWarning>
       <body className={inter.className}>
-        <TooltipProvider delayDuration={200}>
-          {children}
-          <Toaster position="bottom-right" />
-        </TooltipProvider>
+        <Providers>
+          <TooltipProvider delayDuration={200}>
+            {children}
+            <Toaster position="bottom-right" />
+          </TooltipProvider>
+        </Providers>
       </body>
     </html>
   );

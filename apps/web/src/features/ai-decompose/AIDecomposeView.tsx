@@ -3,15 +3,9 @@
 import * as React from "react";
 import {
   Sparkles,
-  Bot,
   Check,
   X,
-  Clock,
-  Send,
   Loader2,
-  AlertCircle,
-  HelpCircle,
-  CheckSquare,
   ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,7 +34,6 @@ import {
   MOCK_DECOMPOSED_TASKS,
   type DecomposedTaskItem,
 } from "@/mocks/ai-decompose";
-import { MEMBERS } from "@/mocks/members";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 

@@ -1,15 +1,8 @@
 "use client";
 
 import * as React from "react";
-import {
-  Grid2X2,
-  AlertCircle,
-  Calendar,
-  UserCheck,
-  Trash2,
-  Sparkles,
-  MoveRight,
-} from "lucide-react";
+
+
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +12,7 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { StateToggle, type ScreenState } from "@/components/app/StateToggle";
 import { Skeleton } from "@/components/ui/skeleton";
-import { INITIAL_TASKS, type TaskItem } from "@/mocks/tasks";
+import { INITIAL_TASKS } from "@/mocks/tasks";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 

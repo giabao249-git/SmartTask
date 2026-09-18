@@ -2,19 +2,13 @@
 
 import * as React from "react";
 import {
-  Award,
   Plus,
   CheckCircle2,
   ShieldCheck,
   Search,
-  Filter,
-  Layers,
-  Sparkles,
-  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
@@ -69,18 +63,16 @@ import {
   type MemberSkillRating,
 } from "@/mocks/skills";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 export function SkillsMatrixView() {
   const [screenState, setScreenState] = React.useState<ScreenState>("data");
   const [ratings, setRatings] = React.useState<MemberSkillRating[]>(MEMBER_SKILLS_RATINGS);
-  const [skills, setSkills] = React.useState<SkillDefinition[]>(SKILL_DEFINITIONS);
+  const [skills] = React.useState<SkillDefinition[]>(SKILL_DEFINITIONS);
   const [addSkillOpen, setAddSkillOpen] = React.useState(false);
   const [selectedMemberId, setSelectedMemberId] = React.useState(MEMBERS[4].id); // An (Fullstack)
   const [selectedSkillId, setSelectedSkillId] = React.useState(skills[0].id);
   const [selectedLevel, setSelectedLevel] = React.useState("3");
   const [comboboxOpen, setComboboxOpen] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState("");
 
   const getRating = (memberId: string, skillId: string) => {
     return ratings.find((r) => r.memberId === memberId && r.skillId === skillId);

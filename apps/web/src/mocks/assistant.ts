@@ -1,4 +1,3 @@
-import { MEMBERS, type Member } from "./members";
 
 export type ProposalKind =
   | "DECOMPOSE"

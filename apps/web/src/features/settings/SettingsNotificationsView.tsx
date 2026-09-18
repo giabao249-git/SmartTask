@@ -4,22 +4,16 @@ import * as React from "react";
 import {
   Bell,
   Settings,
-  Shield,
   Bot,
   Sliders,
-  CheckCircle2,
   AlertTriangle,
   Clock,
   Sparkles,
   Save,
-  Key,
   Users,
-  UserCheck,
   Plus,
   Trash2,
   Tag,
-  Briefcase,
-  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,12 +78,12 @@ export function SettingsNotificationsView() {
   const [overloadThreshold, setOverloadThreshold] = React.useState(CURRENT_WORKSPACE.workloadThresholds.overload.toString());
   const [aiProvider, setAiProvider] = React.useState(CURRENT_WORKSPACE.aiConfig.provider);
   const [aiModel, setAiModel] = React.useState(CURRENT_WORKSPACE.aiConfig.model);
-  const [monthlyTokenQuota, setMonthlyTokenQuota] = React.useState(CURRENT_WORKSPACE.aiConfig.monthlyTokenQuota.toString());
+  const [monthlyTokenQuota] = React.useState(CURRENT_WORKSPACE.aiConfig.monthlyTokenQuota.toString());
 
   // WORKSPACE prompt policy & Member Aliases state
   const [aiPolicyText, setAiPolicyText] = React.useState(WORKSPACE_AI_POLICY);
   const [aliases, setAliases] = React.useState<MemberAlias[]>(INITIAL_MEMBER_ALIASES);
-  const [membersList, setMembersList] = React.useState<Member[]>(MEMBERS);
+  const [membersList] = React.useState<Member[]>(MEMBERS);
 
   // New Alias Dialog state
   const [addAliasOpen, setAddAliasOpen] = React.useState(false);
@@ -661,7 +655,7 @@ export function SettingsNotificationsView() {
                           <div className="flex items-center gap-2">
                             <UserAvatar
                               name={item.userName}
-                              role={item.role as any}
+                              role={item.role}
                               initials={item.userName.slice(0, 2).toUpperCase()}
                               size="sm"
                             />

@@ -3,16 +3,10 @@
 import * as React from "react";
 import {
   Search,
-  Filter,
-  ArrowUpDown,
-  CheckSquare,
-  Clock,
-  Calendar,
   Sparkles,
   ChevronLeft,
   ChevronRight,
   Trash2,
-  UserCheck,
   CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";

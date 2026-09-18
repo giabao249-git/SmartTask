@@ -2,21 +2,16 @@
 
 import * as React from "react";
 import {
-  Scale,
   ArrowRight,
   Check,
   CheckCircle2,
   AlertTriangle,
-  Sparkles,
-  TrendingDown,
-  Info,
-  Clock,
   Shuffle,
   ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardDescription, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/app/PageHeader";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { WorkloadBadge } from "@/components/app/WorkloadBadge";
@@ -27,9 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   CURRENT_REBALANCE_PROPOSAL,
   type RebalanceProposal,
-  type RebalanceAction,
 } from "@/mocks/rebalance";
-import { MEMBERS } from "@/mocks/members";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 

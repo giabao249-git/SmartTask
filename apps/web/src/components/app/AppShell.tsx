@@ -23,8 +23,6 @@ import {
   PanelLeftClose,
   PanelLeft,
   ChevronRight,
-  CheckCircle2,
-  AlertTriangle,
   FolderKanban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -66,17 +64,18 @@ export function AppShell({ children }: AppShellProps) {
   const currentUser = MEMBERS[0]; // Lan (PM)
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  // Auto-collapse sidebar below 1024px
+  // Tự thu gọn sidebar dưới 1024px; trang Trợ lý AI (3 cột) thu gọn từ dưới 1280px để cột chat không bị bóp
+  const isAssistantPage = pathname.includes("/assistant");
   React.useEffect(() => {
+    const threshold = isAssistantPage ? 1280 : 1024;
     const handleResize = () => {
-      if (typeof window !== "undefined" && window.innerWidth < 1024) {
-        setSidebarCollapsed(true);
-      }
+      if (typeof window === "undefined") return;
+      setSidebarCollapsed(window.innerWidth < threshold);
     };
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [isAssistantPage]);
 
   // Keyboard shortcuts: ⌘K for search, ⌘J for AI Assistant
   React.useEffect(() => {

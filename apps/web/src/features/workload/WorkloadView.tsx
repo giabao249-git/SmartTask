@@ -3,18 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  Users2,
   Calendar,
   AlertTriangle,
-  Info,
   Clock,
   Briefcase,
   Coffee,
   ChevronRight,
   TrendingUp,
   Flame,
-  CheckCircle2,
-  FileText,
   Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,7 +27,6 @@ import {
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
@@ -40,7 +35,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/app/PageHeader";
 import { UserAvatar } from "@/components/app/UserAvatar";
@@ -49,7 +44,7 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { StateToggle, type ScreenState } from "@/components/app/StateToggle";
 import { WORKLOAD_DETAILS, type MemberWorkloadDetail } from "@/mocks/workload";
-import { burnoutToVariant, percentToWorkload } from "@/lib/status";
+import { burnoutToVariant } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
 export function WorkloadView() {

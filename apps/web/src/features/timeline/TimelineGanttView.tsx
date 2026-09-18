@@ -2,17 +2,9 @@
 
 import * as React from "react";
 import {
-  CalendarRange,
-  Calendar,
-  Clock,
   ArrowRight,
-  Sparkles,
-  AlertTriangle,
-  Layers,
-  ChevronRight,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,7 +13,7 @@ import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { StateToggle, type ScreenState } from "@/components/app/StateToggle";
-import { TIMELINE_TASKS, type TimelineTask } from "@/mocks/timeline";
+import { TIMELINE_TASKS } from "@/mocks/timeline";
 import { MEMBERS } from "@/mocks/members";
 import { cn } from "@/lib/utils";
 

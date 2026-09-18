@@ -29,7 +29,9 @@
     "test": "npm test --workspaces --if-present",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
     "shared:build": "npm run build -w @smarttask/shared",
-    "prepare": "npm run shared:build"
+    "prepare": "npm run shared:build",
+    "web:lint": "npm run lint -w apps/web",
+    "web:typecheck": "npm run typecheck -w apps/web"
   },
   "devDependencies": {
     "prettier": "^3.3.3"

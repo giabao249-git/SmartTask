@@ -3,15 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  FolderKanban,
   Plus,
   UserPlus,
-  Users,
-  Building2,
   Calendar,
   ArrowRight,
-  Shield,
-  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

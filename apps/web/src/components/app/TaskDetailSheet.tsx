@@ -5,7 +5,6 @@ import {
   Sheet,
   SheetContent,
   SheetHeader,
-  SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -30,21 +29,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PriorityBadge } from "./PriorityBadge";
 import { UserAvatar } from "./UserAvatar";
 import { WorkloadBadge } from "./WorkloadBadge";
 import { MEMBERS, type Member } from "@/mocks/members";
 import { type TaskItem } from "@/mocks/tasks";
-import { statusToVariant, type TaskStatus, type PriorityLevel } from "@/lib/status";
+import { type TaskStatus, type PriorityLevel } from "@/lib/status";
 import {
-  Calendar,
   Clock,
   Sparkles,
   CheckSquare,
   Link as LinkIcon,
   Paperclip,
   Send,
-  UserCheck,
   ChevronsUpDown,
   History,
   MessageSquare,
@@ -61,13 +57,17 @@ interface TaskDetailSheetProps {
   onUpdateTask?: (updatedTask: TaskItem) => void;
 }
 
-export function TaskDetailSheet({
+export function TaskDetailSheet({ task, open, onOpenChange, onUpdateTask }: TaskDetailSheetProps) {
+  if (!task) return null;
+  return <TaskDetailSheetBody task={task} open={open} onOpenChange={onOpenChange} onUpdateTask={onUpdateTask} />;
+}
+
+function TaskDetailSheetBody({
   task,
   open,
   onOpenChange,
-  onUpdateTask,
-}: TaskDetailSheetProps) {
-  if (!task) return null;
+  onUpdateTask: _onUpdateTask,
+}: TaskDetailSheetProps & { task: TaskItem }) {
 
   const [title, setTitle] = React.useState(task.title);
   const [description, setDescription] = React.useState(task.description);

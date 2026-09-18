@@ -6,13 +6,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   Clock,
-  TrendingDown,
-  Users2,
-  Sparkles,
   ArrowRight,
   Flame,
   Scale,
-  Calendar,
 } from "lucide-react";
 import {
   BarChart,
@@ -20,18 +16,16 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  ResponsiveContainer,
   LineChart,
   Line,
   ReferenceLine,
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/app/PageHeader";
-import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { StateToggle, type ScreenState } from "@/components/app/StateToggle";
@@ -40,7 +34,6 @@ import {
   DASHBOARD_BURNDOWN_DATA,
   DASHBOARD_ALERTS,
 } from "@/mocks/dashboard";
-import { CURRENT_PROJECT } from "@/mocks/members";
 import { cn } from "@/lib/utils";
 
 export function ProjectDashboardView() {

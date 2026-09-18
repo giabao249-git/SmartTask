@@ -19,7 +19,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, MoreHorizontal, AlertTriangle, Users, Sparkles, Filter } from "lucide-react";
+import { Plus, MoreHorizontal, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";

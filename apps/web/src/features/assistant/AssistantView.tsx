@@ -13,20 +13,14 @@ import {
   AlertTriangle,
   Clock,
   User,
-  ArrowRight,
   Edit2,
   Trash2,
   Layers,
-  ChevronRight,
   RefreshCw,
   Search,
   Check,
-  Calendar,
   AlertCircle,
-  HelpCircle,
-  TrendingDown,
   Info,
-  Sliders,
   ExternalLink,
   MessageSquare,
   ShieldAlert,
@@ -35,7 +29,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -45,15 +38,13 @@ import {
   SheetHeader,
   SheetTitle,
   SheetDescription,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/app/PageHeader";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
 import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
-import { MEMBERS, type Member } from "@/mocks/members";
+import { MEMBERS } from "@/mocks/members";
 import { TASKS, type TaskItem } from "@/mocks/tasks";
 import {
   INITIAL_SESSIONS,
@@ -64,7 +55,6 @@ import {
   type AIProposal,
   type AssistantMessage,
   type DraftItem,
-  type ClarificationOption,
   type RiskExplanationData,
 } from "@/mocks/assistant";
 import { toast } from "sonner";
@@ -118,7 +108,7 @@ export function AssistantView() {
   // Active session and data getters
   const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
   const activeProposals = proposalsMap[activeSessionId] || [];
-  const activeMessages = messagesMap[activeSessionId] || [];
+  const activeMessages = React.useMemo(() => messagesMap[activeSessionId] ?? [], [messagesMap, activeSessionId]);
 
   // Count open drafts in active session
   const totalOpenDrafts = activeProposals.reduce(
@@ -1563,7 +1553,7 @@ function DraftItemCard({
           <div className="flex items-center gap-1">
             <UserAvatar
               name={item.assigneeName}
-              role={item.assigneeRole as any}
+              role={item.assigneeRole}
               initials={item.assigneeName.slice(0, 2).toUpperCase()}
               size="sm"
             />
