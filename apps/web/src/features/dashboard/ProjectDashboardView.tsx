@@ -4,7 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Clock, Settings2, Sparkles, TrendingDown, UserX, Users2 } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Clock, History, Settings2, Sparkles, TrendingDown, UserX, Users2 } from "lucide-react";
+import { ActivityList } from "@/features/activity/ActivityList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -225,6 +226,18 @@ export function ProjectDashboardView() {
               </CardContent>
             </Card>
           </div>
+
+          <Card className="border-border/80">
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" /> Hoạt động gần đây
+              </CardTitle>
+              <CardDescription className="text-xs">Dòng hoạt động dự án (UC-16) — tạo, chuyển cột, giao việc, bình luận, sprint.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <ActivityList projectId={project.id} limit={15} compact />
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

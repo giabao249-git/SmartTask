@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { AtSign, Download, FileText, Loader2, MessageSquare, Paperclip, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { AtSign, Download, FileText, History, Loader2, MessageSquare, Paperclip, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { ActivityList } from "@/features/activity/ActivityList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -268,6 +269,9 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
             <TabsTrigger value="files" className="text-xs gap-1">
               <Paperclip className="h-3 w-3" /> Đính kèm ({task.attachmentCount})
             </TabsTrigger>
+            <TabsTrigger value="activity" className="text-xs gap-1">
+              <History className="h-3 w-3" /> Hoạt động
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="subtasks" className="space-y-2 pt-2">
             {task.subtasks.map((s) => (
@@ -313,6 +317,9 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
           </TabsContent>
           <TabsContent value="files" className="pt-2">
             <AttachmentsPanel taskId={task.id} canEdit={project.canEdit} />
+          </TabsContent>
+          <TabsContent value="activity" className="pt-2">
+            <ActivityList projectId={project.id} taskId={task.id} compact />
           </TabsContent>
         </Tabs>
       </div>

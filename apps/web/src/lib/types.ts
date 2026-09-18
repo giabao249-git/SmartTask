@@ -513,3 +513,15 @@ export interface InvitationView {
   createdAt: string;
   invitedBy?: { id: string; fullName: string } | null;
 }
+
+export interface ActivityItem {
+  id: string;
+  taskId: string | null;
+  taskKey: string | null;
+  task: { title: string } | null;
+  action: string;
+  diff: Record<string, unknown> | null;
+  source: "MANUAL" | "AI" | "SYSTEM";
+  createdAt: string;
+  actor: { id: string; fullName: string; shortName: string | null; avatarUrl: string | null } | null;
+}
