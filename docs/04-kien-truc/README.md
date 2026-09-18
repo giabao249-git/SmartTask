@@ -33,6 +33,7 @@ Nguồn: `~/Table_Calendar/docs/ai-scheduling-architecture/01-target-architectur
 | [09-cong-nghe.md](09-cong-nghe.md) | Danh mục công nghệ theo lớp, phiên bản, lý do, thay thế; miễn phí ↔ doanh nghiệp; lệnh cài đặt Tuần 07 | Đề cương Mục 5; Chương 1.6; Tuần 07 |
 | [10-quy-uoc-giao-dien.md](10-quy-uoc-giao-dien.md) | shadcn/ui là nguồn duy nhất: ba tầng component, cấm/bắt buộc, token, variant, ESLint chặn phần tử thô, thứ tự việc Frontend Lead | Tuần 06 mockup; Tuần 07–08 |
 | [11-chot-chuc-nang-va-api.md](11-chot-chuc-nang-va-api.md) | **Bản chốt** phạm vi 3 mức (MVP 24 UC / làm nếu kịp theo thứ tự / không làm), quy ước API, 146 operation REST, sự kiện socket, mã lỗi | Đề cương Mục 4, 7; OpenAPI Tuần 06; controller Tuần 07 |
+| [12-chat-phien-va-ban-nhap.md](12-chat-phien-va-ban-nhap.md) | Chat theo phiên: danh mục intent, bản nháp lưu server theo phiên (sửa nhiều lượt, duyệt từng phần → xanh lá), khoá chống lạc/chồng lượt, danh tính + chính sách chọn người, API S9, hợp đồng UI rail bản nháp | Backend Phase 8 (chat), màn Trợ lý AI |
 
 ## Quy ước
 

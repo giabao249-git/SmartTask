@@ -8,6 +8,7 @@ import {
   type SprintEventPayload,
   type TaskEventPayload,
 } from '../common/events/task.events';
+import { AI_EVENTS, type AiProposalAppliedPayload } from '../ai/ai.events';
 import { FORECAST_EVENTS } from '../forecast/forecast.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WORKLOAD_EVENTS } from '../workload/workload.service';
@@ -149,6 +150,17 @@ export class RealtimeListener {
       sprintId: p.sprintId,
       from: p.from,
       to: p.to,
+    });
+  }
+
+  @OnEvent(AI_EVENTS.proposalApplied)
+  onProposalApplied(p: AiProposalAppliedPayload): void {
+    this.gateway.toProject(p.projectId, 'ai:proposal:applied', {
+      proposalId: p.proposalId,
+      kind: p.kind,
+      taskIds: p.taskIds,
+      actorId: p.actorId,
+      at: p.at,
     });
   }
 }
