@@ -1,399 +1,246 @@
 "use client";
 
 import * as React from "react";
-import {
-  Sparkles,
-  Check,
-  X,
-  Loader2,
-  ArrowRight,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
+import { useMutation } from "@tanstack/react-query";
+import { Sparkles, Loader2, Check, X, Bot } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/app/PageHeader";
-import { UserAvatar } from "@/components/app/UserAvatar";
-import { WorkloadBadge } from "@/components/app/WorkloadBadge";
-import { EmptyState } from "@/components/app/EmptyState";
-import { ErrorState } from "@/components/app/ErrorState";
-import { StateToggle, type ScreenState } from "@/components/app/StateToggle";
-import {
-  DEFAULT_AI_PROMPT,
-  MOCK_DECOMPOSED_TASKS,
-  type DecomposedTaskItem,
-} from "@/mocks/ai-decompose";
+import { api, describeError, isApiError } from "@/lib/api";
+import { useCurrentProject } from "@/lib/hooks/use-project";
+import { useSkills, useSprints } from "@/lib/hooks/queries";
+import { draftItemToVariant } from "@/lib/status";
+import type { ApplyResponse, ProposalView, TurnUsage } from "@/lib/types";
+import type { ValidationResult } from "@smarttask/shared";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { ValidationNote } from "@/features/assistant/ActionCard";
+import { makeResolver } from "@/features/assistant/codes";
 
+interface DecomposeResponse {
+  proposalId: string | null;
+  action: import("@smarttask/shared").StructuredAction;
+  validation: ValidationResult | null;
+  cached: boolean;
+  usage: TurnUsage | null;
+}
+
+/** Form phân rã (UC-28, docs 11 §3.11): POST /projects/:id/ai/decompose → bảng xem trước → apply/reject. Chat nhiều lượt ở màn Trợ lý AI. */
 export function AIDecomposeView() {
-  const [screenState, setScreenState] = React.useState<ScreenState>("data");
-  const [prompt, setPrompt] = React.useState(DEFAULT_AI_PROMPT);
-  const [isProcessing, setIsProcessing] = React.useState(false);
-  const [tasks, setTasks] = React.useState<DecomposedTaskItem[]>(MOCK_DECOMPOSED_TASKS);
-  const [hasDecomposed, setHasDecomposed] = React.useState(true);
+  const project = useCurrentProject();
+  const router = useRouter();
+  const sprints = useSprints(project.id);
+  const skills = useSkills(project.workspaceId);
+  const [requirement, setRequirement] = React.useState("");
+  const [sprintId, setSprintId] = React.useState<string>(project.activeSprint?.id ?? "__backlog");
+  const [detail, setDetail] = React.useState<"coarse" | "normal" | "fine">("normal");
+  const [result, setResult] = React.useState<DecomposeResponse | null>(null);
+  const [proposal, setProposal] = React.useState<ProposalView | null>(null);
+  const [error, setError] = React.useState<{ code: string; message: string } | null>(null);
 
-  const selectedCount = tasks.filter((t) => t.selected).length;
-  const totalHours = tasks
-    .filter((t) => t.selected)
-    .reduce((acc, cur) => acc + cur.estimateHours, 0);
+  const decompose = useMutation({
+    mutationFn: () => api.post<DecomposeResponse>(`/projects/${project.id}/ai/decompose`, { requirement: requirement.trim(), sprintId: sprintId === "__backlog" ? undefined : sprintId, detail }),
+    onSuccess: async (r) => {
+      setError(null);
+      setResult(r);
+      setProposal(r.proposalId ? await api.get<ProposalView>(`/ai/proposals/${r.proposalId}`) : null);
+    },
+    onError: (e) => {
+      const { code, message } = describeError(e);
+      if (code === "AI_QUOTA_EXCEEDED") {
+        const d = isApiError(e) ? e.detail<{ used: number; limit: number }>() : undefined;
+        toast.error(`Hết hạn mức AI hôm nay${d ? ` (${d.used}/${d.limit})` : ""}`);
+      } else if (code === "AI_IN_PROGRESS") toast.warning("Đang có một lượt phân rã chưa xong");
+      else setError({ code, message });
+    },
+  });
+  const apply = useMutation({
+    mutationFn: () => api.post<ApplyResponse>(`/ai/proposals/${proposal!.id}/apply`, { version: proposal!.version }),
+    onSuccess: (r) => {
+      setProposal(r.proposal);
+      toast.success(`Đã tạo ${r.createdTasks.length} công việc: ${r.createdTasks.map((t) => t.key).join(", ")}`, { action: { label: "Mở Kanban", onClick: () => router.push(`/projects/${project.id}/board`) } });
+    },
+    onError: (e) => {
+      const { code, message } = describeError(e);
+      toast.error(code === "PROPOSAL_VALIDATION_FAILED" ? "Đề xuất còn lỗi kiểm tra — sửa trong Trợ lý AI trước khi tạo" : message, { description: code });
+    },
+  });
+  const reject = useMutation({
+    mutationFn: () => api.post<void>(`/ai/proposals/${proposal!.id}/reject`, {}),
+    onSuccess: () => {
+      setProposal(null);
+      setResult(null);
+      toast.success("Đã từ chối đề xuất");
+    },
+    onError: (e) => toast.error(describeError(e).message),
+  });
 
-  const handleDecompose = () => {
-    if (!prompt.trim()) return;
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      setHasDecomposed(true);
-      toast.success("AI Agent đã hoàn tất phân rã WBS và đề xuất phân công!");
-    }, 1800);
-  };
-
-  const handleToggleSelectAll = (checked: boolean) => {
-    setTasks((prev) => prev.map((t) => ({ ...t, selected: checked })));
-  };
-
-  const handleToggleRow = (id: string) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, selected: !t.selected } : t))
-    );
-  };
-
-  const handleTitleChange = (id: string, newTitle: string) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, title: newTitle } : t))
-    );
-  };
-
-  const handleHoursChange = (id: string, hours: number) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, estimateHours: hours } : t))
-    );
-  };
-
-  const handleApplyTasks = () => {
-    toast.success(`Đã áp dụng ${selectedCount} công việc vào Sprint 3`, {
-      description: `Tổng số giờ ước lượng: ${totalHours}h. Đã tự động cập nhật tải cho Minh, An, Lan, Thảo.`,
-    });
-  };
-
-  const handleReject = () => {
-    toast.info("Đã từ chối bản đề xuất phân rã này");
-    setHasDecomposed(false);
-  };
+  const resolver = makeResolver(proposal?.codeMap, project.members, (sprints.data ?? []).map((s) => ({ id: s.id, name: s.name })), (skills.data ?? []).map((s) => ({ id: s.id, name: s.name })));
+  const busy = decompose.isPending || apply.isPending || reject.isPending;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="AI Phân rã yêu cầu thành công việc"
-        description="Mô hình AI Agent tự động bóc tách WBS, nhận diện kỹ năng và đề xuất giao việc cân bằng tải."
-        breadcrumbs={[
-          { label: "VNPT Dev Team", href: "/workspaces" },
-          { label: "SmartTask v1", href: "/projects/ST/dashboard" },
-          { label: "AI Decompose" },
-        ]}
-      />
+        title={`AI phân rã yêu cầu · ${project.key}`}
+        description="Mô tả yêu cầu → LLM đề xuất danh sách công việc → hệ thống kiểm trên dữ liệu sống → bạn duyệt mới tạo thật."
+        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "AI phân rã" }]}
+      >
+        <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => router.push(`/projects/${project.id}/assistant${requirement.trim() ? `?prompt=${encodeURIComponent(`Phân rã yêu cầu: ${requirement.trim()}`)}` : ""}`)}>
+          <Bot className="h-3.5 w-3.5" /> Chat nhiều lượt
+        </Button>
+      </PageHeader>
 
-      {screenState === "loading" && (
-        <div className="space-y-4">
-          <Skeleton className="h-32 w-full rounded-xl" />
-          <Skeleton className="h-96 w-full rounded-xl" />
-        </div>
+      {!project.canManage && (
+        <Alert>
+          <AlertTitle className="text-xs">Chỉ PM/quản trị workspace mới phân rã bằng AI</AlertTitle>
+          <AlertDescription className="text-[11px]">Bạn có thể xem, nhưng nút gửi bị khoá.</AlertDescription>
+        </Alert>
       )}
 
-      {screenState === "empty" && (
-        <EmptyState
-          title="Chưa có yêu cầu nào cần phân rã"
-          description="Nhập yêu cầu phần mềm hoặc mô tả tính năng để AI Agent hỗ trợ bóc tách danh sách việc con và tính toán tải khả dụng."
-          actionLabel="Tải yêu cầu mẫu"
-          onAction={() => {
-            setPrompt(DEFAULT_AI_PROMPT);
-            setScreenState("data");
-          }}
-        />
-      )}
-
-      {screenState === "error" && (
-        <ErrorState
-          code="AI_QUOTA_EXCEEDED"
-          message="Bạn đã dùng hết hạn mức token AI trong tháng của workspace VNPT (1.000.000 tokens). Vui lòng chuyển sang Ollama local hoặc liên hệ Quản trị viên."
-          onRetry={() => setScreenState("data")}
-        />
-      )}
-
-      {screenState === "data" && (
-        <div className="space-y-6">
-          {/* Prompt Input Card */}
-          <Card className="border-border/80 shadow-xs">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-info/10 text-info">
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-                  <CardTitle className="text-base font-semibold">
-                    Nhập yêu cầu phần mềm (User Story / BRD)
-                  </CardTitle>
-                </div>
-                <Badge variant="outline" className="text-xs text-muted-foreground">
-                  Mô hình: Gemini 1.5 Pro
+      <Card className="border-border/80">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-info" /> Yêu cầu
+          </CardTitle>
+          <CardDescription className="text-xs">20–4.000 ký tự. Ví dụ: &quot;Xây dựng quên mật khẩu qua email: gửi link 15 phút, đặt mật khẩu mới, khoá sau 5 lần sai.&quot;</CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 pt-2 space-y-3">
+          <Textarea value={requirement} onChange={(e) => setRequirement(e.target.value)} className="text-xs min-h-[110px]" minLength={20} maxLength={4000} disabled={busy} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <Select value={sprintId} onValueChange={setSprintId} disabled={busy}>
+              <SelectTrigger className="h-8 text-xs w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__backlog" className="text-xs">
+                  Backlog
+                </SelectItem>
+                {(sprints.data ?? []).filter((s) => s.status !== "CLOSED").map((s) => (
+                  <SelectItem key={s.id} value={s.id} className="text-xs">
+                    {s.name} · {s.status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={detail} onValueChange={(v) => setDetail(v as typeof detail)} disabled={busy}>
+              <SelectTrigger className="h-8 text-xs w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="coarse" className="text-xs">
+                  Thô (3–6 task)
+                </SelectItem>
+                <SelectItem value="normal" className="text-xs">
+                  Vừa (5–12)
+                </SelectItem>
+                <SelectItem value="fine" className="text-xs">
+                  Chi tiết (8–25)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-[11px] text-muted-foreground">{requirement.trim().length}/4000</span>
+            <Button size="sm" className="ml-auto h-8 text-xs gap-1.5" disabled={!project.canManage || busy || requirement.trim().length < 20} onClick={() => decompose.mutate()}>
+              {decompose.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Phân rã
+            </Button>
+          </div>
+          {error && (
+            <Alert variant="destructive" className="py-2">
+              <AlertTitle className="text-xs flex items-center gap-2">
+                AI không trả lời được{" "}
+                <Badge variant="destructive" className="font-mono text-[10px]">
+                  {error.code}
                 </Badge>
-              </div>
-              <CardDescription className="text-xs">
-                Mô tả tính năng từ 3–5 câu để AI Agent tự động phân rã WBS, ước lượng giờ và gán nhân sự theo kỹ năng.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-3">
-              <Textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Nhập yêu cầu phần mềm chi tiết tại đây..."
-                className="min-h-[100px] text-xs leading-relaxed"
-                disabled={isProcessing}
-              />
-            </CardContent>
-
-            <CardFooter className="pt-0 flex items-center justify-between border-t border-border/40 py-3 bg-muted/10">
-              <span className="text-[11px] text-muted-foreground">
-                Gợi ý: Bao gồm cả yêu cầu backend, frontend, bảo mật và kịch bản test.
-              </span>
-              <Button
-                onClick={handleDecompose}
-                disabled={isProcessing || !prompt.trim()}
-                className="gap-2 text-xs"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Đang phân rã yêu cầu...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4" />
-                    Bắt đầu phân rã WBS
-                  </>
-                )}
-              </Button>
-            </CardFooter>
-          </Card>
-
-          {/* Streaming Skeleton during processing */}
-          {isProcessing && (
-            <Card className="border-info/50 bg-info/5 p-6 space-y-4 animate-pulse">
-              <div className="flex items-center gap-2 text-info text-sm font-semibold">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>AI Agent đang bóc tách WBS và kiểm tra Validator tải trống...</span>
-              </div>
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </Card>
+              </AlertTitle>
+              <AlertDescription className="text-[11px]">{error.message}</AlertDescription>
+            </Alert>
           )}
+        </CardContent>
+      </Card>
 
-          {/* Decomposed Tasks Preview Panel (Chờ xác nhận: viền info + badge info) */}
-          {!isProcessing && hasDecomposed && (
-            <Card className="border-info/60 bg-card shadow-sm ring-1 ring-info/20">
-              <CardHeader className="pb-3 border-b border-info/20 bg-info/5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="info" className="gap-1.5 py-0.5 px-2 text-xs">
-                      <Sparkles className="h-3 w-3" />
-                      Đề xuất chờ xác nhận từ AI Agent
-                    </Badge>
-                    <span className="text-xs font-semibold text-foreground">
-                      {tasks.length} công việc con được tạo
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>Đã chọn:</span>
-                    <Badge variant="secondary" className="font-mono tabular-nums">
-                      {selectedCount}/{tasks.length} việc · {totalHours}h
-                    </Badge>
-                  </div>
-                </div>
-              </CardHeader>
-
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-muted/40 text-xs">
-                      <TableRow>
-                        <TableHead className="w-10 text-center">
-                          <Checkbox
-                            checked={selectedCount === tasks.length}
-                            onCheckedChange={handleToggleSelectAll}
-                            aria-label="Chọn tất cả"
-                          />
-                        </TableHead>
-                        <TableHead className="min-w-[280px]">Tiêu đề công việc (WBS)</TableHead>
-                        <TableHead className="w-24 text-center">Giờ ước tính</TableHead>
-                        <TableHead className="min-w-[160px]">Kỹ năng cần thiết</TableHead>
-                        <TableHead className="w-24">Phụ thuộc</TableHead>
-                        <TableHead className="min-w-[150px]">Người được đề xuất</TableHead>
-                        <TableHead className="w-28 text-center">Tải sau nhận</TableHead>
-                        <TableHead className="min-w-[220px]">Lý do phân công</TableHead>
-                      </TableRow>
-                    </TableHeader>
-
-                    <TableBody className="text-xs">
-                      {tasks.map((t) => (
-                        <TableRow
-                          key={t.id}
-                          className={cn(
-                            "transition-colors",
-                            !t.selected && "opacity-40 bg-muted/10"
-                          )}
-                        >
-                          {/* Checkbox */}
-                          <TableCell className="text-center">
-                            <Checkbox
-                              checked={t.selected}
-                              onCheckedChange={() => handleToggleRow(t.id)}
-                            />
-                          </TableCell>
-
-                          {/* Editable Title */}
-                          <TableCell className="font-medium">
-                            <Input
-                              value={t.title}
-                              onChange={(e) => handleTitleChange(t.id, e.target.value)}
-                              className="h-7 text-xs px-2 border-transparent hover:border-input focus-visible:border-primary shadow-none"
-                            />
-                          </TableCell>
-
-                          {/* Estimate Hours */}
-                          <TableCell className="text-center">
-                            <Input
-                              type="number"
-                              value={t.estimateHours}
-                              onChange={(e) => handleHoursChange(t.id, Number(e.target.value))}
-                              className="h-7 w-16 text-center text-xs font-mono tabular-nums mx-auto"
-                            />
-                          </TableCell>
-
-                          {/* Required Skills */}
-                          <TableCell>
-                            <div className="flex items-center gap-1 flex-wrap">
-                              {t.requiredSkills.map((sk) => (
-                                <Badge
-                                  key={sk.name}
-                                  variant="secondary"
-                                  className="text-[10px] px-1.5 py-0 h-4"
-                                >
-                                  {sk.name} ({sk.level})
-                                </Badge>
-                              ))}
-                            </div>
-                          </TableCell>
-
-                          {/* Dependencies */}
-                          <TableCell>
-                            <div className="flex items-center gap-1 flex-wrap">
-                              {t.dependencies.length > 0 ? (
-                                t.dependencies.map((dep) => (
-                                  <Badge
-                                    key={dep}
-                                    variant="outline"
-                                    className="font-mono text-[10px] px-1 py-0 h-4"
-                                  >
-                                    {dep}
-                                  </Badge>
-                                ))
-                              ) : (
-                                <span className="text-muted-foreground text-[11px]">—</span>
-                              )}
-                            </div>
-                          </TableCell>
-
-                          {/* Suggested Assignee */}
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <UserAvatar
-                                name={t.suggestedAssigneeName}
-                                role={t.suggestedAssigneeRole}
-                                size="sm"
-                                showTooltip={false}
-                              />
-                              <div>
-                                <span className="font-medium text-foreground">
-                                  {t.suggestedAssigneeName}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground block">
-                                  {t.suggestedAssigneeRole}
-                                </span>
-                              </div>
-                            </div>
-                          </TableCell>
-
-                          {/* Post-assign Workload */}
-                          <TableCell className="text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <span className="text-muted-foreground text-[10px] line-through tabular-nums">
-                                {t.currentWorkload}%
-                              </span>
-                              <ArrowRight className="h-2.5 w-2.5 text-muted-foreground" />
-                              <WorkloadBadge percent={t.postAssignWorkload} />
-                            </div>
-                          </TableCell>
-
-                          {/* Rationale */}
-                          <TableCell className="text-muted-foreground text-[11px] leading-snug">
-                            {t.assignmentRationale}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-
-              {/* Action Bar Footer */}
-              <CardFooter className="p-4 border-t border-info/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-muted/20">
-                <div className="text-xs text-muted-foreground">
-                  Đề xuất tuân thủ công thức tải khả dụng và khớp ma trận kỹ năng của nhóm VNPT.
-                </div>
-
-                <div className="flex items-center gap-2 self-end sm:self-auto">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleReject}
-                    className="gap-1.5 text-xs text-muted-foreground hover:text-destructive"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    Từ chối
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={handleApplyTasks}
-                    disabled={selectedCount === 0}
-                    className="gap-1.5 text-xs bg-primary text-primary-foreground shadow"
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                    Áp dụng {selectedCount} công việc
-                  </Button>
-                </div>
-              </CardFooter>
-            </Card>
-          )}
-        </div>
+      {result && result.action.type !== "DECOMPOSE_PROPOSAL" && (
+        <Alert>
+          <AlertTitle className="text-xs">{result.action.type === "ASK_CLARIFICATION" ? "AI cần làm rõ" : "AI trả lời"}</AlertTitle>
+          <AlertDescription className="text-[11px]">
+            {result.action.reply}
+            {result.action.type === "ASK_CLARIFICATION" && ` — ${result.action.question}`} Bổ sung vào yêu cầu rồi gửi lại, hoặc dùng chat nhiều lượt.
+          </AlertDescription>
+        </Alert>
       )}
 
-      <StateToggle state={screenState} onChange={setScreenState} />
+      {proposal && (
+        <Card className="border-border/80">
+          <CardHeader className="p-4 pb-2 flex-row items-start justify-between space-y-0 gap-2">
+            <div>
+              <CardTitle className="text-sm flex items-center gap-2">
+                Đề xuất {proposal.items.length} công việc
+                <Badge variant={draftItemToVariant(proposal.status)} className="text-[10px]">
+                  {proposal.status}
+                </Badge>
+                {result?.cached && (
+                  <Badge variant="outline" className="text-[10px]">
+                    bản nháp đang mở
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {proposal.action.reply}
+                {result?.usage && ` · ${result.usage.model} · ${result.usage.durationMs} ms · ${result.usage.inputTokens + result.usage.outputTokens} token`}
+              </CardDescription>
+              {proposal.validation && <ValidationNote validation={proposal.validation} />}
+            </div>
+            {proposal.status === "DRAFT" && (
+              <div className="flex items-center gap-2 shrink-0">
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1" disabled={busy} onClick={() => reject.mutate()}>
+                  <X className="h-3.5 w-3.5" /> Từ chối
+                </Button>
+                <Button size="sm" className="h-8 text-xs gap-1" disabled={busy || !(proposal.validation?.ok ?? true)} onClick={() => apply.mutate()}>
+                  <Check className="h-3.5 w-3.5" /> Tạo {proposal.items.length} công việc
+                </Button>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="p-4 pt-0 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs w-12">Mã</TableHead>
+                  <TableHead className="text-xs">Tiêu đề</TableHead>
+                  <TableHead className="text-xs text-right">Giờ</TableHead>
+                  <TableHead className="text-xs">Người gợi ý</TableHead>
+                  <TableHead className="text-xs">Kỹ năng</TableHead>
+                  <TableHead className="text-xs">Sau</TableHead>
+                  <TableHead className="text-xs">Trạng thái</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {proposal.items.map((i) => (
+                  <TableRow key={i.draftKey} className="text-xs">
+                    <TableCell className="font-mono">{i.draftKey}</TableCell>
+                    <TableCell>{i.title}</TableCell>
+                    <TableCell className="text-right font-mono">{i.estimateHours ?? "—"}</TableCell>
+                    <TableCell>{resolver.user(i.assignee)?.name ?? (i.assignee ? i.assignee : <span className="italic text-muted-foreground">chưa giao</span>)}</TableCell>
+                    <TableCell className="text-muted-foreground">{(i.skills ?? []).map((s) => resolver.skillLabel(s)).join(", ")}</TableCell>
+                    <TableCell className="font-mono">{i.dependsOn?.join(", ")}</TableCell>
+                    <TableCell>
+                      <Badge variant={draftItemToVariant(i.status)} className="text-[10px]">
+                        {i.status === "APPLIED" ? (proposal.applied?.tasks.find((t) => t.draftKey === i.draftKey)?.key ?? "đã tạo") : i.status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {proposal.status === "DRAFT" && proposal.validation && !proposal.validation.ok && (
+              <p className="text-[11px] text-muted-foreground mt-2">Sửa từng mục (giờ, người, phụ thuộc) ở màn Trợ lý AI rồi duyệt; form này chỉ tạo khi đề xuất qua kiểm tra.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

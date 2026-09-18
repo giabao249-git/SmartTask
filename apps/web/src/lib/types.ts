@@ -460,3 +460,40 @@ export interface ExplainView {
   cached: boolean;
   cachedUntil: string | null;
 }
+
+export interface NotificationView {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  data: Record<string, unknown> | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface WorkspaceSettingsView {
+  defaultCapacityHours: number;
+  workdays: number[];
+  holidays: string[];
+  workHours: { start: string; end: string };
+  adminOverhead: number;
+  workload: {
+    thresholds: { high: number; full: number; overload: number };
+    ear: { smoothingHours: number; windowWeeks: number };
+    burnout: Record<string, number>;
+    fairnessTarget: number;
+  };
+  ai: { dailyLimitPerUser: number; enabledPurposes: string[]; behaviorSignals: boolean };
+  retention: Record<string, number>;
+}
+
+export interface InvitationView {
+  id: string;
+  email: string | null;
+  role: WorkspaceRole;
+  token: string;
+  expiresAt: string;
+  createdAt: string;
+  invitedBy?: { id: string; fullName: string } | null;
+}

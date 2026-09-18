@@ -247,7 +247,7 @@ function Stat({ label, value, variant }: { label: string; value: string; variant
 }
 
 /** Bảng sự thật cho giao việc (UC-26/39): thành viên × task chưa giao — khớp kỹ năng, giờ trống trước hạn; KHÔNG xếp hạng. */
-function CapacityTable({ projectId, sprintId, canView }: { projectId: string; sprintId?: string; canView: boolean }) {
+export function CapacityTable({ projectId, sprintId, canView }: { projectId: string; sprintId?: string; canView: boolean }) {
   const q = useCapacityTable(projectId, sprintId, canView);
   if (!canView) return <EmptyState icon={Table2} title="Chỉ PM xem bảng năng lực" description="Bảng này phục vụ giao việc và Trợ lý AI; cần vai PM hoặc quản trị workspace." />;
   if (q.isPending) return <Skeleton className="h-64 w-full" />;

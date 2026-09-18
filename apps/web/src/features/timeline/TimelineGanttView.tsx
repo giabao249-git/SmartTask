@@ -1,243 +1,227 @@
 "use client";
 
 import * as React from "react";
-import {
-  ArrowRight,
-} from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { CalendarRange, ZoomIn, ZoomOut, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/app/PageHeader";
-import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
-import { StateToggle, type ScreenState } from "@/components/app/StateToggle";
-import { TIMELINE_TASKS } from "@/mocks/timeline";
-import { MEMBERS } from "@/mocks/members";
+import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
+import { taskKeyOf } from "@/components/app/TaskCard";
+import { describeError } from "@/lib/api";
+import { useCurrentProject } from "@/lib/hooks/use-project";
+import { useSprints } from "@/lib/hooks/queries";
+import { priorityToVariant } from "@/lib/status";
+import type { TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useTasks } from "@/features/board/hooks";
 
-const TIMELINE_DAYS = [
-  { day: "T4", date: "2026-10-23", label: "23/10" },
-  { day: "T5", date: "2026-10-24", label: "24/10" },
-  { day: "T6", date: "2026-10-25", label: "25/10" },
-  { day: "T7", date: "2026-10-26", label: "26/10", isToday: true }, // Hôm nay
-  { day: "CN", date: "2026-10-27", label: "27/10" },
-  { day: "T2", date: "2026-10-28", label: "28/10" },
-  { day: "T3", date: "2026-10-29", label: "29/10" },
-];
+const DAY = 86_400_000;
+const ZOOM = { day: 40, week: 18, month: 7 } as const;
+type Zoom = keyof typeof ZOOM;
 
+const toDay = (iso: string) => Math.floor(new Date(iso).getTime() / DAY);
+const fmt = (dayIdx: number) => {
+  const d = new Date(dayIdx * DAY);
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+};
+
+/** Gantt chỉ đọc (UC-13): thanh theo ngày bắt đầu–hạn, nhóm theo sprint, đường hôm nay, quá hạn, mũi tên phụ thuộc, thu phóng. */
 export function TimelineGanttView() {
-  const [screenState, setScreenState] = React.useState<ScreenState>("data");
+  const project = useCurrentProject();
+  const params = useSearchParams();
+  const sprints = useSprints(project.id);
+  const [sprintFilter, setSprintFilter] = React.useState<string>("__all");
+  const [zoom, setZoom] = React.useState<Zoom>("week");
+  const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
+  const tasksQuery = useTasks(project.id, { sprintId: sprintFilter !== "__all" ? sprintFilter : undefined });
+  const px = ZOOM[zoom];
+  const today = Math.floor(Date.now() / DAY);
 
-  // Group tasks by assignee name
-  const groupedTasks = MEMBERS.map((member) => ({
-    member,
-    tasks: TIMELINE_TASKS.filter((t) => t.assigneeName === member.name),
-  }));
+  const rows = React.useMemo(() => (tasksQuery.data ?? []).filter((t) => t.startDate || t.dueDate), [tasksQuery.data]);
+  const range = React.useMemo(() => {
+    if (!rows.length) return { start: today - 7, end: today + 21 };
+    const starts = rows.map((t) => toDay(t.startDate ?? t.dueDate!));
+    const ends = rows.map((t) => toDay(t.dueDate ?? t.startDate!));
+    return { start: Math.min(...starts, today) - 2, end: Math.max(...ends, today) + 3 };
+  }, [rows, today]);
+  const days = range.end - range.start + 1;
+  const groups = React.useMemo(() => {
+    const bySprint = new Map<string, TaskListItem[]>();
+    for (const t of rows) {
+      const k = t.sprintId ?? "__backlog";
+      bySprint.set(k, [...(bySprint.get(k) ?? []), t]);
+    }
+    const name = (id: string) => (id === "__backlog" ? "Backlog" : (sprints.data?.find((s) => s.id === id)?.name ?? "Sprint"));
+    return [...bySprint.entries()].map(([id, list]) => ({ id, name: name(id), tasks: list.sort((a, b) => (a.startDate ?? a.dueDate ?? "").localeCompare(b.startDate ?? b.dueDate ?? "")) }));
+  }, [rows, sprints.data]);
+  // Hàng 0 = trục ngày (h-8), mỗi nhóm 1 hàng tiêu đề rồi tới task
+  const rowIndex = new Map<string, number>();
+  let idx = 1;
+  for (const g of groups) {
+    idx += 1;
+    for (const t of g.tasks) rowIndex.set(t.id, idx++);
+  }
+  const ROW = 32;
 
-  const getDayOffset = (dateStr: string) => {
-    const idx = TIMELINE_DAYS.findIndex((d) => d.date === dateStr);
-    return idx !== -1 ? idx : 0;
-  };
-
-  const getDaySpan = (startStr: string, endStr: string) => {
-    const start = getDayOffset(startStr);
-    const end = getDayOffset(endStr);
-    return Math.max(1, end - start + 1);
+  const bar = (t: TaskListItem) => {
+    const s = toDay(t.startDate ?? t.dueDate!);
+    const e = Math.max(s, toDay(t.dueDate ?? t.startDate!));
+    return { left: (s - range.start) * px, width: (e - s + 1) * px, overdue: !t.completedAt && !!t.dueDate && e < today };
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Biểu đồ Gantt & Tiến độ Timeline"
-        description="Lộ trình thực hiện công việc Sprint 3, phụ thuộc giữa các đầu việc và tiến độ theo ngày."
-        breadcrumbs={[
-          { label: "VNPT Dev Team", href: "/workspaces" },
-          { label: "SmartTask v1", href: "/projects/ST/dashboard" },
-          { label: "Timeline" },
-        ]}
+        title={`Gantt / Timeline · ${project.key}`}
+        description="Chỉ đọc — kéo giãn thanh là mục 'làm nếu kịp' (docs 11 §1.2 #11). Mở chi tiết bằng cách bấm thanh."
+        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Timeline" }]}
       >
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-xs">
-            Sprint 3 · 23/10–29/10 · 7 ngày làm việc
-          </Badge>
+          <Select value={sprintFilter} onValueChange={setSprintFilter}>
+            <SelectTrigger className="h-8 text-xs w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all" className="text-xs">
+                Mọi sprint
+              </SelectItem>
+              {(sprints.data ?? []).map((s) => (
+                <SelectItem key={s.id} value={s.id} className="text-xs">
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex items-center rounded-md border border-border/80">
+            {(["day", "week", "month"] as Zoom[]).map((z) => (
+              <Button key={z} variant={zoom === z ? "default" : "ghost"} size="sm" className="h-8 text-xs rounded-none first:rounded-l-md last:rounded-r-md" onClick={() => setZoom(z)}>
+                {z === "day" ? <ZoomIn className="h-3.5 w-3.5" /> : z === "month" ? <ZoomOut className="h-3.5 w-3.5" /> : "Tuần"}
+              </Button>
+            ))}
+          </div>
         </div>
       </PageHeader>
 
-      {screenState === "loading" && (
-        <div className="space-y-4">
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <Skeleton className="h-96 w-full rounded-xl" />
-        </div>
-      )}
-
-      {screenState === "empty" && (
-        <EmptyState
-          title="Chưa có lịch trình công việc"
-          description="Các công việc trong sprint chưa được ấn định ngày bắt đầu và ngày hoàn thành."
-          actionLabel="Đặt lịch tự động bằng AI"
-          onAction={() => setScreenState("data")}
-        />
-      )}
-
-      {screenState === "error" && (
-        <ErrorState
-          code="DEPENDENCY_CYCLE"
-          message="Phát hiện quan hệ phụ thuộc vòng tròn giữa các thẻ công việc (ST-12 -> ST-5 -> ST-12). Vui lòng gỡ bỏ liên kết phụ thuộc."
-          onRetry={() => setScreenState("data")}
-        />
-      )}
-
-      {screenState === "data" && (
-        <Card className="shadow-xs overflow-hidden border-border/80">
-          <CardHeader className="p-4 border-b border-border/60 bg-muted/20 flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-sm font-semibold">
-                Tiến độ công việc nhóm theo thành viên
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Đường chỉ màu đỏ biểu thị mốc thời gian hôm nay (26/10)
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded-xs bg-success" />
-                Hoàn thành
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded-xs bg-primary" />
-                Đang làm
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded-xs bg-muted" />
-                Chưa bắt đầu
-              </span>
-            </div>
+      {tasksQuery.isPending ? (
+        <Skeleton className="h-96 w-full" />
+      ) : tasksQuery.isError ? (
+        <ErrorState code={describeError(tasksQuery.error).code} message={describeError(tasksQuery.error).message} onRetry={() => tasksQuery.refetch()} />
+      ) : rows.length === 0 ? (
+        <EmptyState icon={CalendarRange} title="Chưa có công việc có ngày" description="Đặt ngày bắt đầu/hạn cho công việc để hiện trên timeline." />
+      ) : (
+        <Card className="border-border/80">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm">{rows.length} công việc · {groups.length} nhóm</CardTitle>
+            <CardDescription className="text-xs">Đường đỏ = hôm nay · thanh đỏ = quá hạn · mũi tên = phụ thuộc</CardDescription>
           </CardHeader>
-
           <CardContent className="p-0">
             <ScrollArea className="w-full">
-              <div className="min-w-[900px]">
-                {/* Timeline Grid Header (Days) */}
-                <div className="grid grid-cols-12 border-b border-border/60 bg-muted/40 text-xs font-semibold py-2.5 px-4">
-                  <div className="col-span-4 text-muted-foreground">Công việc / Người nhận</div>
-                  <div className="col-span-8 grid grid-cols-7 text-center">
-                    {TIMELINE_DAYS.map((d) => (
-                      <div
-                        key={d.date}
-                        className={cn(
-                          "py-0.5 rounded text-xs",
-                          d.isToday && "bg-destructive/10 text-destructive font-bold ring-1 ring-destructive/40"
-                        )}
-                      >
-                        <span className="block text-[10px] text-muted-foreground">{d.day}</span>
-                        <span>{d.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Grouped by Assignee */}
-                <div className="divide-y divide-border/40 relative">
-                  {/* Vertical "Hôm nay" Line (Positioned over the 4th day of 7) */}
-                  <div
-                    className="absolute top-0 bottom-0 pointer-events-none z-10 border-r-2 border-dashed border-destructive/80"
-                    style={{ left: "calc(33.333% + (66.666% / 7) * 3.5)" }}
-                  >
-                    <span className="absolute -top-1 -translate-x-1/2 bg-destructive text-destructive-foreground text-[9px] px-1 py-0.2 rounded font-bold uppercase">
-                      Hôm nay
-                    </span>
-                  </div>
-
-                  {groupedTasks.map((group) => (
-                    <div key={group.member.id} className="py-2 bg-background">
-                      {/* Assignee Group Header */}
-                      <div className="px-4 py-1.5 flex items-center gap-2 bg-muted/20 border-y border-border/20 text-xs font-semibold">
-                        <UserAvatar
-                          name={group.member.name}
-                          avatar={group.member.avatar}
-                          role={group.member.role}
-                          initials={group.member.initials}
-                          isOnline={group.member.isOnline}
-                          size="sm"
-                          showTooltip={false}
-                        />
-                        <span>{group.member.name}</span>
-                        <span className="text-muted-foreground font-normal">({group.member.role})</span>
-                        <Badge variant="secondary" className="ml-auto text-[10px] py-0">
-                          {group.tasks.length} việc
-                        </Badge>
-                      </div>
-
-                      {/* Tasks of this member */}
-                      <div className="space-y-2 py-2">
-                        {group.tasks.map((task) => {
-                          const startCol = getDayOffset(task.startDate);
-                          const spanCols = getDaySpan(task.startDate, task.dueDate);
-
-                          return (
-                            <div
-                              key={task.code}
-                              className="grid grid-cols-12 items-center px-4 py-1 text-xs hover:bg-muted/30 transition-colors group"
-                            >
-                              {/* Left: Task code & title */}
-                              <div className="col-span-4 flex items-center gap-2 pr-2">
-                                <Badge variant="outline" className="font-mono text-[10px] px-1 py-0 font-semibold shrink-0">
-                                  {task.code}
-                                </Badge>
-                                <span className="truncate text-foreground font-medium" title={task.title}>
-                                  {task.title}
-                                </span>
-                                {task.dependsOn && (
-                                  <span className="text-[10px] text-muted-foreground shrink-0 font-mono flex items-center gap-0.5">
-                                    <ArrowRight className="h-2.5 w-2.5" />
-                                    {task.dependsOn}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Right: Gantt Bar on 7-col grid */}
-                              <div className="col-span-8 grid grid-cols-7 relative h-7 items-center">
-                                <div
-                                  className={cn(
-                                    "h-5 rounded-md text-[10px] font-medium flex items-center justify-between px-2 text-primary-foreground shadow-xs transition-all",
-                                    task.status === "DONE"
-                                      ? "bg-success"
-                                      : task.status === "IN_PROGRESS"
-                                      ? "bg-primary"
-                                      : task.status === "REVIEW"
-                                      ? "bg-warning text-warning-foreground"
-                                      : "bg-muted text-muted-foreground border border-border",
-                                    task.isOverdue && "ring-1 ring-destructive"
-                                  )}
-                                  style={{
-                                    gridColumnStart: startCol + 1,
-                                    gridColumnEnd: `span ${spanCols}`,
-                                  }}
-                                >
-                                  <span className="truncate">{task.progress}%</span>
-                                  {task.isOverdue && (
-                                    <span className="text-[9px] bg-destructive px-1 rounded text-white shrink-0">
-                                      Trễ
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+              <div className="flex" style={{ minWidth: 260 + days * px }}>
+                <div className="w-[260px] shrink-0 border-r border-border/60 sticky left-0 bg-card z-10">
+                  <div className="h-8 border-b border-border/60" />
+                  {groups.map((g) => (
+                    <React.Fragment key={g.id}>
+                      <div className="h-8 px-3 flex items-center text-xs font-semibold bg-muted/40 border-b border-border/40">{g.name}</div>
+                      {g.tasks.map((t) => (
+                        <Button key={t.id} variant="ghost" onClick={() => setSelectedId(t.id)} className="h-8 w-full justify-start px-3 text-xs rounded-none border-b border-border/30 gap-2">
+                          <span className="font-mono text-muted-foreground">{taskKeyOf(project.key, t)}</span>
+                          <span className="truncate">{t.title}</span>
+                        </Button>
+                      ))}
+                    </React.Fragment>
                   ))}
                 </div>
+                <div className="relative" style={{ width: days * px, height: idx * ROW }}>
+                  {/* Trục ngày */}
+                  <div className="h-8 border-b border-border/60 relative text-[10px] text-muted-foreground">
+                    {Array.from({ length: days }).map((_, i) => {
+                      const d = range.start + i;
+                      const date = new Date(d * DAY);
+                      const dow = date.getUTCDay();
+                      const show = zoom === "day" || (zoom === "week" && dow === 1) || (zoom === "month" && date.getUTCDate() === 1);
+                      if (!show) return null;
+                      const span = zoom === "day" ? 1 : zoom === "week" ? 7 : 30;
+                      return (
+                        <div key={i} className="absolute bottom-0 h-full border-l border-border/40 pl-1 flex items-end pb-0.5 whitespace-nowrap" style={{ left: i * px, width: span * px }}>
+                          {fmt(d)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Nền hàng + cuối tuần */}
+                  {Array.from({ length: days }).map((_, i) => {
+                    const dow = new Date((range.start + i) * DAY).getUTCDay();
+                    return dow === 0 || dow === 6 ? <div key={i} className="absolute top-8 bottom-0 bg-muted/30" style={{ left: i * px, width: px }} /> : null;
+                  })}
+                  {/* Hôm nay */}
+                  <div className="absolute top-0 bottom-0 w-px bg-destructive z-10" style={{ left: (today - range.start) * px + px / 2 }} title="Hôm nay" />
+                  {/* Thanh */}
+                  {groups.flatMap((g) =>
+                    g.tasks.map((t) => {
+                      const b = bar(t);
+                      const r = rowIndex.get(t.id) ?? 0;
+                      return (
+                        <Button
+                          key={t.id}
+                          variant="ghost"
+                          onClick={() => setSelectedId(t.id)}
+                          className={cn("absolute h-6 px-2 justify-start text-[11px] rounded-md border overflow-hidden", b.overdue ? "bg-destructive/15 border-destructive/50 text-destructive" : t.completedAt ? "bg-success/15 border-success/40" : "bg-primary/10 border-primary/40")}
+                          style={{ top: r * ROW + 4, left: b.left, width: Math.max(b.width, px) }}
+                          title={`${taskKeyOf(project.key, t)} · ${t.startDate?.slice(0, 10) ?? "?"} → ${t.dueDate?.slice(0, 10) ?? "?"}`}
+                        >
+                          <span className="truncate">{t.title}</span>
+                          {t.progress > 0 && <span className="ml-auto font-mono text-[10px]">{t.progress}%</span>}
+                        </Button>
+                      );
+                    }),
+                  )}
+                  {/* Phụ thuộc (mũi tên đơn giản từ cuối thanh trước → đầu thanh sau) */}
+                  <svg className="absolute inset-0 pointer-events-none" width={days * px} height={(idx + 1) * ROW}>
+                    {rows.flatMap((t) =>
+                      t.dependsOnIds.map((depId) => {
+                        const dep = rows.find((x) => x.id === depId);
+                        if (!dep) return null;
+                        const a = bar(dep);
+                        const b = bar(t);
+                        const y1 = (rowIndex.get(dep.id) ?? 0) * ROW + 16;
+                        const y2 = (rowIndex.get(t.id) ?? 0) * ROW + 16;
+                        const x1 = a.left + a.width;
+                        const x2 = b.left;
+                        return <path key={`${depId}-${t.id}`} d={`M${x1},${y1} C${x1 + 12},${y1} ${x2 - 12},${y2} ${x2},${y2}`} fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth={1} markerEnd="url(#arrow)" />;
+                      }),
+                    )}
+                    <defs>
+                      <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                        <path d="M0,0 L6,3 L0,6 z" fill="hsl(var(--muted-foreground))" />
+                      </marker>
+                    </defs>
+                  </svg>
+                </div>
               </div>
+              <ScrollBar orientation="horizontal" />
             </ScrollArea>
+            <div className="p-3 border-t border-border/40 flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
+              {(["URGENT", "HIGH", "MEDIUM", "LOW"] as const).map((p) => (
+                <Badge key={p} variant={priorityToVariant(p)} className="text-[9px] px-1 py-0">
+                  {p}
+                </Badge>
+              ))}
+              <span className="ml-auto flex items-center gap-1">
+                <Link2 className="h-3 w-3" /> {rows.reduce((n, t) => n + t.dependsOnIds.length, 0)} phụ thuộc
+              </span>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      <StateToggle state={screenState} onChange={setScreenState} />
+      <TaskDetailSheet taskId={selectedId} project={project} open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)} />
     </div>
   );
 }
