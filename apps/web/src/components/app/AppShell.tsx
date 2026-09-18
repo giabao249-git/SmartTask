@@ -24,6 +24,7 @@ import {
   PanelLeft,
   ChevronRight,
   FolderKanban,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,10 +44,19 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { UserAvatar } from "./UserAvatar";
 import { AIAssistantDrawer } from "./AIAssistantDrawer";
-import { CURRENT_WORKSPACE, CURRENT_PROJECT, MEMBERS } from "@/mocks/members";
 import { MOCK_NOTIFICATIONS } from "@/mocks/notifications";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/auth";
+import { readLastProject, useProjectContext } from "@/lib/hooks/use-project";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -60,8 +70,17 @@ export function AppShell({ children }: AppShellProps) {
   const [aiDrawerOpen, setAiDrawerOpen] = React.useState(false);
   const [isDark, setIsDark] = React.useState(false);
   const [notifications, setNotifications] = React.useState(MOCK_NOTIFICATIONS);
-
-  const currentUser = MEMBERS[0]; // Lan (PM)
+  const auth = useAuth();
+  const projectCtx = useProjectContext();
+  const [lastProject, setLastProject] = React.useState<{ id: string; key: string; name: string } | null>(null);
+  React.useEffect(() => setLastProject(readLastProject()), [projectCtx?.id]);
+  // Dự án để dựng menu: dự án đang mở, nếu không thì dự án mở gần nhất
+  const project = projectCtx ?? lastProject;
+  const projectBase = project ? `/projects/${project.id}` : null;
+  const currentUser = auth.user;
+  const workspace = projectCtx
+    ? auth.workspaces.find((w) => w.id === projectCtx.workspaceId) ?? auth.workspaces[0]
+    : auth.workspaces[0];
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   // Tự thu gọn sidebar dưới 1024px; trang Trợ lý AI (3 cột) thu gọn từ dưới 1280px để cột chat không bị bóp
@@ -84,15 +103,15 @@ export function AppShell({ children }: AppShellProps) {
         e.preventDefault();
         setCommandOpen((open) => !open);
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === "j") {
+      if ((e.metaKey || e.ctrlKey) && e.key === "j" && projectBase) {
         e.preventDefault();
-        router.push("/projects/ST/assistant");
+        router.push(`${projectBase}/assistant`);
       }
     };
 
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-  }, [router]);
+  }, [router, projectBase]);
 
   const toggleTheme = () => {
     const root = document.documentElement;
@@ -105,61 +124,25 @@ export function AppShell({ children }: AppShellProps) {
     }
   };
 
-  const navItems = [
-    {
-      title: "Dashboard",
-      href: "/projects/ST/dashboard",
-      icon: LayoutDashboard,
-    },
-    {
-      title: "Bảng Kanban",
-      href: "/projects/ST/board",
-      icon: Kanban,
-      badge: "WIP 4/3",
-      badgeVariant: "warning" as const,
-    },
-    {
-      title: "Danh sách task",
-      href: "/projects/ST/tasks",
-      icon: ListTodo,
-    },
-    {
-      title: "Gantt / Timeline",
-      href: "/projects/ST/timeline",
-      icon: CalendarRange,
-    },
-    {
-      title: "Ma trận Eisenhower",
-      href: "/projects/ST/eisenhower",
-      icon: Grid2X2,
-    },
-    {
-      title: "Tải nhân sự (Workload)",
-      href: "/projects/ST/workload",
-      icon: Users2,
-      badge: "1 Quá tải",
-      badgeVariant: "destructive" as const,
-    },
-    {
-      title: "Ma trận kỹ năng",
-      href: "/projects/ST/skills",
-      icon: Award,
-    },
-    {
-      title: "Trợ lý AI",
-      href: "/projects/ST/assistant",
-      icon: Bot,
-      badge: "Chat & Nháp",
-      badgeVariant: "info" as const,
-    },
-    {
-      title: "Đề xuất cân bằng tải",
-      href: "/projects/ST/rebalance",
-      icon: Scale,
-      badge: "Spread 41%",
-      badgeVariant: "warning" as const,
-    },
-  ];
+  const navItems = projectBase
+    ? [
+        { title: "Dashboard", href: `${projectBase}/dashboard`, icon: LayoutDashboard },
+        { title: "Bảng Kanban", href: `${projectBase}/board`, icon: Kanban },
+        { title: "Danh sách task", href: `${projectBase}/tasks`, icon: ListTodo },
+        { title: "Gantt / Timeline", href: `${projectBase}/timeline`, icon: CalendarRange },
+        { title: "Ma trận Eisenhower", href: `${projectBase}/eisenhower`, icon: Grid2X2 },
+        { title: "Tải nhân sự (Workload)", href: `${projectBase}/workload`, icon: Users2 },
+        { title: "Ma trận kỹ năng", href: `${projectBase}/skills`, icon: Award },
+        {
+          title: "Trợ lý AI",
+          href: `${projectBase}/assistant`,
+          icon: Bot,
+          badge: "Chat & Nháp",
+          badgeVariant: "info" as const,
+        },
+        { title: "Đề xuất cân bằng tải", href: `${projectBase}/rebalance`, icon: Scale },
+      ]
+    : [];
 
   const secondaryNavItems = [
     {
@@ -207,7 +190,7 @@ export function AppShell({ children }: AppShellProps) {
             <CommandItem
               onSelect={() => {
                 setCommandOpen(false);
-                router.push("/projects/ST/assistant");
+                if (projectBase) router.push(`${projectBase}/assistant`);
               }}
               className="cursor-pointer"
             >
@@ -216,7 +199,7 @@ export function AppShell({ children }: AppShellProps) {
             </CommandItem>
             <CommandItem
               onSelect={() => {
-                router.push("/projects/ST/assistant");
+                if (projectBase) router.push(`${projectBase}/assistant`);
                 setCommandOpen(false);
               }}
               className="cursor-pointer"
@@ -226,7 +209,7 @@ export function AppShell({ children }: AppShellProps) {
             </CommandItem>
             <CommandItem
               onSelect={() => {
-                router.push("/projects/ST/rebalance");
+                if (projectBase) router.push(`${projectBase}/rebalance`);
                 setCommandOpen(false);
               }}
               className="cursor-pointer"
@@ -254,10 +237,10 @@ export function AppShell({ children }: AppShellProps) {
               </div>
               <div className="flex flex-col truncate">
                 <span className="font-semibold text-xs tracking-tight text-foreground truncate">
-                  {CURRENT_WORKSPACE.name}
+                  {workspace?.name ?? "SmartTask"}
                 </span>
                 <span className="text-[10px] text-muted-foreground truncate">
-                  {CURRENT_PROJECT.name} ({CURRENT_PROJECT.key})
+                  {project ? `${project.name} (${project.key})` : "Chưa chọn dự án"}
                 </span>
               </div>
             </div>
@@ -376,7 +359,8 @@ export function AppShell({ children }: AppShellProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push("/projects/ST/assistant")}
+            onClick={() => projectBase && router.push(`${projectBase}/assistant`)}
+            disabled={!projectBase}
             className={cn(
               "w-full justify-start gap-2 text-xs h-8 border-info/40 bg-info/5 hover:bg-info/10 text-info font-medium",
               sidebarCollapsed && "justify-center px-0"
@@ -398,20 +382,19 @@ export function AppShell({ children }: AppShellProps) {
             )}
           >
             <UserAvatar
-              name={currentUser.name}
-              avatar={currentUser.avatar}
-              role={currentUser.role}
-              initials={currentUser.initials}
-              isOnline={currentUser.isOnline}
+              name={currentUser?.fullName ?? "?"}
+              avatar={currentUser?.avatarUrl ?? undefined}
+              role={workspace?.role}
+              isOnline
               size="sm"
             />
             {!sidebarCollapsed && (
               <div className="flex flex-col truncate flex-1">
                 <span className="text-xs font-medium text-foreground truncate">
-                  {currentUser.name}
+                  {currentUser?.fullName}
                 </span>
                 <span className="text-[10px] text-muted-foreground truncate">
-                  {currentUser.role} · VNPT
+                  {projectCtx?.myRole ?? workspace?.role ?? ""}{workspace ? ` · ${workspace.name}` : ""}
                 </span>
               </div>
             )}
@@ -435,14 +418,20 @@ export function AppShell({ children }: AppShellProps) {
             </Button>
 
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground flex items-center gap-1.5">
+              <Link href="/workspaces" className="font-semibold text-foreground flex items-center gap-1.5 hover:underline">
                 <FolderKanban className="h-4 w-4 text-primary" />
-                {CURRENT_PROJECT.name}
-              </span>
-              <ChevronRight className="h-3 w-3" />
-              <Badge variant="outline" className="text-[10px] font-mono font-medium">
-                {CURRENT_PROJECT.currentSprint}
-              </Badge>
+                {projectCtx ? projectCtx.name : "Workspace & Dự án"}
+              </Link>
+              {projectCtx && (
+                <>
+                  <ChevronRight className="h-3 w-3" />
+                  <Badge variant="outline" className="text-[10px] font-mono font-medium">
+                    {projectCtx.activeSprint
+                      ? `${projectCtx.activeSprint.name} · ${fmtRange(projectCtx.activeSprint.startDate, projectCtx.activeSprint.endDate)}`
+                      : "Chưa có sprint chạy"}
+                  </Badge>
+                </>
+              )}
             </div>
           </div>
 
@@ -550,17 +539,37 @@ export function AppShell({ children }: AppShellProps) {
               {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
 
-            {/* Current User Avatar */}
+            {/* Current User menu */}
             <div className="pl-1 border-l border-border/60">
-              <UserAvatar
-                name={currentUser.name}
-                avatar={currentUser.avatar}
-                role={currentUser.role}
-                initials={currentUser.initials}
-                isOnline={currentUser.isOnline}
-                workloadPercent={currentUser.utilization}
-                size="sm"
-              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Tài khoản">
+                    <UserAvatar name={currentUser?.fullName ?? "?"} avatar={currentUser?.avatarUrl ?? undefined} role={workspace?.role} isOnline size="sm" showTooltip={false} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="text-xs">
+                    <div className="font-semibold truncate">{currentUser?.fullName}</div>
+                    <div className="text-[10px] text-muted-foreground font-normal truncate">{currentUser?.email}</div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => router.push("/workspaces")} className="text-xs">
+                    <Building2 className="mr-2 h-4 w-4" /> Workspace & dự án
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => router.push("/settings")} className="text-xs">
+                    <Settings className="mr-2 h-4 w-4" /> Cài đặt
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      void auth.logout().then(() => router.replace("/login"));
+                    }}
+                    className="text-xs text-destructive focus:text-destructive"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" /> Đăng xuất
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </header>
@@ -575,4 +584,12 @@ export function AppShell({ children }: AppShellProps) {
       <AIAssistantDrawer open={aiDrawerOpen} onOpenChange={setAiDrawerOpen} />
     </div>
   );
+}
+
+function fmtRange(a: string, b: string): string {
+  const f = (d: string) => {
+    const x = new Date(d);
+    return `${String(x.getUTCDate()).padStart(2, "0")}/${String(x.getUTCMonth() + 1).padStart(2, "0")}`;
+  };
+  return `${f(a)}–${f(b)}`;
 }

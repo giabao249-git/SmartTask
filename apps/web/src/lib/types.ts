@@ -45,16 +45,45 @@ export interface ProjectListItem {
   startDate: string | null;
   endDate: string | null;
   workspaceId: string;
-  taskCount?: number;
+  createdAt?: string;
+  _count?: { members: number; tasks: number };
   activeSprint?: { id: string; name: string; startDate: string; endDate: string } | null;
   myRole?: ProjectRole | null;
 }
 
 export interface ProjectMember {
-  userId: string;
+  id: string;
+  fullName: string;
+  shortName: string | null;
+  avatarUrl: string | null;
+  email?: string;
   role: ProjectRole;
-  user: { id: string; fullName: string; shortName: string | null; avatarUrl: string | null };
-  skills?: { skillId: string; name: string; level: number }[];
+  joinedAt: string;
+}
+
+export interface BoardColumn {
+  id: string;
+  projectId: string;
+  name: string;
+  statusKey: string;
+  position: number;
+  wipLimit: number | null;
+  isDone: boolean;
+}
+
+export interface LabelView {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface ProjectDetail extends ProjectListItem {
+  columns: BoardColumn[];
+  labels: LabelView[];
+  members: ProjectMember[];
+  canManage: boolean;
+  canEdit: boolean;
+  _count?: { members: number; tasks: number };
 }
 
 // ── AI chat (docs 12 §5, phase-8 mục E) ─────────────────────
