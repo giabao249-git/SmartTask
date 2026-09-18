@@ -43,12 +43,12 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { UserAvatar } from "./UserAvatar";
-import { AIAssistantDrawer } from "./AIAssistantDrawer";
 import { MOCK_NOTIFICATIONS } from "@/mocks/notifications";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { readLastProject, useProjectContext } from "@/lib/hooks/use-project";
+import { readLastProject } from "@/lib/hooks/use-project";
+import { useProject } from "@/lib/hooks/queries";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,11 +67,12 @@ export function AppShell({ children }: AppShellProps) {
   const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const [commandOpen, setCommandOpen] = React.useState(false);
-  const [aiDrawerOpen, setAiDrawerOpen] = React.useState(false);
   const [isDark, setIsDark] = React.useState(false);
   const [notifications, setNotifications] = React.useState(MOCK_NOTIFICATIONS);
   const auth = useAuth();
-  const projectCtx = useProjectContext();
+  // AppShell nằm trên layout dự án nên đọc :projectId từ URL; query dùng chung cache với ProjectLayout (không gọi 2 lần)
+  const routeProjectId = /^\/projects\/([0-9a-f-]{36})/i.exec(pathname)?.[1];
+  const projectCtx = useProject(routeProjectId).data ?? null;
   const [lastProject, setLastProject] = React.useState<{ id: string; key: string; name: string } | null>(null);
   React.useEffect(() => setLastProject(readLastProject()), [projectCtx?.id]);
   // Dự án để dựng menu: dự án đang mở, nếu không thì dự án mở gần nhất
@@ -580,8 +581,6 @@ export function AppShell({ children }: AppShellProps) {
         </main>
       </div>
 
-      {/* Persistent AI Assistant Drawer */}
-      <AIAssistantDrawer open={aiDrawerOpen} onOpenChange={setAiDrawerOpen} />
     </div>
   );
 }

@@ -64,6 +64,7 @@ import {
   type MemberAlias,
 } from "@/mocks/members";
 import { toast } from "sonner";
+import { AiPolicyTab } from "./AiPolicyTab";
 import { cn } from "@/lib/utils";
 
 export function SettingsNotificationsView() {
@@ -173,8 +174,12 @@ export function SettingsNotificationsView() {
       )}
 
       {screenState === "data" && (
-        <Tabs defaultValue="notifications" className="w-full space-y-4">
-          <TabsList className="grid w-full sm:w-[480px] grid-cols-3">
+        <Tabs defaultValue="ai" className="w-full space-y-4">
+          <TabsList className="grid w-full sm:w-[640px] grid-cols-4">
+            <TabsTrigger value="ai" className="text-xs gap-1.5">
+              <Bot className="h-3.5 w-3.5" />
+              Trợ lý AI (thật)
+            </TabsTrigger>
             <TabsTrigger value="notifications" className="text-xs gap-1.5">
               <Bell className="h-3.5 w-3.5" />
               Thông báo ({unreadCount})
@@ -188,6 +193,10 @@ export function SettingsNotificationsView() {
               Thành viên & Alias
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="ai" className="space-y-4">
+            <AiPolicyTab />
+          </TabsContent>
 
           {/* TAB 1: Trung tâm thông báo */}
           <TabsContent value="notifications" className="space-y-4">

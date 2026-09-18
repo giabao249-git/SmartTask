@@ -248,3 +248,11 @@ export interface QuotaView {
   resetsAt: string;
   timezone: string;
 }
+
+export interface SkillView {
+  id: string;
+  name: string;
+  category: string;
+  isActive: boolean;
+  aliases: string[];
+}

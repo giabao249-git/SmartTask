@@ -143,3 +143,45 @@ export function riskToVariant(r: RiskLevel | string): BadgeVariant {
       return "secondary";
   }
 }
+
+/**
+ * Trạng thái bản nháp AI (docs 12 §6): DRAFT viền info "AI · chờ duyệt"; APPLIED success (xanh lá);
+ * DISCARDED gạch ngang mờ; EXPIRED warning. Mọi màu thẻ nháp đi qua đây.
+ */
+export type DraftItemStatus = "DRAFT" | "APPLIED" | "DISCARDED";
+export type ProposalStatus = "DRAFT" | "APPLIED" | "REJECTED" | "EXPIRED";
+
+export function draftItemToVariant(s: DraftItemStatus | string): BadgeVariant {
+  switch (s) {
+    case "DRAFT":
+      return "info";
+    case "APPLIED":
+      return "success";
+    default:
+      return "secondary";
+  }
+}
+
+export function draftItemClasses(s: DraftItemStatus | string): string {
+  switch (s) {
+    case "DRAFT":
+      return "border-info/40 bg-info/5 hover:border-info/70";
+    case "APPLIED":
+      return "border-success/40 bg-success/10";
+    default:
+      return "border-border/40 bg-muted/30 opacity-60";
+  }
+}
+
+export function proposalToVariant(s: ProposalStatus | string): BadgeVariant {
+  switch (s) {
+    case "DRAFT":
+      return "info";
+    case "APPLIED":
+      return "success";
+    case "EXPIRED":
+      return "warning";
+    default:
+      return "secondary";
+  }
+}

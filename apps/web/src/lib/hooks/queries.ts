@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { ProjectDetail, ProjectListItem, WorkspaceListItem, WorkspaceMemberView, SprintView } from "@/lib/types";
+import type { ProjectDetail, ProjectListItem, SkillView, WorkspaceListItem, WorkspaceMemberView, SprintView } from "@/lib/types";
 
 /** Khoá query tập trung — invalidation theo tiền tố. */
 export const qk = {
@@ -11,7 +11,12 @@ export const qk = {
   members: (wsId: string) => ["workspaces", wsId, "members"] as const,
   project: (id: string) => ["projects", id] as const,
   sprints: (id: string) => ["projects", id, "sprints"] as const,
+  skills: (wsId: string) => ["workspaces", wsId, "skills"] as const,
 };
+
+export function useSkills(wsId: string | undefined) {
+  return useQuery({ queryKey: qk.skills(wsId ?? ""), queryFn: () => api.get<SkillView[]>(`/workspaces/${wsId}/skills`), enabled: !!wsId, staleTime: 5 * 60_000 });
+}
 
 export function useWorkspaces() {
   return useQuery({ queryKey: qk.workspaces, queryFn: () => api.get<WorkspaceListItem[]>("/workspaces") });
