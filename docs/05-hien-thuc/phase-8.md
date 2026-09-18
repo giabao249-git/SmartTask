@@ -55,6 +55,15 @@ Realtime: `ai:proposal:updated {sessionId, projectId, proposal}` và `ai:session
 - `npm run api:lint && npm run api:test && npm run api:test:e2e` xanh.
 - `node scripts/ai-smoke.mjs --chat` chạy 3 lượt chat với provider thật (hoặc fake) và in bản nháp.
 
+## Sửa khi tích hợp web (18/09/2026)
+
+Không đổi logic API. Hai chỉnh nhỏ phục vụ chạy web thật:
+
+- `prisma/seed.ts` mở rộng và idempotent: 3 người dùng (lan/minh/huy@smarttask.local, `Demo@1234`), workspace **SmartTask Demo** (Lan OWNER, Minh/Huy MEMBER có phòng ban/chức danh/quản lý), 30 kỹ năng mặc định + alias ("chị Lan", "Minh BE", "Huy FE"), kỹ năng thành viên, dự án **ST – SmartTask v1** (cột mặc định, 3 nhãn, `taskCounter = 8`), Sprint 1 ACTIVE (−7…+4 ngày) và Sprint 2 PLANNED, 8 task có ngày/giờ/phụ thuộc để các màn Kanban, Gantt, tải, dashboard có dữ liệu ngay. Chạy lại không tạo trùng.
+- `.env` dev: `AI_PROVIDER=fake` (khoá Gemini vẫn giữ; bật `gemini` khi cần thử thật — hỏi trước).
+
+Bảng màn ↔ endpoint và các mục "chờ backend": `docs/05-hien-thuc/web-tich-hop.md`.
+
 ## Chưa làm / phase sau
 
 - Đổi cột/trạng thái task qua chat (`patch.status`) — cảnh báo "chưa hỗ trợ" (cần `move` với vị trí).
