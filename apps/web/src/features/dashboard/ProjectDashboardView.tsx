@@ -81,7 +81,7 @@ export function ProjectDashboardView() {
       >
         <div className="flex items-center gap-2">
           <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
-            <Link href="/projects/ST/rebalance">
+            <Link href="/projects/ST/assistant?initialPrompt=G%E1%BB%A1+b%E1%BB%9Bt+cho+Huy">
               <Scale className="h-3.5 w-3.5 text-warning" />
               <span>Đề xuất cân bằng tải</span>
             </Link>
@@ -333,7 +333,9 @@ export function ProjectDashboardView() {
                 Cảnh báo rủi ro & Đề xuất hành động
               </h3>
               <Button asChild variant="link" size="sm" className="text-xs text-primary">
-                <Link href="/projects/ST/rebalance">Xem chi tiết phương án cân bằng →</Link>
+                <Link href="/projects/ST/assistant?initialPrompt=G%E1%BB%A1+b%E1%BB%9Bt+cho+Huy">
+                  Xem chi tiết phương án cân bằng (AI) →
+                </Link>
               </Button>
             </div>
 

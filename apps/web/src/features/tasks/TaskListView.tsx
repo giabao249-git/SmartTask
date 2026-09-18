@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
   TableBody,
@@ -254,7 +255,8 @@ export function TaskListView() {
 
           {/* Task Data Table */}
           <div className="rounded-xl border border-border/80 overflow-hidden bg-card shadow-xs">
-            <Table>
+            <ScrollArea className="w-full">
+              <Table className="min-w-[960px]">
               <TableHeader className="bg-muted/40 text-xs">
                 <TableRow>
                   <TableHead className="w-10 text-center">
@@ -379,8 +381,9 @@ export function TaskListView() {
                 ))}
               </TableBody>
             </Table>
+          </ScrollArea>
 
-            {/* Pagination Footer */}
+          {/* Pagination Footer */}
             <div className="p-3 border-t border-border/40 flex items-center justify-between text-xs text-muted-foreground bg-muted/10">
               <span>Hiển thị 1–{filteredTasks.length} trong tổng số {filteredTasks.length} việc</span>
               <div className="flex items-center gap-2">

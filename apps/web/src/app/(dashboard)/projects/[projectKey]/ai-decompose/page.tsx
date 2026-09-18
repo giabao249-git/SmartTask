@@ -1,5 +1,10 @@
-import { AIDecomposeView } from "@/features/ai-decompose/AIDecomposeView";
+import { redirect } from "next/navigation";
 
-export default function AIDecomposePage() {
-  return <AIDecomposeView />;
+export default async function AIDecomposePage({
+  params,
+}: {
+  params: Promise<{ projectKey: string }>;
+}) {
+  const { projectKey } = await params;
+  redirect(`/projects/${projectKey}/assistant`);
 }

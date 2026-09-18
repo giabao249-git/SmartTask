@@ -22,7 +22,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Plus, MoreHorizontal, AlertTriangle, Users, Sparkles, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
@@ -304,7 +304,8 @@ export function KanbanBoard() {
           onDragEnd={handleDragEnd}
         >
           {/* Kanban Columns Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+          <ScrollArea className="w-full pb-4">
+            <div className="grid grid-cols-4 gap-4 items-start min-w-[1080px]">
             {COLUMNS.map((col) => {
               const colTasks = getColumnTasks(col.id);
               const isOverWip = col.wipLimit !== undefined && colTasks.length > col.wipLimit;
@@ -419,6 +420,8 @@ export function KanbanBoard() {
               );
             })}
           </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
 
           {/* Drag Overlay (Ghost Card while dragging) */}
           <DragOverlay>

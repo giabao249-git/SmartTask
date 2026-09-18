@@ -664,3 +664,6 @@ export const INITIAL_TASKS: TaskItem[] = [
     sprint: "Sprint 3 · 23/10–29/10",
   },
 ];
+
+export const TASKS = INITIAL_TASKS;
+
