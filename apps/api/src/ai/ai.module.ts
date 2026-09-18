@@ -6,6 +6,10 @@ import { AiAdminController } from './ai-admin.controller';
 import { AiConfigService } from './ai-config/ai-config.service';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
+import { ChatController } from './chat/chat.controller';
+import { ChatService } from './chat/chat.service';
+import { IdentityAdminController } from './chat/identity-admin.controller';
+import { IdentityService } from './chat/identity.service';
 import { ContextBuilderService } from './context/context-builder.service';
 import { ExecutorService } from './executor/executor.service';
 import { ProposalsService } from './proposals/proposals.service';
@@ -20,7 +24,12 @@ import { ActionValidatorService } from './validator/action-validator.service';
  */
 @Module({
   imports: [WorkloadModule, ForecastModule, TasksModule],
-  controllers: [AiController, AiAdminController],
+  controllers: [
+    AiController,
+    AiAdminController,
+    ChatController,
+    IdentityAdminController,
+  ],
   providers: [
     AiConfigService,
     GeminiPromptCacheService,
@@ -31,6 +40,8 @@ import { ActionValidatorService } from './validator/action-validator.service';
     ExecutorService,
     QuotaService,
     AiService,
+    ChatService,
+    IdentityService,
   ],
   exports: [AiConfigService, AiProviderService],
 })

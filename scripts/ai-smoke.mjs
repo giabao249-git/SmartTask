@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * Thử AI thật một vòng (docs 05-hien-thuc/phase-7.md): dựng workspace/dự án/sprint/kỹ năng tạm, gọi
+ * Thử AI thật một vòng (docs 05-hien-thuc/phase-7.md, phase-8.md): dựng workspace/dự án/sprint/kỹ năng tạm, gọi
  * POST /projects/:id/ai/decompose với Gemini (hoặc provider đang cấu hình), in đề xuất + validation + token/chi phí,
- * rồi POST /sprints/:id/forecast/explain. Không áp dụng đề xuất trừ khi có --apply.
+ * rồi POST /sprints/:id/forecast/explain; với --chat chạy thêm 3 lượt chat theo phiên (phân rã → "cái thứ hai đổi
+ * 6 giờ, giao Lan" → "bỏ cái cuối") và in bản nháp sau mỗi lượt. Không áp dụng đề xuất trừ khi có --apply.
  *
- *   node scripts/ai-smoke.mjs --api http://localhost:3000 [--apply] [--detail normal]
+ *   node scripts/ai-smoke.mjs --api http://localhost:3000 [--apply] [--chat] [--detail normal]
  *        [--requirement "Xây dựng quên mật khẩu qua email…"]
  */
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > -1 ? process.argv[i + 1] : d; };
@@ -96,3 +97,24 @@ const quota = await json(`/ai/quota?workspaceId=${ws.id}`, {}, pm.token);
 console.log(`\nHạn mức: ${quota.used}/${quota.limit}, mở lại ${quota.resetsAt}`);
 const usage = await json(`/workspaces/${ws.id}/ai-usage?groupBy=purpose`, {}, pm.token);
 console.log(`Sổ token: ${JSON.stringify(usage.totals)}`);
+
+// ── Chat theo phiên (Phase 8) ──
+if (has('chat')) {
+  let sessionId;
+  const turns = [
+    `Phân rã yêu cầu sau thành công việc cho sprint: ${REQUIREMENT}`,
+    'Cái thứ hai đổi thành 6 giờ, giao chị Lan',
+    'Bỏ cái cuối cùng đi',
+  ];
+  for (const text of turns) {
+    console.log(`\n▶ POST /ai/chat: "${text.slice(0, 70)}…"`);
+    t0 = Date.now();
+    const r = await post('/ai/chat', { projectId: project.id, sessionId, text, sprintId: sprint.id }, pm.token);
+    sessionId = r.sessionId;
+    console.log(`  ${Date.now() - t0} ms · ${r.action.type} · validation ${r.validation ? (r.validation.ok ? 'ok' : `lỗi ${r.validation.errors.map((e) => e.code).join(',')}`) : '—'} · usage ${JSON.stringify(r.usage)}`);
+    console.log(`  reply: ${r.action.reply}`);
+    for (const p of r.proposals)
+      console.log(`  [${p.kind} · ${p.status} · v${p.version}] ${p.items.map((i) => `${i.draftKey}${i.status === 'APPLIED' ? '✓' : i.status === 'DISCARDED' ? '✗' : ''} ${i.title} (${i.estimateHours ?? '?'}h${i.assignee ? ` → ${i.assignee}` : ''})`).join(' · ')}`);
+  }
+  console.log(`\nPhiên ${sessionId} — GET /ai/sessions/${sessionId} để xem lại.`);
+}

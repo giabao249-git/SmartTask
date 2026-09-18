@@ -18,6 +18,6 @@ process.env.NODE_ENV = 'test';
 process.env.JWT_ACCESS_SECRET ??= 'e2e-access-secret-0123456789abcdef';
 process.env.JWT_REFRESH_SECRET ??= 'e2e-refresh-secret-0123456789abcdef';
 // Phase 7: AI chạy bằng nhà cung cấp giả (không gọi mạng); APP_KEY để mã hoá khoá API trong test quản trị
-process.env.AI_PROVIDER = 'fake';
+process.env.AI_PROVIDER = 'mock'; // hàng đợi action cho e2e chat; rỗng → fake
 process.env.APP_KEY ??= 'e2e-app-key-phase-7';
 process.env.SYSTEM_ADMIN_EMAILS ??= '';

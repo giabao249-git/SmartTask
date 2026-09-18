@@ -6,6 +6,7 @@ import type { ResolvedAiConfig } from '../ai-config/ai-config.service';
 import { hashPrompt } from '../ai-config/crypto.util';
 import { tachPromptTinhDong } from '../prompt/prompt-assembler';
 import { fakeGenerate } from './fake-provider';
+import { mockGenerate } from './mock-provider';
 import {
   geminiBody,
   geminiGenerateUrl,
@@ -178,7 +179,10 @@ export class AiProviderService {
     const { config } = input;
     if (config.provider === 'FAKE')
       return {
-        text: fakeGenerate(input.purpose, input.userText),
+        text:
+          config.model === 'mock'
+            ? await mockGenerate(input.purpose, input.system, input.userText)
+            : fakeGenerate(input.purpose, input.userText),
         usage: {
           inputTokens: Math.ceil(input.userText.length / 4),
           cachedInputTokens: 0,

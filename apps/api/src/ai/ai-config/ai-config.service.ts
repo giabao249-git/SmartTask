@@ -209,13 +209,13 @@ export class AiConfigService implements OnModuleInit {
 
   private async fromEnv(purpose: AiPurpose): Promise<ResolvedAiConfig> {
     const providerEnv = this.config.get('AI_PROVIDER', { infer: true });
-    if (providerEnv === 'fake')
+    if (providerEnv === 'fake' || providerEnv === 'mock')
       return {
         configId: null,
         workspaceId: null,
         purpose,
         provider: 'FAKE',
-        model: 'fake',
+        model: providerEnv,
         apiKey: null,
         baseUrl: null,
         timeoutMs: 5000,

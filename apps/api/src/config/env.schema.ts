@@ -51,8 +51,8 @@ export const envSchema = z.object({
   API_PUBLIC_URL: z.string().url().optional(),
   UPLOAD_DIR: z.string().default('uploads'),
   // AI (dùng từ Phase 7)
-  /** Cấu hình dự phòng khi workspace chưa có ai_configs trong DB; `fake` chỉ cho dev/test (trả JSON mẫu, không gọi mạng) */
-  AI_PROVIDER: z.enum(['gemini', 'ollama', 'fake']).default('gemini'),
+  /** Cấu hình dự phòng khi workspace chưa có ai_configs trong DB; `fake` (JSON mẫu) / `mock` (hàng đợi action cho e2e) không gọi mạng */
+  AI_PROVIDER: z.enum(['gemini', 'ollama', 'fake', 'mock']).default('gemini'),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),

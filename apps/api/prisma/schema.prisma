@@ -116,6 +116,9 @@ model User {
   refreshTokens       RefreshToken[]
   ownedWorkspaces     Workspace[]          @relation("WorkspaceOwner")
   workspaceMembers    WorkspaceMember[]
+  managedMembers      WorkspaceMember[]    @relation("MemberManager")
+  memberAliases       MemberAlias[]        @relation("AliasOwner")
+  aliasesCreated      MemberAlias[]        @relation("AliasCreator")
   invitationsSent     Invitation[]         @relation("InvitationInviter")
   userSkills          UserSkill[]          @relation("UserSkillOwner")
   verifiedSkills      UserSkill[]          @relation("UserSkillVerifier")
@@ -179,6 +182,7 @@ model Workspace {
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
   owner         User                @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  memberAliases MemberAlias[]
   members       WorkspaceMember[]
   invitations   Invitation[]
   skills        Skill[]
@@ -196,17 +200,40 @@ model Workspace {
 }
 
 model WorkspaceMember {
-  workspaceId String        @map("workspace_id") @db.Uuid
-  userId      String        @map("user_id") @db.Uuid
-  role        WorkspaceRole @default(MEMBER)
-  joinedAt    DateTime      @default(now()) @map("joined_at")
+  workspaceId   String        @map("workspace_id") @db.Uuid
+  userId        String        @map("user_id") @db.Uuid
+  role          WorkspaceRole @default(MEMBER)
+  /// Dữ liệu DANH TÍNH cho LLM nhận diện người (docs 12 §4) — admin quản, không mang chính sách.
+  department    String?       @db.VarChar(80)
+  title         String?       @db.VarChar(80)
+  managerUserId String?       @map("manager_user_id") @db.Uuid
+  joinedAt      DateTime      @default(now()) @map("joined_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  manager   User?     @relation("MemberManager", fields: [managerUserId], references: [id], onDelete: SetNull)
 
   @@id([workspaceId, userId])
   @@index([userId])
   @@map("workspace_members")
+}
+
+/// Bí danh do admin đặt ("chị Lan", "Minh BE") — chỉ để LLM nhận diện, giống Table_Calendar UserAlias.
+model MemberAlias {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  alias       String   @db.Citext
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation("AliasOwner", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("AliasCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, alias])
+  @@index([workspaceId, userId])
+  @@map("member_aliases")
 }
 
 model Invitation {
@@ -722,6 +749,7 @@ enum AiProposalKind {
   RESCHEDULE
   REBALANCE
   TASK_DRAFT
+  TASK_UPDATE
 }
 
 enum AiProposalStatus {
@@ -882,20 +910,26 @@ model AiHabit {
 }
 
 model ChatSession {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  workspaceId String   @map("workspace_id") @db.Uuid
-  projectId   String?  @map("project_id") @db.Uuid
-  title       String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  workspaceId  String    @map("workspace_id") @db.Uuid
+  projectId    String?   @map("project_id") @db.Uuid
+  title        String?
+  /// Cấp draftKey duy nhất trong phiên (d1, d2, … không tái dùng) — docs 12 §2
+  nextDraftSeq Int       @default(1) @map("next_draft_seq")
+  lastTurnAt   DateTime? @map("last_turn_at")
+  archivedAt   DateTime? @map("archived_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
   messages  ChatMessage[]
+  proposals AiProposal[]
 
   @@index([userId, workspaceId, updatedAt])
+  @@index([userId, projectId, archivedAt, lastTurnAt])
   @@map("chat_sessions")
 }
 
@@ -926,11 +960,19 @@ model AiProposal {
   projectId        String           @map("project_id") @db.Uuid
   userId           String           @map("user_id") @db.Uuid
   messageId        String?          @map("message_id") @db.Uuid
+  /// NULL = tạo từ form (decompose); có = bản nháp trong phiên chat (docs 12 §2)
+  sessionId        String?          @map("session_id") @db.Uuid
   kind             AiProposalKind
   payload          Json
   codeMap          Json?            @map("code_map")
   validationResult Json?            @map("validation_result")
   status           AiProposalStatus @default(DRAFT)
+  /// Khoá lạc quan khi duyệt/sửa
+  version          Int              @default(1)
+  /// { "d1": "DRAFT" | "APPLIED" | "DISCARDED", … } — trạng thái proposal suy ra từ đây
+  itemStatus       Json?            @map("item_status")
+  /// { "d1": "<task uuid>", … } — để thẻ xanh lá link sang ST-xx
+  appliedMap       Json?            @map("applied_map")
   appliedById      String?          @map("applied_by_id") @db.Uuid
   appliedAt        DateTime?        @map("applied_at")
   expiresAt        DateTime         @map("expires_at")
@@ -940,12 +982,14 @@ model AiProposal {
   user      User         @relation("ProposalOwner", fields: [userId], references: [id], onDelete: Cascade)
   appliedBy User?        @relation("ProposalApplier", fields: [appliedById], references: [id], onDelete: SetNull)
   message   ChatMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  session   ChatSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   feedback  AiFeedback[]
   tasks     Task[]
   tokenLogs AiTokenLog[]
 
   @@index([projectId, status, createdAt])
   @@index([status, expiresAt])
+  @@index([sessionId, status, createdAt])
   @@map("ai_proposals")
 }
 

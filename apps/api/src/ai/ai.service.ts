@@ -1,10 +1,10 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { AiLogStatus, AiProposalKind, AiPurpose } from '@prisma/client';
-import type {
-  DecomposeProposal,
-  StructuredAction,
-  ValidationIssue,
-  ValidationResult,
+import {
+  draftPatchSchema,
+  type StructuredAction,
+  type ValidationIssue,
+  type ValidationResult,
 } from '@smarttask/shared';
 import { ProjectAccessService } from '../common/access/project-access.service';
 import { AppError } from '../common/app-error';
@@ -21,13 +21,23 @@ import {
   type BuiltContext,
 } from './context/context-builder.service';
 import { CodeBook } from './context/short-codes';
-import type { ApplyProposalDto, DecomposeDto } from './dto/ai.dto';
+import type {
+  ApplyProposalDto,
+  DecomposeDto,
+  PatchItemDto,
+} from './dto/ai.dto';
+import {
+  filterItems,
+  type ItemStatusMap,
+  type ProposalAction,
+} from './proposals/draft-items';
 import { applyEdits } from './executor/apply-edits';
 import { ExecutorService } from './executor/executor.service';
 import { parseStructuredAction } from './parser/response-parser';
 import {
   ProposalsService,
   type ProposalPayload,
+  type ProposalRow,
 } from './proposals/proposals.service';
 import {
   AiProviderService,
@@ -180,6 +190,7 @@ export class AiService {
               requirementHash,
             },
             action: turn.action,
+            proposed: turn.action,
             resolution,
           },
           codeMap: turn.ctx.codes.toJSON(),
@@ -201,42 +212,80 @@ export class AiService {
     return this.proposals.view(await this.proposals.get(userId, id));
   }
 
-  /** Áp dụng: gộp sửa của người → validate lại trên dữ liệu sống → Executor. Idempotent theo header Idempotency-Key. */
+  /**
+   * Duyệt toàn bộ hoặc một phần (`draftKeys`) — docs 12 §5: kiểm `version` (409 PROPOSAL_VERSION_CONFLICT), gộp sửa
+   * tay Phase 7 (`edits`), validate lại TẬP CON được duyệt trên dữ liệu sống → Executor → item APPLIED + applied_map.
+   * Idempotent theo header Idempotency-Key khi đã APPLIED toàn bộ.
+   */
   async apply(
     userId: string,
     id: string,
     dto: ApplyProposalDto,
     idempotencyKey?: string,
   ) {
-    const row = await this.proposals.get(userId, id);
-    const access = await this.access.assertManage(userId, row.projectId);
+    let row = await this.proposals.get(userId, id);
+    const access = await this.assertCanApply(userId, row);
     const payload = row.payload as unknown as ProposalPayload;
     if (row.status === 'APPLIED' && idempotencyKey && payload.applied)
       return {
         proposalId: row.id,
+        proposal: this.proposals.view(row),
         createdTaskIds: payload.applied.taskIds,
         tasks: payload.applied.tasks,
+        createdTasks: payload.applied.tasks,
         idempotent: true,
       };
     this.proposals.assertDraft(row);
-    if (row.kind !== AiProposalKind.DECOMPOSE)
+    this.proposals.assertVersion(row, dto.version);
+
+    // Sửa tay kiểu Phase 7 (thẻ xem trước form): remove → bỏ item; còn lại vá vào action
+    let action = payload.action as ProposalAction;
+    if (dto.edits?.tasks?.length) {
+      const removed = dto.edits.tasks
+        .filter((e) => e.remove)
+        .map((e) => e.draftKey);
+      if (removed.length) row = await this.proposals.discardItems(row, removed);
+      const kept = dto.edits.tasks.filter((e) => !e.remove);
+      if (kept.length) {
+        if (action.type !== 'DECOMPOSE_PROPOSAL')
+          throw AppError.unprocessable('VALIDATION_FAILED', {
+            fields: [
+              'edits.tasks chỉ dùng cho DECOMPOSE — panel chat dùng PATCH /ai/proposals/:id/items/:draftKey',
+            ],
+          });
+        try {
+          action = applyEdits(action, kept);
+        } catch (e) {
+          throw AppError.unprocessable('VALIDATION_FAILED', {
+            fields: [String((e as Error).message).slice(0, 500)],
+          });
+        }
+      }
+    }
+
+    const items = (row.itemStatus ?? {}) as ItemStatusMap;
+    const requested = dto.draftKeys?.length
+      ? dto.draftKeys
+      : Object.keys(items).filter((k) => items[k] === 'DRAFT');
+    for (const k of requested) {
+      if (!(k in items))
+        throw AppError.unprocessable('UNKNOWN_DRAFT_KEY', { draftKey: k });
+      if (items[k] === 'APPLIED')
+        throw AppError.conflict('DRAFT_ALREADY_APPLIED', { draftKey: k });
+      if (items[k] === 'DISCARDED')
+        throw AppError.unprocessable('UNKNOWN_DRAFT_KEY', {
+          draftKey: k,
+          reason: 'đã bỏ',
+        });
+    }
+    if (!requested.length)
       throw AppError.unprocessable('VALIDATION_FAILED', {
-        fields: [`Loại đề xuất ${row.kind} chưa áp dụng được ở Phase 7`],
+        fields: ['Không còn mục nào để duyệt'],
       });
 
+    const subset = filterItems(action, requested);
     const codes = CodeBook.from(row.codeMap as never);
-    let action: DecomposeProposal;
-    try {
-      action = applyEdits(
-        payload.action as DecomposeProposal,
-        dto.edits?.tasks,
-      );
-    } catch (e) {
-      throw AppError.unprocessable('VALIDATION_FAILED', {
-        fields: [String((e as Error).message).slice(0, 500)],
-      });
-    }
-    const validation = await this.validator.validateDecompose(action, {
+    const validation = await this.validator.validateAction(subset, {
       codes,
       projectId: row.projectId,
       workspaceId: access.workspaceId,
@@ -245,24 +294,98 @@ export class AiService {
     const { resolution, ...validationOnly } = validation;
     await this.prisma.aiProposal.update({
       where: { id },
-      data: { validationResult: validationOnly as never },
+      data: {
+        payload: { ...payload, action } as never,
+        validationResult: validationOnly as never,
+      },
     });
     if (!validation.ok)
       throw AppError.unprocessable('PROPOSAL_VALIDATION_FAILED', {
         errors: validation.errors,
         warnings: validation.warnings,
       });
-    return this.executor.applyDecompose(
+    const result = await this.executor.execute(
       row,
       access.workspaceId,
-      action,
+      subset,
       resolution,
       userId,
+      (row.appliedMap ?? {}) as Record<string, string>,
+    );
+    const updated = await this.proposals.markApplied(
+      { ...row, payload: { ...payload, action } as never },
+      userId,
+      result.applied,
+      action,
+    );
+    return {
+      proposalId: row.id,
+      proposal: this.proposals.view(updated),
+      createdTaskIds: result.applied.map((a) => a.taskId),
+      tasks: result.applied,
+      createdTasks: result.applied,
+      idempotent: false,
+    };
+  }
+
+  async reject(
+    userId: string,
+    id: string,
+    reason?: string,
+    draftKeys?: string[],
+  ) {
+    const row = await this.proposals.get(userId, id);
+    await this.assertCanApply(userId, row);
+    return this.proposals.view(
+      await this.proposals.reject(userId, id, reason, draftKeys),
     );
   }
 
-  async reject(userId: string, id: string, reason?: string): Promise<void> {
-    await this.proposals.reject(userId, id, reason);
+  /** Người sửa tay một item trên panel (docs 12 §5) — không qua LLM; validate lại cả proposal; version +1. */
+  async patchItem(
+    userId: string,
+    id: string,
+    draftKey: string,
+    dto: PatchItemDto,
+  ) {
+    const row = await this.proposals.get(userId, id);
+    const access = await this.assertCanApply(userId, row);
+    this.proposals.assertDraft(row);
+    this.proposals.assertVersion(row, dto.version);
+    const parsed = draftPatchSchema.safeParse(dto.patch);
+    if (!parsed.success)
+      throw AppError.unprocessable('VALIDATION_FAILED', {
+        fields: parsed.error.issues.map(
+          (i) => `patch.${i.path.join('.')}: ${i.message}`,
+        ),
+      });
+    const action = this.proposals.patched(row, draftKey, parsed.data);
+    const payload = row.payload as unknown as ProposalPayload;
+    const validation = await this.validator.validateAction(action, {
+      codes: CodeBook.from(row.codeMap as never),
+      projectId: row.projectId,
+      workspaceId: access.workspaceId,
+      sprintId: payload.request.sprintId,
+    });
+    const { resolution, ...validationOnly } = validation;
+    const updated = await this.proposals.savePatched(
+      row,
+      action,
+      validationOnly,
+      resolution,
+      { editedKey: draftKey },
+    );
+    return this.proposals.view(updated);
+  }
+
+  /** PM/quản trị, hoặc chính người tạo đề xuất nếu người đó được sửa task trong dự án (thành viên). */
+  private async assertCanApply(userId: string, row: ProposalRow) {
+    const access = await this.access.resolve(userId, row.projectId);
+    if (!access.canManage && !(row.userId === userId && access.canEdit))
+      throw AppError.forbidden({
+        required: 'PM/quản trị hoặc người tạo đề xuất là thành viên dự án',
+      });
+    return access;
   }
 
   // ── UC-31: giải thích rủi ro ───────────────────────────────
@@ -353,7 +476,7 @@ export class AiService {
 
   // ── Một lượt gọi: build → call → parse → validate → gọi lại 1 lần ──
 
-  private async runTurn(
+  async runTurn(
     config: ResolvedAiConfig,
     buildInput: BuildInput,
     endpoint: string,

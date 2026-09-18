@@ -8,7 +8,12 @@ import {
   type SprintEventPayload,
   type TaskEventPayload,
 } from '../common/events/task.events';
-import { AI_EVENTS, type AiProposalAppliedPayload } from '../ai/ai.events';
+import {
+  AI_EVENTS,
+  type AiProposalAppliedPayload,
+  type AiProposalUpdatedPayload,
+  type AiSessionUpdatedPayload,
+} from '../ai/ai.events';
 import { FORECAST_EVENTS } from '../forecast/forecast.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WORKLOAD_EVENTS } from '../workload/workload.service';
@@ -160,6 +165,27 @@ export class RealtimeListener {
       kind: p.kind,
       taskIds: p.taskIds,
       actorId: p.actorId,
+      at: p.at,
+    });
+  }
+
+  /** Bản nháp trong phiên đổi (vá/bỏ/duyệt) → tab thứ hai của cùng người thấy thẻ đổi màu (docs 12 §5). */
+  @OnEvent(AI_EVENTS.proposalUpdated)
+  onProposalUpdated(p: AiProposalUpdatedPayload): void {
+    this.gateway.toUser(p.userId, 'ai:proposal:updated', {
+      sessionId: p.sessionId,
+      projectId: p.projectId,
+      proposal: p.proposal,
+      at: p.at,
+    });
+  }
+
+  @OnEvent(AI_EVENTS.sessionUpdated)
+  onSessionUpdated(p: AiSessionUpdatedPayload): void {
+    this.gateway.toUser(p.userId, 'ai:session:updated', {
+      sessionId: p.sessionId,
+      projectId: p.projectId,
+      change: p.change,
       at: p.at,
     });
   }
