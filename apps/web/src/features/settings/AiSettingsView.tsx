@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { BarChart3, Cpu, KeyRound, Sparkles, UserCog } from "lucide-react";
+import { BarChart3, Cpu, KeyRound, ShieldAlert, Sparkles, UserCog } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AiConfigsTab } from "./AiConfigsTab";
 import { AiModelsTab } from "./AiModelsTab";
 import { AiUsageTab } from "./AiUsageTab";
@@ -39,6 +40,16 @@ export function AiSettingsView({ workspaceId, canEdit }: AiSettingsViewProps) {
           </div>
         </div>
       </div>
+
+      {!canEdit && (
+        <Alert className="border-amber-500/30 bg-amber-500/5 text-amber-900 dark:text-amber-200 py-3">
+          <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertTitle className="text-xs font-semibold">Chế độ xem (Chỉ đọc)</AlertTitle>
+          <AlertDescription className="text-xs">
+            Bạn đang đăng nhập với vai trò Thành viên. Bạn có thể xem danh mục model, gọi thử kết nối và kiểm toán token. Để thêm mới, chỉnh sửa khóa API hoặc chính sách prompt, vui lòng liên hệ Quản trị viên (OWNER / ADMIN) của workspace.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Tabs value={subTab} onValueChange={setSubTab} className="w-full space-y-4">
         <TabsList className="grid w-full sm:w-[680px] grid-cols-4 bg-muted/60 p-1">

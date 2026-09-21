@@ -421,10 +421,23 @@ export function AssistantView() {
           </p>
         </div>
 
-        {/* Nút nổi hoặc mở bản nháp trên mobile */}
-        <Button variant="outline" size="sm" className="lg:hidden h-8 text-xs gap-1.5 border-info/40 text-info" onClick={() => setRailSheet(true)}>
-          <Layers className="h-3.5 w-3.5" /> Bản nháp ({openDrafts})
-        </Button>
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 border-info/30 text-info hover:bg-info/10"
+            onClick={() => router.push(`/settings?tab=ai&ws=${project.workspaceId}`)}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Cấu hình AI</span>
+          </Button>
+
+          {/* Nút nổi hoặc mở bản nháp trên mobile */}
+          <Button variant="outline" size="sm" className="lg:hidden h-8 text-xs gap-1.5 border-info/40 text-info" onClick={() => setRailSheet(true)}>
+            <Layers className="h-3.5 w-3.5" /> Bản nháp ({openDrafts})
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 flex gap-3 overflow-hidden w-full max-w-full">

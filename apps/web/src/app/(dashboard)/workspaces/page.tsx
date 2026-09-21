@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, UserPlus, Calendar, ArrowRight, Building2, FolderKanban, Copy } from "lucide-react";
+import { Plus, UserPlus, Calendar, ArrowRight, Building2, FolderKanban, Copy, Sparkles, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -91,6 +91,17 @@ export default function WorkspacesPage() {
         breadcrumbs={[{ label: "Workspace" }, { label: "Danh sách dự án" }]}
       >
         <div className="flex items-center gap-2">
+          {wsId && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs text-info hover:text-info border-info/30 hover:bg-info/10"
+              onClick={() => router.push(`/settings?tab=ai&ws=${wsId}`)}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Cấu hình AI</span>
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setNewWsOpen(true)}>
             <Building2 className="h-3.5 w-3.5" />
             <span>Workspace mới</span>
@@ -139,13 +150,22 @@ export default function WorkspacesPage() {
               </TabsList>
             </Tabs>
             {ws && (
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                 <span>{ws._count.members} thành viên · {ws._count.projects} dự án</span>
                 <div className="flex -space-x-1.5">
                   {(membersQuery.data ?? []).slice(0, 6).map((m) => (
                     <UserAvatar key={m.id} name={m.fullName} avatar={m.avatarUrl ?? undefined} role={m.role} size="sm" className="ring-2 ring-background" />
                   ))}
                 </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                  onClick={() => router.push(`/settings?tab=settings&ws=${ws.id}`)}
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                  <span>Cài đặt</span>
+                </Button>
               </div>
             )}
           </CardContent>

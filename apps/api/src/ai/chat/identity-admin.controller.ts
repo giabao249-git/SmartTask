@@ -36,7 +36,11 @@ export class IdentityAdminController {
   ) {}
 
   @Get('ai/prompt')
-  @WorkspaceRoles(WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
+  @WorkspaceRoles(
+    WorkspaceRole.OWNER,
+    WorkspaceRole.ADMIN,
+    WorkspaceRole.MEMBER,
+  )
   @ApiOperation({
     summary:
       'WORKSPACE prompt đang hiệu lực (chính sách chọn người, giọng điệu…)',

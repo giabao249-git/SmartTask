@@ -4,7 +4,6 @@ import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Bell,
-  Lock,
   ShieldAlert,
   Sliders,
   Sparkles,
@@ -13,7 +12,6 @@ import {
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -74,9 +72,17 @@ export function SettingsNotificationsView() {
     }
   };
 
-  const effective = wsId ?? lastProject.data?.workspaceId ?? auth.workspaces[0]?.id ?? null;
+  const isSuperAdmin = Boolean(
+    auth.user?.isSuperAdmin || (auth.user as unknown as { platformRole?: string })?.platformRole === "ROOT_ADMIN"
+  );
+  const effective =
+    wsId && auth.workspaces.some((w) => w.id === wsId)
+      ? wsId
+      : lastProject.data?.workspaceId && auth.workspaces.some((w) => w.id === lastProject.data?.workspaceId)
+      ? lastProject.data?.workspaceId
+      : auth.workspaces[0]?.id ?? null;
   const ws = auth.workspaces.find((w) => w.id === effective);
-  const isAdmin = ws?.role === "OWNER" || ws?.role === "ADMIN";
+  const isAdmin = isSuperAdmin || ws?.role === "OWNER" || ws?.role === "ADMIN";
   const canEdit = isAdmin;
 
   // Change tab and optionally update URL
@@ -241,7 +247,9 @@ export function SettingsNotificationsView() {
                   Admin
                 </Badge>
               ) : (
-                <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground border-border/80">
+                  Chỉ xem
+                </Badge>
               )}
             </button>
           </div>
@@ -282,29 +290,7 @@ export function SettingsNotificationsView() {
 
           {activeTab === "ai" && (
             effective && ws ? (
-              isAdmin ? (
-                <AiSettingsView workspaceId={effective} canEdit={canEdit} />
-              ) : (
-                <div className="p-8 border border-border/70 rounded-xl bg-card text-center space-y-4 max-w-md mx-auto my-6 shadow-xs">
-                  <div className="h-12 w-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
-                    <Lock className="h-6 w-6" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <h3 className="text-base font-semibold text-foreground">Giới hạn quyền truy cập</h3>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      Bạn đang đăng nhập với vai trò <strong>{ws.role}</strong>. Chỉ Quản trị viên (OWNER / ADMIN) mới có quyền truy cập và chỉnh sửa cấu hình hệ thống AI, khóa API và Model Catalog.
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleTabChange("profile")}
-                    className="text-xs"
-                  >
-                    Quay lại Hồ sơ cá nhân
-                  </Button>
-                </div>
-              )
+              <AiSettingsView workspaceId={effective} canEdit={canEdit} />
             ) : (
               <NoWorkspace />
             )

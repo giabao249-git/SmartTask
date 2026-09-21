@@ -75,7 +75,11 @@ export class AiAdminController {
   // ── Cấu hình theo workspace ────────────────────────────────
 
   @Get('workspaces/:wsId/ai-configs')
-  @WorkspaceRoles(WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
+  @WorkspaceRoles(
+    WorkspaceRole.OWNER,
+    WorkspaceRole.ADMIN,
+    WorkspaceRole.MEMBER,
+  )
   @ApiOperation({ summary: 'Cấu hình AI của workspace (khoá đã che)' })
   listConfigs(@Param('wsId', ParseUUIDPipe) wsId: string) {
     return this.aiConfig.listConfigs(wsId);
@@ -165,7 +169,11 @@ export class AiAdminController {
   // ── Prompt có phiên bản ────────────────────────────────────
 
   @Get('workspaces/:wsId/ai-prompts/:type')
-  @WorkspaceRoles(WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
+  @WorkspaceRoles(
+    WorkspaceRole.OWNER,
+    WorkspaceRole.ADMIN,
+    WorkspaceRole.MEMBER,
+  )
   @ApiOperation({
     summary: 'Prompt đang hiệu lực (MASTER chỉ đọc, WORKSPACE sửa được)',
   })
@@ -199,7 +207,11 @@ export class AiAdminController {
   // ── Sổ token ───────────────────────────────────────────────
 
   @Get('workspaces/:wsId/ai-usage')
-  @WorkspaceRoles(WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
+  @WorkspaceRoles(
+    WorkspaceRole.OWNER,
+    WorkspaceRole.ADMIN,
+    WorkspaceRole.MEMBER,
+  )
   @ApiOperation({
     summary: 'Chi phí/token theo ngày | mục đích | người (UC-32, 40)',
   })
