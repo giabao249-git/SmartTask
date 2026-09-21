@@ -234,8 +234,8 @@ graph TD
 
 | Vai trò | Phân quyền & Chức năng chính | Hạn chế |
 |:---|:---|:---|
-| **`PM` (Project Manager)** | • **Trưởng dự án / Quản lý Agile**.<br/>• Lập kế hoạch Sprint: Tạo Sprint mới, Bắt đầu Sprint (Start Sprint), Đóng/Hoàn thành Sprint (Complete Sprint).<br/>• **Trợ lý AI WBS**: Kích hoạt AI phân rã yêu cầu dự án thành các task con chi tiết kèm ước lượng số giờ và kỹ năng cần thiết.<br/>• Phân bổ công việc và cân bằng tải nhân sự theo năng lực.<br/>• Quản lý thành viên dự án và cấu hình cột Kanban (WIP limits). | • CSDL áp đặt ràng buộc độc bản: **Mỗi dự án chỉ có duy nhất 1 Project Manager (PM)** nhằm đảm bảo rõ ràng trách nhiệm quản lý. |
-| **`MEMBER`** | • **Thành viên thực thi dự án**.<br/>• Nhận task chưa phân công nhanh chóng bằng nút **`+ Nhận task`** ngay trên thẻ Kanban.<br/>• Sử dụng phím tắt **`Q`** để bật/tắt bộ lọc **"Việc của tôi"**.<br/>• Kéo thả thẻ task giữa các cột trạng thái (`Cần làm` ➔ `Đang làm` ➔ `Kiểm thử` ➔ `Hoàn thành`).<br/>• Khai báo log giờ làm việc (Time Entry), gán nhãn, cập nhật tiến độ %. | • Không được phép Bắt đầu/Đóng Sprint.<br/>• Không được cấu hình lại cấu trúc cột Kanban của dự án. |
+| **`PM` (Project Manager)** | • **Trưởng dự án / Quản lý Agile**.<br/>• Lập kế hoạch Sprint: Tạo Sprint mới, Bắt đầu Sprint (Start Sprint), Đóng/Hoàn thành Sprint (Complete Sprint).<br/>• **Tạo công việc thủ công** (nút `+ Tạo công việc`, phím `C`, hoặc `+ Thêm công việc` ở từng cột) & **Trợ lý AI WBS**: Phân rã yêu cầu dự án thành task con tự động kèm ước lượng.<br/>• Phân bổ công việc và cân bằng tải nhân sự theo năng lực.<br/>• Quản lý thành viên dự án và cấu hình cột Kanban (WIP limits). | • CSDL áp đặt ràng buộc độc bản: **Mỗi dự án chỉ có duy nhất 1 Project Manager (PM)** nhằm đảm bảo rõ ràng trách nhiệm quản lý. |
+| **`MEMBER`** | • **Thành viên thực thi dự án**.<br/>• **Tạo công việc thủ công linh hoạt**: Bấm nút **`+ Tạo công việc`**, phím tắt **`C`**, hoặc nút **`+ Thêm công việc`** dưới mỗi cột để thêm việc trực tiếp vào cột mong muốn.<br/>• Nhận task chưa phân công nhanh chóng bằng nút **`+ Nhận task`** ngay trên thẻ Kanban.<br/>• Sử dụng phím tắt **`Q`** để bật/tắt bộ lọc **"Việc của tôi"**.<br/>• Kéo thả thẻ task giữa các cột trạng thái (`Cần làm` ➔ `Đang làm` ➔ `Kiểm thử` ➔ `Hoàn thành`).<br/>• Khai báo log giờ làm việc (Time Entry), gán nhãn, cập nhật tiến độ %, mở Sheet chi tiết để bổ sung thông tin. | • Không được phép Bắt đầu/Đóng Sprint.<br/>• Không được cấu hình lại cấu trúc cột Kanban của dự án. |
 
 ---
 
@@ -341,7 +341,11 @@ Mở trình duyệt và truy cập: **`http://localhost:3001/login`**
 3. **Kéo thả Cập nhật Trạng thái Task:**
    - Kéo thẻ task từ cột `Cần làm` sang cột `Đang làm` hoặc `Hoàn thành`.
    - Tiến độ công việc và trạng thái được cập nhật theo thời gian thực.
-4. **Kiểm tra Cơ chế Khóa Giao diện Cài đặt (Locked / Read-only Barrier):**
+4. **Tạo Công việc Mới Thủ công (Manual Task Creation):**
+   - Bấm nút **`+ Tạo công việc`** ở góc trên phải (hoặc nhấn phím tắt **`C`** trên bàn phím, hoặc bấm **`+ Thêm công việc`** ở chân bất kỳ cột nào).
+   - Điền Tiêu đề, Mô tả, chọn Cột trạng thái, Độ ưu tiên, Giờ ước lượng, Hạn chót và Người thực hiện.
+   - Bấm **"Tạo công việc"**: Thẻ task lập tức xuất hiện đúng cột đã chọn mà không cần thông qua AI.
+5. **Kiểm tra Cơ chế Khóa Giao diện Cài đặt (Locked / Read-only Barrier):**
    - Điều hướng tới trang **Cài đặt Workspace** hoặc **Cài đặt AI**:
    - Giao diện hiển thị biểu tượng ổ khóa màu vàng kèm thông báo:  
      > *🔒 Chế độ Chỉ xem: Bạn đang đăng nhập với vai trò Thành viên (MEMBER). Chỉ Quản trị viên hoặc Chủ sở hữu Workspace mới có quyền chỉnh sửa cấu hình này.*

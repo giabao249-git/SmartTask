@@ -103,6 +103,16 @@ const SHORTCUT_SECTIONS: ShortcutSection[] = [
     icon: Kanban,
     items: [
       {
+        keys: ["C"],
+        description: "Mở nhanh hộp thoại Tạo công việc thủ công",
+        badge: "Tạo task",
+      },
+      {
+        keys: ["Q"],
+        description: "Bật / Tắt bộ lọc nhanh 'Việc của tôi'",
+        badge: "Bộ lọc",
+      },
+      {
         keys: ["Space", "Enter"],
         description: "Kích hoạt chọn thẻ công việc để di chuyển bằng bàn phím",
       },

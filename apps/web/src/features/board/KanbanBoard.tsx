@@ -20,6 +20,7 @@ import { Plus, MoreHorizontal, AlertTriangle, Filter, ShieldCheck, User, Scale, 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -101,10 +102,23 @@ export function KanbanBoard() {
   const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
   const [sheetOpen, setSheetOpen] = React.useState(!!params.get("task"));
   const [createOpen, setCreateOpen] = React.useState(false);
-
+  const [selectedColumnId, setSelectedColumnId] = React.useState<string>("");
   const [quickFilter, setQuickFilter] = React.useState<"all" | "my" | "unassigned">("all");
 
-  // Shortcut Q để bật/tắt "Việc của tôi"
+  const columns = React.useMemo(
+    () => project.columns.slice().sort((a, b) => a.position - b.position),
+    [project.columns],
+  );
+
+  const openCreateDialog = React.useCallback(
+    (colId?: string) => {
+      setSelectedColumnId(colId || columns[0]?.id || "");
+      setCreateOpen(true);
+    },
+    [columns],
+  );
+
+  // Shortcuts: Q để bật/tắt "Việc của tôi", C để mở tạo công việc thủ công
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
@@ -113,10 +127,14 @@ export function KanbanBoard() {
         e.preventDefault();
         setQuickFilter((prev) => (prev === "my" ? "all" : "my"));
       }
+      if (!isInput && (e.key === "c" || e.key === "C") && project.canEdit) {
+        e.preventDefault();
+        openCreateDialog();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [openCreateDialog, project.canEdit]);
 
   const handleClaimTask = React.useCallback(
     (task: TaskListItem) => {
@@ -150,7 +168,6 @@ export function KanbanBoard() {
   const unassignedTasks = React.useMemo(() => local.filter((t) => t.assignees.length === 0), [local]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor));
-  const columns = project.columns;
   const colTasks = (colId: string) =>
     local
       .filter((t) => t.columnId === colId)
@@ -224,8 +241,11 @@ export function KanbanBoard() {
             ))}
           </div>
           {project.canEdit && (
-            <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
+            <Button size="sm" onClick={() => openCreateDialog()} className="gap-1.5 shadow-xs">
               <Plus className="h-4 w-4" /> Tạo công việc
+              <kbd className="hidden sm:inline-block ml-1 text-[10px] font-mono px-1 py-0.2 rounded bg-primary-foreground/20 text-primary-foreground">
+                C
+              </kbd>
             </Button>
           )}
         </div>
@@ -394,6 +414,7 @@ export function KanbanBoard() {
                   onOpen={openTask}
                   onMove={(t, colId) => doMove(t, colId)}
                   onClaim={handleClaimTask}
+                  onAddTask={openCreateDialog}
                   currentUserId={auth.user?.id}
                   canEdit={project.canEdit}
                 />
@@ -414,12 +435,16 @@ export function KanbanBoard() {
               e.preventDefault();
               const f = new FormData(e.currentTarget);
               const assignee = String(f.get("assigneeId") ?? "");
+              const col = String(f.get("columnId") ?? "") || selectedColumnId;
+              const desc = String(f.get("description") ?? "").trim();
               mut.create.mutate(
                 {
-                  title: String(f.get("title") ?? ""),
+                  title: String(f.get("title") ?? "").trim(),
+                  description: desc || undefined,
                   priority: String(f.get("priority") ?? "MEDIUM"),
                   estimateHours: Number(f.get("estimateHours")) || undefined,
                   dueDate: String(f.get("dueDate") ?? "") || undefined,
+                  columnId: col && col !== "__first" ? col : undefined,
                   sprintId: sprintFilter !== "__all" && sprintFilter !== "__backlog" ? sprintFilter : project.activeSprint?.id,
                   assigneeIds: assignee && assignee !== "__none" ? [assignee] : [],
                 },
@@ -435,44 +460,101 @@ export function KanbanBoard() {
             className="space-y-4"
           >
             <DialogHeader>
-              <DialogTitle className="text-base">Tạo công việc</DialogTitle>
-              <DialogDescription className="text-xs">Vào cột đầu tiên của {sprintFilter !== "__all" && sprintFilter !== "__backlog" ? "sprint đang lọc" : project.activeSprint ? "sprint đang chạy" : "backlog"}.</DialogDescription>
+              <DialogTitle className="text-base flex items-center justify-between">
+                <span>Tạo công việc thủ công</span>
+                <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border">
+                  Phím C
+                </kbd>
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Tạo công việc mới vào {sprintFilter !== "__all" && sprintFilter !== "__backlog" ? "sprint đang lọc" : project.activeSprint ? "sprint đang chạy" : "backlog"}.
+              </DialogDescription>
             </DialogHeader>
-            <Input name="title" placeholder="Tiêu đề" className="text-xs h-9" required minLength={1} maxLength={200} />
-            <div className="grid grid-cols-3 gap-3">
-              <Select name="priority" defaultValue="MEDIUM">
-                <SelectTrigger className="text-xs h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {["LOW", "MEDIUM", "HIGH", "URGENT"].map((p) => (
-                    <SelectItem key={p} value={p} className="text-xs">
-                      {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input name="estimateHours" type="number" step="0.5" min={0} placeholder="Giờ" className="text-xs h-9" />
-              <Input name="dueDate" type="date" className="text-xs h-9" />
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-foreground mb-1 block">
+                  Tiêu đề công việc <span className="text-destructive">*</span>
+                </label>
+                <Input name="title" placeholder="Ví dụ: Thiết kế giao diện chi tiết task..." className="text-xs h-9" required minLength={1} maxLength={200} autoFocus />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-foreground mb-1 block">
+                  Mô tả chi tiết (tuỳ chọn)
+                </label>
+                <Textarea name="description" placeholder="Ghi chú thêm yêu cầu, checklist hoặc tiêu chí nghiệm thu..." className="text-xs min-h-[65px] resize-none" maxLength={2000} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-1 block">Cột trạng thái</label>
+                  <Select name="columnId" value={selectedColumnId} onValueChange={setSelectedColumnId}>
+                    <SelectTrigger className="text-xs h-9">
+                      <SelectValue placeholder="Chọn cột" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {columns.map((c) => (
+                        <SelectItem key={c.id} value={c.id} className="text-xs">
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-1 block">Độ ưu tiên</label>
+                  <Select name="priority" defaultValue="MEDIUM">
+                    <SelectTrigger className="text-xs h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LOW" className="text-xs">Thấp (Low)</SelectItem>
+                      <SelectItem value="MEDIUM" className="text-xs">Trung bình (Medium)</SelectItem>
+                      <SelectItem value="HIGH" className="text-xs">Cao (High)</SelectItem>
+                      <SelectItem value="URGENT" className="text-xs">Khẩn cấp (Urgent)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-1 block">Ước lượng (giờ)</label>
+                  <Input name="estimateHours" type="number" step="0.5" min={0} placeholder="Ví dụ: 8" className="text-xs h-9" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-1 block">Hạn chót</label>
+                  <Input name="dueDate" type="date" className="text-xs h-9" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-1 block">Người thực hiện</label>
+                  <Select name="assigneeId" defaultValue="__none">
+                    <SelectTrigger className="text-xs h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none" className="text-xs">
+                        Chưa giao (Unassigned)
+                      </SelectItem>
+                      {project.members.map((m) => (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">
+                          {m.fullName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
-            <Select name="assigneeId" defaultValue="__none">
-              <SelectTrigger className="text-xs h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none" className="text-xs">
-                  Chưa giao
-                </SelectItem>
-                {project.members.map((m) => (
-                  <SelectItem key={m.id} value={m.id} className="text-xs">
-                    {m.fullName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <DialogFooter>
-              <Button type="submit" size="sm" disabled={mut.create.isPending}>
-                Tạo
+
+            <DialogFooter className="pt-2 border-t border-border/40">
+              <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>
+                Hủy
+              </Button>
+              <Button type="submit" size="sm" disabled={mut.create.isPending} className="gap-1.5">
+                <Plus className="h-4 w-4" /> Tạo công việc
               </Button>
             </DialogFooter>
           </form>
@@ -490,6 +572,7 @@ function Column({
   onOpen,
   onMove,
   onClaim,
+  onAddTask,
   currentUserId,
   canEdit,
 }: {
@@ -500,6 +583,7 @@ function Column({
   onOpen: (t: TaskListItem) => void;
   onMove: (t: TaskListItem, colId: string) => void;
   onClaim?: (t: TaskListItem) => void;
+  onAddTask?: (colId: string) => void;
   currentUserId?: string;
   canEdit: boolean;
 }) {
@@ -552,6 +636,16 @@ function Column({
             </div>
           ))}
           {tasks.length === 0 && <div className="flex flex-1 items-center justify-center p-6 border border-dashed border-border/60 rounded-lg text-xs text-muted-foreground">Kéo thẻ vào đây</div>}
+          {canEdit && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onAddTask?.(col.id)}
+              className="w-full justify-start text-xs text-muted-foreground hover:text-foreground hover:bg-background/80 border border-dashed border-border/50 hover:border-border mt-1 h-8 gap-1.5 rounded-lg transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" /> Thêm công việc
+            </Button>
+          )}
         </div>
       </SortableContext>
     </div>
