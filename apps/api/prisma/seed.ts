@@ -135,7 +135,7 @@ async function main(): Promise<void> {
       fullName: 'Bùi Hoàng Long',
       shortName: 'Long (Super Admin)',
       isSuperAdmin: true,
-      platformRole: PlatformRole.SUPER_ADMIN,
+      platformRole: PlatformRole.ROOT_ADMIN,
     },
     {
       key: 'Lan',
@@ -627,7 +627,7 @@ async function main(): Promise<void> {
       Email: 'admin@smarttask.local',
       Password: 'Demo@1234',
       Tên: 'Bùi Hoàng Long',
-      'Platform Role': 'SUPER_ADMIN',
+      'Platform Role': 'ROOT_ADMIN',
       'Workspace Role': 'ADMIN',
       'Project Role': 'PM',
       'Đặc quyền test': 'Vào /admin (Mission Control, FinOps, Telemetry, Maintenance)',
