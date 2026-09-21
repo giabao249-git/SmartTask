@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, MoreHorizontal, AlertTriangle, Filter } from "lucide-react";
+import { Plus, MoreHorizontal, AlertTriangle, Filter, ShieldCheck, User, Scale, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -40,11 +40,23 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useBoardRealtime, useMoveTask, useTaskMutations, useTasks } from "./hooks";
 
-function SortableTaskItem({ task, projectKey, onClick }: { task: TaskListItem; projectKey: string; onClick: (t: TaskListItem) => void }) {
+function SortableTaskItem({
+  task,
+  projectKey,
+  onClick,
+  onClaim,
+  currentUserId,
+}: {
+  task: TaskListItem;
+  projectKey: string;
+  onClick: (t: TaskListItem) => void;
+  onClaim?: (t: TaskListItem) => void;
+  currentUserId?: string;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, data: { type: "Task", task } });
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }} {...attributes} {...listeners}>
-      <TaskCard task={task} projectKey={projectKey} onClick={onClick} isDragging={isDragging} />
+      <TaskCard task={task} projectKey={projectKey} onClick={onClick} onClaim={onClaim} currentUserId={currentUserId} isDragging={isDragging} />
     </div>
   );
 }
@@ -90,9 +102,65 @@ export function KanbanBoard() {
   const [sheetOpen, setSheetOpen] = React.useState(!!params.get("task"));
   const [createOpen, setCreateOpen] = React.useState(false);
 
+  const [quickFilter, setQuickFilter] = React.useState<"all" | "my" | "unassigned">("all");
+
+  // Shortcut Q để bật/tắt "Việc của tôi"
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      const isInput = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement | null)?.isContentEditable;
+      if (!isInput && (e.key === "q" || e.key === "Q")) {
+        e.preventDefault();
+        setQuickFilter((prev) => (prev === "my" ? "all" : "my"));
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const handleClaimTask = React.useCallback(
+    (task: TaskListItem) => {
+      const currentUserId = auth.user?.id;
+      if (!currentUserId) {
+        toast.error("Vui lòng đăng nhập để nhận việc");
+        return;
+      }
+      mut.update.mutate(
+        { id: task.id, version: task.version, patch: { assigneeId: currentUserId } },
+        {
+          onSuccess: () => {
+            toast.success(`Bạn đã nhận task ${taskKeyOf(project.key, task)}`);
+          },
+          onError: (err) => {
+            toast.error("Không thể nhận task", { description: describeError(err).message });
+          },
+        },
+      );
+    },
+    [auth.user?.id, mut.update, project.key],
+  );
+
+  const isLeader = project.canManage || project.myRole === "PM";
+  const myTasks = React.useMemo(() => {
+    const currentUserId = auth.user?.id;
+    if (!currentUserId) return [];
+    return local.filter((t) => t.assignees.some((a) => a.id === currentUserId));
+  }, [local, auth.user?.id]);
+  const myHours = myTasks.reduce((s, t) => s + (t.remainingHours ?? t.estimateHours ?? 0), 0);
+  const unassignedTasks = React.useMemo(() => local.filter((t) => t.assignees.length === 0), [local]);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor));
   const columns = project.columns;
-  const colTasks = (colId: string) => local.filter((t) => t.columnId === colId).sort((a, b) => a.position - b.position);
+  const colTasks = (colId: string) =>
+    local
+      .filter((t) => t.columnId === colId)
+      .filter((t) => {
+        const currentUserId = auth.user?.id;
+        if (quickFilter === "my") return currentUserId ? t.assignees.some((a) => a.id === currentUserId) : true;
+        if (quickFilter === "unassigned") return t.assignees.length === 0;
+        return true;
+      })
+      .sort((a, b) => a.position - b.position);
 
   const openTask = (t: TaskListItem) => {
     setSelectedId(t.id);
@@ -149,8 +217,8 @@ export function KanbanBoard() {
         description={project.activeSprint ? `${project.activeSprint.name} · ${project.activeSprint.startDate.slice(0, 10)} → ${project.activeSprint.endDate.slice(0, 10)}` : "Chưa có sprint đang chạy"}
         breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Bảng Kanban" }]}
       >
-        <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center -space-x-2 border-r border-border/60 pr-3">
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="hidden md:flex items-center -space-x-2 border-r border-border/60 pr-3 shrink-0">
             {project.members.map((m) => (
               <UserAvatar key={m.id} name={m.fullName} avatar={m.avatarUrl ?? undefined} role={m.role} size="sm" className="ring-2 ring-background" />
             ))}
@@ -163,9 +231,99 @@ export function KanbanBoard() {
         </div>
       </PageHeader>
 
+      {/* Thanh phân vai PM/Leader vs Thành viên thường */}
+      {isLeader ? (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl border border-primary/20 bg-primary/5 text-xs">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-semibold text-xs gap-1 py-0.5">
+              <ShieldCheck className="h-3.5 w-3.5" /> PM / Trưởng nhóm điều phối
+            </Badge>
+            <span className="text-muted-foreground">
+              Toàn quyền quản trị tiến độ sprint, phân rã WBS và cân bằng tải nhân sự
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/projects/${project.id}/rebalance`)}
+              className="h-7 text-xs gap-1 text-info hover:text-info border-info/30 hover:bg-info/10"
+            >
+              <Scale className="h-3 w-3" /> Cân bằng tải AI
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/projects/${project.id}/assistant`)}
+              className="h-7 text-xs gap-1 text-primary hover:text-primary border-primary/30 hover:bg-primary/10"
+            >
+              <Bot className="h-3 w-3" /> Trợ lý AI
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl border border-border/80 bg-card/60 text-xs">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="border-border bg-muted/60 text-foreground font-medium text-xs gap-1 py-0.5">
+              <User className="h-3.5 w-3.5 text-primary" /> Thành viên dự án
+            </Badge>
+            <span className="text-muted-foreground">
+              Bạn đang phụ trách <strong className="text-foreground">{myTasks.length}</strong> công việc (<strong className="text-foreground">{myHours}h</strong> còn lại).
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span>Bấm phím <kbd className="px-1 py-0.5 rounded bg-background border font-mono text-[10px] text-foreground font-semibold">Q</kbd> để lọc nhanh việc của bạn · Nhấn <strong>Nhận việc</strong> trên thẻ chưa giao</span>
+          </div>
+        </div>
+      )}
+
       {/* Bộ lọc */}
       <div className="flex items-center gap-2 flex-wrap text-xs">
-        <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+        {/* Segmented Quick Filter */}
+        <div className="flex items-center rounded-lg border border-border/80 bg-muted/40 p-0.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setQuickFilter("all")}
+            className={cn(
+              "h-7 px-2.5 text-xs rounded-md font-medium transition-colors",
+              quickFilter === "all" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Tất cả
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setQuickFilter(quickFilter === "my" ? "all" : "my")}
+            className={cn(
+              "h-7 px-2.5 text-xs rounded-md font-medium transition-colors gap-1.5",
+              quickFilter === "my" ? "bg-primary text-primary-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <span>Việc của tôi</span>
+            <Badge variant={quickFilter === "my" ? "secondary" : "outline"} className="text-[10px] px-1 py-0 font-mono">
+              {myTasks.length}
+            </Badge>
+            <kbd className={cn("text-[9px] font-mono px-1 rounded border", quickFilter === "my" ? "bg-primary-foreground/20 border-transparent text-primary-foreground" : "bg-background")}>Q</kbd>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setQuickFilter(quickFilter === "unassigned" ? "all" : "unassigned")}
+            className={cn(
+              "h-7 px-2.5 text-xs rounded-md font-medium transition-colors gap-1.5",
+              quickFilter === "unassigned" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <span>Chưa giao</span>
+            <Badge variant="outline" className="text-[10px] px-1 py-0 font-mono">
+              {unassignedTasks.length}
+            </Badge>
+          </Button>
+        </div>
+
+        <Filter className="h-3.5 w-3.5 text-muted-foreground ml-1" />
         <Select value={sprintFilter} onValueChange={setSprintFilter}>
           <SelectTrigger className="h-8 text-xs w-48">
             <SelectValue />
@@ -227,12 +385,23 @@ export function KanbanBoard() {
           <ScrollArea className="w-full pb-4">
             <div className="grid gap-4 items-start" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(260px, 1fr))`, minWidth: columns.length * 270 }}>
               {columns.map((col) => (
-                <Column key={col.id} col={col} tasks={colTasks(col.id)} projectKey={project.key} columns={columns} onOpen={openTask} onMove={(t, colId) => doMove(t, colId)} canEdit={project.canEdit} />
+                <Column
+                  key={col.id}
+                  col={col}
+                  tasks={colTasks(col.id)}
+                  projectKey={project.key}
+                  columns={columns}
+                  onOpen={openTask}
+                  onMove={(t, colId) => doMove(t, colId)}
+                  onClaim={handleClaimTask}
+                  currentUserId={auth.user?.id}
+                  canEdit={project.canEdit}
+                />
               ))}
             </div>
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
-          <DragOverlay>{activeTask ? <TaskCard task={activeTask} projectKey={project.key} isGhost /> : null}</DragOverlay>
+          <DragOverlay>{activeTask ? <TaskCard task={activeTask} projectKey={project.key} currentUserId={auth.user?.id} isGhost /> : null}</DragOverlay>
         </DndContext>
       )}
 
@@ -313,7 +482,27 @@ export function KanbanBoard() {
   );
 }
 
-function Column({ col, tasks, projectKey, columns, onOpen, onMove, canEdit }: { col: BoardColumn; tasks: TaskListItem[]; projectKey: string; columns: BoardColumn[]; onOpen: (t: TaskListItem) => void; onMove: (t: TaskListItem, colId: string) => void; canEdit: boolean }) {
+function Column({
+  col,
+  tasks,
+  projectKey,
+  columns,
+  onOpen,
+  onMove,
+  onClaim,
+  currentUserId,
+  canEdit,
+}: {
+  col: BoardColumn;
+  tasks: TaskListItem[];
+  projectKey: string;
+  columns: BoardColumn[];
+  onOpen: (t: TaskListItem) => void;
+  onMove: (t: TaskListItem, colId: string) => void;
+  onClaim?: (t: TaskListItem) => void;
+  currentUserId?: string;
+  canEdit: boolean;
+}) {
   const isOverWip = col.wipLimit != null && tasks.length > col.wipLimit;
   return (
     <div className={cn("flex flex-col rounded-xl border bg-muted/25 transition-all p-3 min-h-[520px]", isOverWip ? "border-warning ring-1 ring-warning/40 bg-warning/5" : "border-border/70")}>
@@ -336,7 +525,7 @@ function Column({ col, tasks, projectKey, columns, onOpen, onMove, canEdit }: { 
         <div className="flex flex-col gap-2.5 flex-1 min-h-[100px]">
           {tasks.map((task) => (
             <div key={task.id} className="group relative">
-              <SortableTaskItem task={task} projectKey={projectKey} onClick={onOpen} />
+              <SortableTaskItem task={task} projectKey={projectKey} onClick={onOpen} onClaim={onClaim} currentUserId={currentUserId} />
               {canEdit && (
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <DropdownMenu>

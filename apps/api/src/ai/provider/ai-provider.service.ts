@@ -1,5 +1,7 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AiLogStatus, AiProvider, AiPurpose, Prisma } from '@prisma/client';
+import type { Env } from '../../config/env.schema';
 import { AppError } from '../../common/app-error';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { ResolvedAiConfig } from '../ai-config/ai-config.service';
@@ -76,6 +78,7 @@ export class AiProviderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly promptCache: GeminiPromptCacheService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
 
   async call(input: AiCallInput): Promise<AiCallResult> {
@@ -195,6 +198,8 @@ export class AiProviderService {
       };
     if (config.provider === AiProvider.GEMINI) return this.callGemini(input);
     if (config.provider === AiProvider.OLLAMA) return this.callOllama(input);
+    if (config.provider === AiProvider.DEEPSEEK)
+      return this.callDeepSeek(input);
     throw new Error(
       `Nhà cung cấp ${String(config.provider)} chưa được hỗ trợ ở Phase 7`,
     );
@@ -270,6 +275,85 @@ export class AiProviderService {
       config.timeoutMs,
     );
     return { ...readOllama(data), cachedContentUsed: false };
+  }
+
+  private async callDeepSeek(input: AiCallInput) {
+    const { config } = input;
+    const apiKey =
+      config.apiKey ||
+      this.config.get('DEEPSEEK_API_KEY', { infer: true }) ||
+      process.env.DEEPSEEK_API_KEY;
+
+    if (!apiKey)
+      throw new AppError(
+        'AI_PROVIDER_UNAVAILABLE',
+        HttpStatus.SERVICE_UNAVAILABLE,
+        {
+          reason:
+            'Chưa có khoá DeepSeek: cấu hình DEEPSEEK_API_KEY hoặc tạo cấu hình AI cho workspace',
+        },
+      );
+
+    const baseUrl = (config.baseUrl || 'https://api.deepseek.com').replace(
+      /\/$/,
+      '',
+    );
+    const body: Record<string, unknown> = {
+      model: config.model || 'deepseek-v4-flash',
+      messages: [
+        { role: 'system', content: input.system },
+        { role: 'user', content: input.userText },
+      ],
+      temperature: input.temperature ?? config.advanced.temperature ?? 0.7,
+      max_tokens:
+        input.maxOutputTokens ??
+        config.advanced.maxOutputTokens ??
+        DEFAULT_MAX_OUTPUT,
+    };
+    if (config.caps.supportsStructuredOutput) {
+      body.response_format = { type: 'json_object' };
+    }
+
+    const data = (await this.post(
+      `${baseUrl}/chat/completions`,
+      {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body,
+      config.timeoutMs,
+    )) as {
+      choices?: Array<{
+        message?: { content?: string };
+        finish_reason?: string;
+      }>;
+      usage?: {
+        prompt_tokens?: number;
+        prompt_cache_hit_tokens?: number;
+        completion_tokens?: number;
+        completion_tokens_details?: { reasoning_tokens?: number };
+        total_tokens?: number;
+      };
+    };
+
+    const choice = data?.choices?.[0];
+    const text = choice?.message?.content || '';
+    const usage = data?.usage || {};
+    return {
+      text,
+      usage: {
+        inputTokens: usage.prompt_tokens || 0,
+        cachedInputTokens: usage.prompt_cache_hit_tokens || 0,
+        outputTokens: usage.completion_tokens || 0,
+        reasoningTokens:
+          usage.completion_tokens_details?.reasoning_tokens || 0,
+        totalTokens:
+          usage.total_tokens ||
+          (usage.prompt_tokens || 0) + (usage.completion_tokens || 0),
+      },
+      truncated: choice?.finish_reason === 'length',
+      cachedContentUsed: (usage.prompt_cache_hit_tokens || 0) > 0,
+    };
   }
 
   private async post(

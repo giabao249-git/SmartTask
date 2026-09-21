@@ -2,16 +2,27 @@
 
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
-import { Bell, Bot, Settings, UserCircle, Users } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Bell,
+  Lock,
+  ShieldAlert,
+  Sliders,
+  Sparkles,
+  UserCircle,
+  Users,
+} from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
 import { useAuth } from "@/lib/auth";
 import { readLastProject } from "@/lib/hooks/use-project";
 import { useProject } from "@/lib/hooks/queries";
 import { NotificationsPanel, useBellCount } from "@/features/notifications/NotificationsPanel";
-import { AiPolicyView } from "./AiPolicyView";
+import { cn } from "@/lib/utils";
+import { AiSettingsView } from "./AiSettingsView";
 import { MembersTab } from "./MembersTab";
 import { ProfileTab } from "./ProfileTab";
 import { WorkspaceSettingsTab } from "./WorkspaceSettingsTab";
@@ -25,14 +36,35 @@ const readLastWorkspace = () => {
   }
 };
 
-/** Cài đặt & thông báo (UC-05/06/23/29): chọn workspace (mặc định của dự án mở gần nhất), 4 tab nối API thật. */
+type SettingsTab = "profile" | "notifications" | "members" | "settings" | "ai";
+
+/** Cài đặt & thông báo (UC-05/06/23/29): 3 phân nhóm rõ ràng (Cá nhân / Workspace / Hệ thống toàn cục) kèm RBAC */
 export function SettingsNotificationsView() {
   const auth = useAuth();
   const params = useSearchParams();
   const unread = useBellCount();
   const last = React.useMemo(() => readLastProject(), []);
   const lastProject = useProject(last?.id);
+
   const [wsId, setWsIdState] = React.useState<string | null>(() => params.get("ws") ?? readLastWorkspace());
+  const [activeTab, setActiveTab] = React.useState<SettingsTab>(() => {
+    const t = params.get("tab") as SettingsTab | null;
+    if (t && ["profile", "notifications", "members", "settings", "ai"].includes(t)) return t;
+    return "profile";
+  });
+
+  // Sync workspace change from top navbar
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<{ workspaceId: string }>;
+      if (custom.detail?.workspaceId) {
+        setWsIdState(custom.detail.workspaceId);
+      }
+    };
+    window.addEventListener("st:workspace-changed", handler);
+    return () => window.removeEventListener("st:workspace-changed", handler);
+  }, []);
+
   const setWsId = (id: string) => {
     setWsIdState(id);
     try {
@@ -41,22 +73,33 @@ export function SettingsNotificationsView() {
       /* private mode */
     }
   };
+
   const effective = wsId ?? lastProject.data?.workspaceId ?? auth.workspaces[0]?.id ?? null;
   const ws = auth.workspaces.find((w) => w.id === effective);
-  const canEdit = ws?.role === "OWNER" || ws?.role === "ADMIN";
+  const isAdmin = ws?.role === "OWNER" || ws?.role === "ADMIN";
+  const canEdit = isAdmin;
+
+  // Change tab and optionally update URL
+  const handleTabChange = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    if (effective) url.searchParams.set("ws", effective);
+    window.history.replaceState(null, "", url.toString());
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Thông báo & Cài đặt Workspace"
-        description="Thông báo realtime, chính sách chọn người của Trợ lý AI, thành viên & lời mời, tham số công thức tải, tài khoản."
+        title="Thông báo & Cài đặt hệ thống"
+        description="Quản lý tài khoản cá nhân, thông báo thời gian thực, thành viên workspace, tham số vận hành và cấu hình AI."
         breadcrumbs={[{ label: ws?.name ?? "Workspace", href: "/workspaces" }, { label: "Cài đặt & Thông báo" }]}
       >
         {auth.workspaces.length > 0 && effective && (
           <div className="flex items-center gap-2 text-xs">
             <span className="text-muted-foreground">Workspace</span>
             <Select value={effective} onValueChange={setWsId}>
-              <SelectTrigger className="h-8 text-xs w-56">
+              <SelectTrigger className="h-8 text-xs w-56 bg-background">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -71,40 +114,203 @@ export function SettingsNotificationsView() {
         )}
       </PageHeader>
 
-      <Tabs defaultValue={params.get("tab") ?? "notifications"} className="w-full space-y-4">
-        <TabsList className="grid w-full lg:w-[800px] grid-cols-5">
-          <TabsTrigger value="notifications" className="text-xs gap-1.5">
-            <Bell className="h-3.5 w-3.5" />
-            Thông báo{unread > 0 ? ` (${unread})` : ""}
-          </TabsTrigger>
-          <TabsTrigger value="ai" className="text-xs gap-1.5">
-            <Bot className="h-3.5 w-3.5" />
-            Trợ lý AI
-          </TabsTrigger>
-          <TabsTrigger value="members" className="text-xs gap-1.5">
-            <Users className="h-3.5 w-3.5" />
-            Thành viên
-          </TabsTrigger>
-          <TabsTrigger value="settings" className="text-xs gap-1.5">
-            <Settings className="h-3.5 w-3.5" />
-            Tham số
-          </TabsTrigger>
-          <TabsTrigger value="profile" className="text-xs gap-1.5">
-            <UserCircle className="h-3.5 w-3.5" />
-            Tài khoản
-          </TabsTrigger>
-        </TabsList>
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* Sidebar phân nhóm (Cá nhân / Workspace / Hệ thống toàn cục) */}
+        <aside className="w-full lg:w-64 shrink-0 rounded-xl border border-border/70 bg-card p-3 shadow-xs space-y-5">
+          {/* Nhóm 1: CÁ NHÂN */}
+          <div className="space-y-1">
+            <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Cá nhân
+            </div>
+            <button
+              type="button"
+              onClick={() => handleTabChange("profile")}
+              className={cn(
+                "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
+                activeTab === "profile"
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <UserCircle className="h-4 w-4 shrink-0" />
+                <span>Hồ sơ & Tài khoản</span>
+              </div>
+            </button>
 
-        <TabsContent value="notifications">
-          <NotificationsPanel />
-        </TabsContent>
-        <TabsContent value="ai">{effective && ws ? <AiPolicyView workspaceId={effective} canEdit={canEdit} /> : <NoWorkspace />}</TabsContent>
-        <TabsContent value="members">{effective && ws ? <MembersTab workspaceId={effective} canEdit={canEdit} /> : <NoWorkspace />}</TabsContent>
-        <TabsContent value="settings">{effective && ws ? <WorkspaceSettingsTab workspaceId={effective} canEdit={canEdit} /> : <NoWorkspace />}</TabsContent>
-        <TabsContent value="profile">
-          <ProfileTab />
-        </TabsContent>
-      </Tabs>
+            <button
+              type="button"
+              onClick={() => handleTabChange("notifications")}
+              className={cn(
+                "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
+                activeTab === "notifications"
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <Bell className="h-4 w-4 shrink-0" />
+                <span>Thông báo</span>
+              </div>
+              {unread > 0 && (
+                <Badge
+                  variant={activeTab === "notifications" ? "secondary" : "destructive"}
+                  className="text-[10px] px-1.5 py-0 h-4 font-mono"
+                >
+                  {unread}
+                </Badge>
+              )}
+            </button>
+          </div>
+
+          {/* Nhóm 2: WORKSPACE */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="truncate">Workspace</span>
+              {ws && (
+                <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono">
+                  {ws.role}
+                </Badge>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange("members")}
+              className={cn(
+                "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
+                activeTab === "members"
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 shrink-0" />
+                <span>Thành viên & Quyền</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange("settings")}
+              className={cn(
+                "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
+                activeTab === "settings"
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <Sliders className="h-4 w-4 shrink-0" />
+                <span>Tham số & Quy tắc</span>
+              </div>
+              {!isAdmin && (
+                <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground border-border/80">
+                  Chỉ xem
+                </Badge>
+              )}
+            </button>
+          </div>
+
+          {/* Nhóm 3: HỆ THỐNG TOÀN CỤC */}
+          <div className="space-y-1">
+            <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Hệ thống toàn cục
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange("ai")}
+              className={cn(
+                "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
+                activeTab === "ai"
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                !isAdmin && "opacity-85"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 shrink-0 text-info" />
+                <span>Cấu hình Trợ lý AI</span>
+              </div>
+              {isAdmin ? (
+                <Badge
+                  variant={activeTab === "ai" ? "secondary" : "default"}
+                  className="text-[9px] px-1 py-0 font-mono"
+                >
+                  Admin
+                </Badge>
+              ) : (
+                <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
+            </button>
+          </div>
+        </aside>
+
+        {/* Nội dung chi tiết theo phân nhóm */}
+        <main className="flex-1 min-w-0 w-full">
+          {activeTab === "profile" && <ProfileTab />}
+
+          {activeTab === "notifications" && <NotificationsPanel />}
+
+          {activeTab === "members" && (
+            effective && ws ? (
+              <MembersTab workspaceId={effective} canEdit={canEdit} />
+            ) : (
+              <NoWorkspace />
+            )
+          )}
+
+          {activeTab === "settings" && (
+            effective && ws ? (
+              <div className="space-y-4">
+                {!isAdmin && (
+                  <Alert className="border-amber-500/30 bg-amber-500/5 text-amber-900 dark:text-amber-200 py-3">
+                    <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <AlertTitle className="text-xs font-semibold">Chế độ xem (Chỉ đọc)</AlertTitle>
+                    <AlertDescription className="text-xs">
+                      Bạn đang là <strong>{ws.role}</strong>. Chỉ Quản trị viên (OWNER / ADMIN) mới có thể chỉnh sửa cài đặt và tham số công thức tải của workspace.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <WorkspaceSettingsTab workspaceId={effective} canEdit={canEdit} />
+              </div>
+            ) : (
+              <NoWorkspace />
+            )
+          )}
+
+          {activeTab === "ai" && (
+            effective && ws ? (
+              isAdmin ? (
+                <AiSettingsView workspaceId={effective} canEdit={canEdit} />
+              ) : (
+                <div className="p-8 border border-border/70 rounded-xl bg-card text-center space-y-4 max-w-md mx-auto my-6 shadow-xs">
+                  <div className="h-12 w-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+                    <Lock className="h-6 w-6" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h3 className="text-base font-semibold text-foreground">Giới hạn quyền truy cập</h3>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Bạn đang đăng nhập với vai trò <strong>{ws.role}</strong>. Chỉ Quản trị viên (OWNER / ADMIN) mới có quyền truy cập và chỉnh sửa cấu hình hệ thống AI, khóa API và Model Catalog.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleTabChange("profile")}
+                    className="text-xs"
+                  >
+                    Quay lại Hồ sơ cá nhân
+                  </Button>
+                </div>
+              )
+            ) : (
+              <NoWorkspace />
+            )
+          )}
+        </main>
+      </div>
     </div>
   );
 }

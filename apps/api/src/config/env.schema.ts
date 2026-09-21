@@ -55,6 +55,7 @@ export const envSchema = z.object({
   AI_PROVIDER: z.enum(['gemini', 'ollama', 'fake', 'mock']).default('gemini'),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  DEEPSEEK_API_KEY: z.string().optional(),
   OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
   OLLAMA_MODEL: z.string().default('qwen2.5:7b'),
   AI_DAILY_LIMIT_PER_USER: z.coerce.number().int().positive().default(20),

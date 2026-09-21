@@ -6,6 +6,8 @@ import type { StructuredAction, ValidationResult, DraftItemStatus } from "@smart
 
 export type WorkspaceRole = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
 export type ProjectRole = "PM" | "MEMBER";
+export type PlatformRole = "ROOT_ADMIN" | "FINOPS_OPERATOR" | "CUSTOMER_SUPPORT" | "SECURITY_AUDITOR";
+export type WorkspaceLifecycleStatus = "ACTIVE" | "WARNING_GRACE" | "READ_ONLY_ENFORCED" | "SOFT_SUSPENDED" | "COLD_STORAGE_ARCHIVED" | "PURGED";
 
 export interface UserView {
   id: string;
@@ -16,6 +18,8 @@ export interface UserView {
   timezone: string;
   weeklyCapacityHours: number | null;
   notificationPrefs?: NotificationPrefs | null;
+  isSuperAdmin?: boolean;
+  platformRole?: PlatformRole | null;
 }
 
 export type NotificationPrefKey = "taskAssigned" | "mentioned" | "taskDue" | "workloadAlert" | "sprint";
@@ -230,6 +234,120 @@ export interface MemberAlias {
   alias: string;
   createdAt: string;
   user?: { fullName: string; shortName: string | null };
+}
+
+export type AiProvider = "GEMINI" | "OPENAI" | "OLLAMA" | "DEEPSEEK";
+export type AiPurpose = "GENERAL" | "DECOMPOSE" | "ASSIGN" | "EXPLAIN" | "CHAT";
+export type AiCacheMode = "NONE" | "GEMINI_CACHED_CONTENTS" | "OPENAI_BREAKPOINT";
+
+export interface AiModelCatalogItem {
+  id: string;
+  provider: AiProvider;
+  model: string;
+  label: string;
+  inputPrice: number;
+  outputPrice: number;
+  cachedInputPrice: number | null;
+  priceEffectiveFrom: string | null;
+  contextWindow: number | null;
+  isReasoning: boolean;
+  supportsTemperature: boolean;
+  supportsStructuredOutput: boolean;
+  supportsVision: boolean;
+  maxOutputTokenParam: string;
+  cacheMode: AiCacheMode;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiConfigItem {
+  id: string;
+  workspaceId: string | null;
+  name: string;
+  catalogId: string;
+  apiKeyMasked: string;
+  hasApiKey: boolean;
+  baseUrl: string | null;
+  purpose: AiPurpose;
+  advancedParams: {
+    temperature?: number;
+    maxOutputTokens?: number;
+    promptCache?: { enabled: boolean; ttlSeconds?: number; minStaticChars?: number };
+    trace?: { enabled: boolean };
+  } | null;
+  timeoutMs: number;
+  isDefault: boolean;
+  isActive: boolean;
+  notes: string | null;
+  createdById: string | null;
+  createdAt: string;
+  updatedAt: string;
+  catalog: {
+    id: string;
+    provider: AiProvider;
+    model: string;
+    label: string;
+    inputPrice: number;
+    outputPrice: number;
+    cachedInputPrice: number | null;
+    isReasoning: boolean;
+    supportsTemperature: boolean;
+    supportsStructuredOutput: boolean;
+    maxOutputTokenParam?: string;
+    cacheMode?: AiCacheMode;
+    isActive?: boolean;
+  };
+}
+
+export interface AiTestResult {
+  ok: boolean;
+  latencyMs: number;
+  provider: string;
+  model: string;
+  reply?: string;
+  error?: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    estimatedCost: number;
+  };
+}
+
+export interface AiUsageReport {
+  from: string;
+  to: string;
+  groupBy: "day" | "purpose" | "user";
+  usdVnd: number;
+  rows: {
+    key: string;
+    label: string;
+    calls: number;
+    tokens: number;
+    inputTokens: number;
+    cachedTokens: number;
+    outputTokens: number;
+    costUsd: number;
+    costVnd: number;
+    durationMs: number;
+    errors: number;
+    avgMs: number;
+    errorRate: number;
+    cachedRate: number;
+  }[];
+  totals: {
+    calls: number;
+    tokens: number;
+    cachedTokens: number;
+    costUsd: number;
+    costVnd: number;
+    errors: number;
+    durationMs: number;
+    errorRate: number;
+    avgMs: number;
+  };
 }
 
 export interface WorkspaceMemberView {
@@ -525,3 +643,119 @@ export interface ActivityItem {
   createdAt: string;
   actor: { id: string; fullName: string; shortName: string | null; avatarUrl: string | null } | null;
 }
+
+export interface PlatformStats {
+  workspaces: {
+    total: number;
+    active: number;
+    suspended: number;
+  };
+  users: {
+    total: number;
+    active: number;
+    superAdmins: number;
+  };
+  tasks: {
+    total: number;
+    completed: number;
+    completionRate: number;
+  };
+  aiFinOps: {
+    totalCalls: number;
+    totalTokens: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalCostUsd: number;
+    totalCostVnd: number;
+  };
+  maintenance: {
+    mode: "DISABLED" | "READ_ONLY" | "FULL";
+    reason?: string;
+    expectedDurationMinutes?: number;
+    updatedAt: string;
+    updatedBy?: string;
+  };
+}
+
+export interface AdminWorkspaceItem {
+  id: string;
+  name: string;
+  slug: string;
+  status: WorkspaceLifecycleStatus;
+  logoUrl?: string | null;
+  owner: {
+    id: string;
+    email: string;
+    fullName: string;
+    avatarUrl?: string | null;
+  };
+  suspendedAt?: string | null;
+  suspendReason?: string | null;
+  membersCount: number;
+  projectsCount: number;
+  aiCallsCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminUserItem {
+  id: string;
+  email: string;
+  fullName: string;
+  avatarUrl?: string | null;
+  isActive: boolean;
+  isSuperAdmin: boolean;
+  platformRole?: PlatformRole | null;
+  lastLoginAt?: string | null;
+  createdAt: string;
+  workspacesCount: number;
+  ownedWorkspacesCount: number;
+}
+
+export interface SystemAuditLogItem {
+  id: string;
+  actorId?: string | null;
+  actorEmail?: string | null;
+  action: string;
+  targetType: string;
+  targetId?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  beforeState?: Record<string, unknown> | null;
+  afterState?: Record<string, unknown> | null;
+  reason?: string | null;
+  previousHash: string;
+  currentHash: string;
+  createdAt: string;
+}
+
+export interface SystemTelemetry {
+  status: string;
+  uptimeSeconds: number;
+  system: {
+    platform: string;
+    arch: string;
+    cpuCores: number;
+    freeMemMb: number;
+    totalMemMb: number;
+  };
+  process: {
+    nodeVersion: string;
+    pid: number;
+    rssMb: number;
+    heapUsedMb: number;
+    heapTotalMb: number;
+  };
+  database: {
+    provider: string;
+    status: string;
+  };
+  maintenance: {
+    mode: "DISABLED" | "READ_ONLY" | "FULL";
+    reason?: string;
+    expectedDurationMinutes?: number;
+    updatedAt: string;
+    updatedBy?: string;
+  };
+}
+

@@ -84,12 +84,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = React.useCallback<AuthState["login"]>(
     async (email, password) => {
+      queryClient.clear();
       const res = await api.post<{ user: UserView; accessToken: string }>("/auth/login", { email, password }, { anonymous: true });
       tokenStore.set(res.accessToken);
       await loadMe();
       return res.user;
     },
-    [loadMe],
+    [loadMe, queryClient],
   );
 
   const register = React.useCallback<AuthState["register"]>(

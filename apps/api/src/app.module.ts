@@ -21,6 +21,7 @@ import { SkillsModule } from './skills/skills.module';
 import { SprintsModule } from './sprints/sprints.module';
 import { TasksModule } from './tasks/tasks.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
+import { AdminModule } from './admin/admin.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { validateEnv, type Env } from './config/env.schema';
@@ -62,6 +63,7 @@ import { UsersModule } from './users/users.module';
     ForecastModule,
     RealtimeModule,
     AiModule,
+    AdminModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

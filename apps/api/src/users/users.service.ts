@@ -1,7 +1,9 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { AppError } from '../common/app-error';
 import type { Prisma } from '@prisma/client';
+import type { Env } from '../config/env.schema';
 import { PrismaService } from '../prisma/prisma.service';
 import type { ChangePasswordDto } from './dto/change-password.dto';
 import type { NotificationPrefsDto } from './dto/notification-prefs.dto';
@@ -16,12 +18,17 @@ const PUBLIC_USER_SELECT = {
   timezone: true,
   weeklyCapacityHours: true,
   notificationPrefs: true,
+  isSuperAdmin: true,
+  platformRole: true,
   createdAt: true,
 } as const;
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService<Env, true>,
+  ) {}
 
   /** GET /me — hồ sơ + workspace của tôi kèm vai trò. */
   async me(userId: string) {
@@ -43,8 +50,17 @@ export class UsersService {
     });
     if (!user) throw AppError.notFound();
     const { workspaceMembers, ...rest } = user;
+    const systemAdminEmails =
+      this.config.get('SYSTEM_ADMIN_EMAILS', { infer: true }) || [];
+    const isEnvAdmin = systemAdminEmails.includes(rest.email.toLowerCase());
+    const isSuperAdmin = rest.isSuperAdmin || isEnvAdmin;
+
     return {
-      user: rest,
+      user: {
+        ...rest,
+        isSuperAdmin,
+        platformRole: rest.platformRole ?? (isSuperAdmin ? 'ROOT_ADMIN' : null),
+      },
       workspaces: workspaceMembers.map((m) => ({
         ...m.workspace,
         role: m.role,

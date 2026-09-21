@@ -415,6 +415,18 @@ export class TasksService {
       });
       if (!s) throw AppError.notFound({ sprintId: patch.sprintId });
     }
+    const targetAssigneeIds =
+      patch.assigneeIds !== undefined
+        ? [...new Set(patch.assigneeIds)]
+        : patch.assigneeId !== undefined
+          ? patch.assigneeId
+            ? [patch.assigneeId]
+            : []
+          : undefined;
+
+    if (targetAssigneeIds !== undefined) {
+      await this.assertAssignees(projectId, targetAssigneeIds);
+    }
     const data: Prisma.TaskUpdateInput = {
       title: patch.title,
       description: patch.description,
@@ -455,6 +467,40 @@ export class TasksService {
       sprintId: patch.sprintId,
     });
     const updated = await this.commit(taskId, version, data);
+
+    if (targetAssigneeIds !== undefined) {
+      const before = current.assignees.map((a) => a.userId);
+      await this.prisma.taskAssignee.deleteMany({
+        where: { taskId, userId: { notIn: targetAssigneeIds } },
+      });
+      const newIds = targetAssigneeIds.filter((id) => !before.includes(id));
+      if (newIds.length > 0) {
+        await this.prisma.taskAssignee.createMany({
+          data: newIds.map((id) => ({ taskId, userId: id })),
+          skipDuplicates: true,
+        });
+      }
+      diff.assignees = { from: before, to: targetAssigneeIds };
+      this.emit(TASK_EVENTS.assigned, {
+        projectId,
+        taskId,
+        actorId: userId,
+        affectedUserIds: [...new Set([...before, ...targetAssigneeIds])],
+        diff: { assignees: { from: before, to: targetAssigneeIds } },
+        version: updated.version,
+        source: TaskSource.MANUAL,
+        at: new Date(),
+      });
+    }
+
+    const finalTask =
+      targetAssigneeIds !== undefined
+        ? await this.prisma.task.findUniqueOrThrow({
+            where: { id: taskId },
+            select: TASK_DETAIL_SELECT,
+          })
+        : updated;
+
     if (patch.sprintId !== undefined && !current.parentId) {
       await this.prisma.task.updateMany({
         where: { parentId: taskId },
@@ -467,11 +513,11 @@ export class TasksService {
       actorId: userId,
       affectedUserIds: current.assignees.map((a) => a.userId),
       diff,
-      version: updated.version,
+      version: finalTask.version,
       source: 'MANUAL',
       at: new Date(),
     });
-    return this.toDetailView(updated);
+    return this.toDetailView(finalTask);
   }
 
   /** Kéo thả: đổi cột/vị trí (và sprint); kiểm WIP; cột hoàn thành đặt completed_at; đánh số lại khi khe quá hẹp. */

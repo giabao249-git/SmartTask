@@ -1,0 +1,31 @@
+{
+  "total": 4,
+  "passed": 4,
+  "failed": 0,
+  "details": [
+    {
+      "id": "TC-01",
+      "name": "Xem tab Thành viên Workspace & Modal đổi Role",
+      "status": "PASSED",
+      "screenshot": "/home/dthai24/SmartTask/docs/test-reports/rbac/TC01_workspace_members_owner.png"
+    },
+    {
+      "id": "TC-02",
+      "name": "Kiểm tra trạng thái Khóa / Read-only khi tài khoản là MEMBER",
+      "status": "PASSED",
+      "screenshot": "/home/dthai24/SmartTask/docs/test-reports/rbac/TC02_workspace_settings_member_readonly.png"
+    },
+    {
+      "id": "TC-03",
+      "name": "Cài đặt Dự án (Project Settings) & phân vai PM vs Member trong dự án",
+      "status": "PASSED",
+      "screenshot": "/home/dthai24/SmartTask/docs/test-reports/rbac/TC03_pm_project_settings.png"
+    },
+    {
+      "id": "TC-04",
+      "name": "Cấu hình Hệ thống AI dành riêng cho Admin/Owner",
+      "status": "PASSED",
+      "screenshot": "/home/dthai24/SmartTask/docs/test-reports/rbac/TC04_ai_settings_admin_owner.png"
+    }
+  ]
+}

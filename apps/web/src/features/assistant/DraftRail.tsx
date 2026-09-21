@@ -2,13 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertCircle, Check, CheckCircle2, Clock, Edit2, ExternalLink, Layers, RefreshCw, Trash2, Loader2 } from "lucide-react";
+import { AlertCircle, Check, CheckCircle2, Clock, Edit2, ExternalLink, Layers, RefreshCw, Trash2, Loader2, ChevronDown } from "lucide-react";
 import type { DraftPatch } from "@smarttask/shared";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -84,8 +85,14 @@ export function DraftRail(p: DraftRailProps) {
             {p.proposals.map((proposal) => {
               const resolver = makeResolver(proposal.codeMap, p.members, p.sprints, p.skills);
               const draftItems = proposal.items.filter((i) => i.status === "DRAFT");
+              const appliedItems = proposal.items.filter((i) => i.status === "APPLIED");
+              const otherItems = proposal.items.filter((i) => i.status !== "DRAFT" && i.status !== "APPLIED");
               const selectedKeys = draftItems.filter((i) => selected[`${proposal.id}:${i.draftKey}`]).map((i) => i.draftKey);
               const canApply = proposal.status === "DRAFT" && draftItems.length > 0;
+              const appliedKeys = appliedItems
+                .map((i) => proposal.applied?.tasks.find((t) => t.draftKey === i.draftKey)?.key ?? i.draftKey)
+                .filter(Boolean)
+                .join(", ");
               return (
                 <Card
                   key={proposal.id}
@@ -115,7 +122,8 @@ export function DraftRail(p: DraftRailProps) {
                   </CardHeader>
 
                   <CardContent className="p-2 space-y-2">
-                    {proposal.items.map((item) => (
+                    {/* Items DRAFT luôn mở */}
+                    {draftItems.map((item) => (
                       <DraftItemCard
                         key={item.draftKey}
                         item={item}
@@ -131,6 +139,69 @@ export function DraftRail(p: DraftRailProps) {
                         onPatch={(patch) => p.onPatch(proposal, item.draftKey, patch)}
                         disabled={p.busy}
                         highlight={p.highlightedKeys.has(item.draftKey)}
+                        refCallback={(el) => {
+                          p.itemRefs.current[item.draftKey] = el;
+                        }}
+                      />
+                    ))}
+
+                    {/* Nhóm item đã duyệt (xanh) thu gọn mặc định thành dòng "Đã tạo N việc · ST-xx" (Collapsible) */}
+                    {appliedItems.length > 0 && (
+                      <Collapsible defaultOpen={false} className="pt-1">
+                        <CollapsibleTrigger asChild>
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-success/10 border border-success/30 text-success text-xs font-medium cursor-pointer hover:bg-success/15 transition-colors group">
+                            <span className="flex items-center gap-1.5 truncate">
+                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
+                              <span className="truncate">
+                                Đã tạo {appliedItems.length} việc · {appliedKeys || "Hoàn thành"}
+                              </span>
+                            </span>
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform duration-200" />
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-2 pt-2">
+                          {appliedItems.map((item) => (
+                            <DraftItemCard
+                              key={item.draftKey}
+                              item={item}
+                              projectId={p.projectId}
+                              assigneeName={resolver.user(item.assignee)?.name ?? item.assignee ?? null}
+                              taskKey={proposal.applied?.tasks.find((t) => t.draftKey === item.draftKey)?.key ?? null}
+                              skillLabel={resolver.skillLabel}
+                              members={p.members}
+                              userCodeOf={resolver.userCodeOf}
+                              selected={false}
+                              onToggle={() => {}}
+                              onDiscard={() => {}}
+                              onPatch={() => {}}
+                              disabled={true}
+                              highlight={p.highlightedKeys.has(item.draftKey)}
+                              refCallback={(el) => {
+                                p.itemRefs.current[item.draftKey] = el;
+                              }}
+                            />
+                          ))}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+
+                    {/* Các mục khác nếu có (như DISCARDED) */}
+                    {otherItems.map((item) => (
+                      <DraftItemCard
+                        key={item.draftKey}
+                        item={item}
+                        projectId={p.projectId}
+                        assigneeName={resolver.user(item.assignee)?.name ?? item.assignee ?? null}
+                        taskKey={null}
+                        skillLabel={resolver.skillLabel}
+                        members={p.members}
+                        userCodeOf={resolver.userCodeOf}
+                        selected={false}
+                        onToggle={() => {}}
+                        onDiscard={() => {}}
+                        onPatch={() => {}}
+                        disabled={p.busy}
+                        highlight={false}
                         refCallback={(el) => {
                           p.itemRefs.current[item.draftKey] = el;
                         }}
@@ -199,9 +270,15 @@ function DraftItemCard({ item, projectId, assigneeName, taskKey, skillLabel, mem
   const isDraft = item.status === "DRAFT";
   const isApplied = item.status === "APPLIED";
   const isDiscarded = item.status === "DISCARDED";
-
   return (
-    <div ref={refCallback} className={cn("p-2.5 rounded-lg border text-xs transition-all space-y-2", draftItemClasses(item.status), highlight && "ring-2 ring-info")}>
+    <div
+      ref={refCallback}
+      className={cn(
+        "p-2.5 rounded-lg border text-xs transition-all duration-300 space-y-2",
+        draftItemClasses(item.status),
+        highlight && "ring-2 ring-info bg-info/20 shadow-sm animate-pulse"
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 flex-1 min-w-0">
           {isDraft && <Checkbox checked={selected} onCheckedChange={onToggle} className="mt-0.5" disabled={disabled} />}

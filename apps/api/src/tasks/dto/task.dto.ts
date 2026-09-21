@@ -148,6 +148,21 @@ export class UpdateTaskDto extends VersionedDto {
   @IsOptional()
   @IsUUID()
   sprintId?: string | null;
+  @ApiPropertyOptional({
+    description: 'Gán người thực hiện duy nhất (hoặc null để gỡ)',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  assigneeId?: string | null;
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Danh sách ID người thực hiện',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUUID('4', { each: true })
+  assigneeIds?: string[];
 }
 
 export class MoveTaskDto extends VersionedDto {

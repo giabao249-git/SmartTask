@@ -1,14 +1,31 @@
 /**
- * Dữ liệu mẫu cho dev/demo (idempotent — chạy lại không tạo trùng). Chạy: npm run db:seed
- *   - 3 tài khoản lan/minh/huy@smarttask.local (mật khẩu Demo@1234)
- *   - workspace "SmartTask Demo" (slug smarttask-demo, Lan OWNER, Minh/Huy MEMBER) + 30 kỹ năng mẫu + danh tính/alias
- *   - dự án ST "SmartTask v1" (PM Lan) với cột mặc định, 1 sprint đang chạy + 1 sprint kế hoạch, 8 task
- * Phase 10 mở rộng thành bộ demo 3 tuần (docs/04-kien-truc/08 §5).
+ * SmartTask Production-Ready Seed Script
+ * Xóa sạch dữ liệu rác cũ và nạp lại dữ liệu mẫu chuẩn cho kiểm thử phân quyền & AI
+ * 
+ * 6 Tài khoản test với các Role khác nhau (Mật khẩu chung: Demo@1234):
+ *  1. admin@smarttask.local  -> Bùi Hoàng Long    (Platform Super Admin / SUPER_ADMIN)
+ *  2. lan@smarttask.local    -> Nguyễn Thị Lan     (Workspace OWNER & Project PM)
+ *  3. quang@smarttask.local  -> Đỗ Hồng Quang     (Workspace ADMIN & Project PM)
+ *  4. minh@smarttask.local   -> Trần Quang Minh    (Workspace MEMBER & Backend Developer)
+ *  5. huy@smarttask.local    -> Lê Đức Huy        (Workspace MEMBER & Frontend/QA Engineer)
+ *  6. mai@smarttask.local    -> Phạm Phương Mai   (Workspace VIEWER - Chỉ xem, không sửa)
  */
-import { PrismaClient, WorkspaceRole, ProjectRole, SprintStatus, Priority } from '@prisma/client';
+import {
+  PrismaClient,
+  WorkspaceRole,
+  ProjectRole,
+  SprintStatus,
+  Priority,
+  PlatformRole,
+  AiPurpose,
+  AiProvider,
+  AiLogStatus,
+} from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { DEFAULT_SKILLS } from '../src/skills/skill-seed';
 import { defaultWorkspaceSettings } from '../src/workspaces/workspace-settings';
+import { AI_CATALOG_SEED } from '../src/ai/ai-config/ai-catalog.seed';
 
 const prisma = new PrismaClient();
 
@@ -22,157 +39,651 @@ const DEFAULT_COLUMNS = [
 const day = (offset: number): Date => {
   const d = new Date();
   d.setUTCHours(0, 0, 0, 0);
-  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7) + offset); // offset từ Thứ Hai tuần này
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7) + offset);
   return d;
 };
 
-async function main(): Promise<void> {
-  const passwordHash = await bcrypt.hash('Demo@1234', 12);
-  const users = [
-    { email: 'lan@smarttask.local', fullName: 'Nguyễn Thị Lan', shortName: 'Lan' },
-    { email: 'minh@smarttask.local', fullName: 'Trần Quang Minh', shortName: 'Minh' },
-    { email: 'huy@smarttask.local', fullName: 'Lê Đức Huy', shortName: 'Huy' },
-  ];
-  const ids: Record<string, string> = {};
-  for (const u of users) {
-    const row = await prisma.user.upsert({ where: { email: u.email }, update: {}, create: { ...u, passwordHash } });
-    ids[u.shortName] = row.id;
-  }
-  console.log(`Seed: ${users.length} tài khoản demo (mật khẩu Demo@1234)`);
+async function cleanDatabase(): Promise<void> {
+  console.log('🧹 [1/6] Đang dọn dẹp và xóa các dữ liệu cũ rác...');
+  await prisma.systemAuditLog.deleteMany({});
+  await prisma.supportAccessSession.deleteMany({});
+  await prisma.aiTokenLog.deleteMany({});
+  await prisma.aiProposal.deleteMany({});
+  await prisma.aiFeedback.deleteMany({});
+  await prisma.chatMessage.deleteMany({});
+  await prisma.chatSession.deleteMany({});
+  await prisma.aiConfig.deleteMany({});
+  await prisma.aiPromptConfig.deleteMany({});
+  await prisma.aiMemory.deleteMany({});
+  await prisma.aiHabit.deleteMany({});
+  await prisma.notification.deleteMany({});
+  await prisma.pushSubscription.deleteMany({});
+  await prisma.activityLog.deleteMany({});
+  await prisma.comment.deleteMany({});
+  await prisma.mention.deleteMany({});
+  await prisma.attachment.deleteMany({});
+  await prisma.taskAssignee.deleteMany({});
+  await prisma.taskSkill.deleteMany({});
+  await prisma.taskDependency.deleteMany({});
+  await prisma.taskLabel.deleteMany({});
+  await prisma.taskReview.deleteMany({});
+  await prisma.timeEntry.deleteMany({});
+  await prisma.task.deleteMany({});
+  await prisma.burndownSnapshot.deleteMany({});
+  await prisma.sprint.deleteMany({});
+  await prisma.boardColumn.deleteMany({});
+  await prisma.label.deleteMany({});
+  await prisma.projectMember.deleteMany({});
+  await prisma.project.deleteMany({});
+  await prisma.userSkill.deleteMany({});
+  await prisma.memberAlias.deleteMany({});
+  await prisma.skillAlias.deleteMany({});
+  await prisma.skill.deleteMany({});
+  await prisma.workspaceMember.deleteMany({});
+  await prisma.invitation.deleteMany({});
+  await prisma.refreshToken.deleteMany({});
+  await prisma.userTimeOff.deleteMany({});
+  await prisma.workloadAlert.deleteMany({});
+  await prisma.workloadSnapshot.deleteMany({});
+  await prisma.calendarEvent.deleteMany({});
+  await prisma.calendarConnection.deleteMany({});
+  await prisma.userMetricsWeekly.deleteMany({});
+  await prisma.workspace.deleteMany({});
+  await prisma.user.deleteMany({});
+  console.log('   ✅ Đã dọn dẹp sạch toàn bộ dữ liệu cũ!');
+}
 
-  // ── Workspace ──
-  let ws = await prisma.workspace.findUnique({ where: { slug: 'smarttask-demo' } });
-  if (!ws) {
-    ws = await prisma.workspace.create({
-      data: {
-        name: 'SmartTask Demo',
-        slug: 'smarttask-demo',
-        ownerId: ids.Lan,
-        settings: defaultWorkspaceSettings(),
-        members: {
-          create: [
-            { userId: ids.Lan, role: WorkspaceRole.OWNER, title: 'PM', department: 'Phòng Phát triển' },
-            { userId: ids.Minh, role: WorkspaceRole.MEMBER, title: 'Backend', department: 'Phòng Phát triển', managerUserId: ids.Lan },
-            { userId: ids.Huy, role: WorkspaceRole.MEMBER, title: 'Frontend', department: 'Phòng Phát triển', managerUserId: ids.Lan },
-          ],
+async function seedAiCatalog(): Promise<void> {
+  console.log('🤖 [2/6] Đang đồng bộ danh mục Model AI (bao gồm DeepSeek V4 Flash & Gemini)...');
+  for (const model of AI_CATALOG_SEED) {
+    await prisma.aiModelCatalog.upsert({
+      where: {
+        provider_model: {
+          provider: model.provider,
+          model: model.model,
         },
       },
+      update: {
+        label: model.label,
+        inputPrice: model.inputPrice,
+        outputPrice: model.outputPrice,
+        cachedInputPrice: model.cachedInputPrice,
+        contextWindow: model.contextWindow,
+        isReasoning: model.isReasoning,
+        supportsStructuredOutput: model.supportsStructuredOutput,
+        sortOrder: model.sortOrder,
+      },
+      create: model,
     });
-    for (const s of DEFAULT_SKILLS)
-      await prisma.skill.create({
-        data: { workspaceId: ws.id, name: s.name, category: s.category, aliases: { create: (s.aliases ?? []).map((alias) => ({ alias })) } },
-      });
-    for (const [userId, alias] of [
-      [ids.Lan, 'chị Lan'],
-      [ids.Minh, 'Minh BE'],
-      [ids.Huy, 'Huy FE'],
-    ] as const)
-      await prisma.memberAlias.create({ data: { workspaceId: ws.id, userId, alias, createdById: ids.Lan } });
-    console.log('Seed: workspace SmartTask Demo + 30 kỹ năng + alias');
   }
+  console.log(`   ✅ Đã nạp ${AI_CATALOG_SEED.length} models vào AiModelCatalog!`);
+}
+
+async function main(): Promise<void> {
+  console.log('🚀 Bắt đầu quy trình Seed dữ liệu mẫu cho SmartTask...');
+  
+  await cleanDatabase();
+  await seedAiCatalog();
+
+  console.log('👥 [3/6] Đang tạo 6 tài khoản mẫu với đầy đủ phân cấp Role...');
+  const passwordHash = await bcrypt.hash('Demo@1234', 10);
+
+  const testAccounts = [
+    {
+      key: 'Long',
+      email: 'admin@smarttask.local',
+      fullName: 'Bùi Hoàng Long',
+      shortName: 'Long (Super Admin)',
+      isSuperAdmin: true,
+      platformRole: PlatformRole.SUPER_ADMIN,
+    },
+    {
+      key: 'Lan',
+      email: 'lan@smarttask.local',
+      fullName: 'Nguyễn Thị Lan',
+      shortName: 'Lan (Owner/PM)',
+      isSuperAdmin: false,
+      platformRole: null,
+    },
+    {
+      key: 'Quang',
+      email: 'quang@smarttask.local',
+      fullName: 'Đỗ Hồng Quang',
+      shortName: 'Quang (Admin)',
+      isSuperAdmin: false,
+      platformRole: null,
+    },
+    {
+      key: 'Minh',
+      email: 'minh@smarttask.local',
+      fullName: 'Trần Quang Minh',
+      shortName: 'Minh (BE Dev)',
+      isSuperAdmin: false,
+      platformRole: null,
+    },
+    {
+      key: 'Huy',
+      email: 'huy@smarttask.local',
+      fullName: 'Lê Đức Huy',
+      shortName: 'Huy (FE/QA)',
+      isSuperAdmin: false,
+      platformRole: null,
+    },
+    {
+      key: 'Mai',
+      email: 'mai@smarttask.local',
+      fullName: 'Phạm Phương Mai',
+      shortName: 'Mai (Viewer)',
+      isSuperAdmin: false,
+      platformRole: null,
+    },
+  ];
+
+  const userMap: Record<string, string> = {};
+  for (const acc of testAccounts) {
+    const user = await prisma.user.create({
+      data: {
+        email: acc.email,
+        fullName: acc.fullName,
+        shortName: acc.shortName,
+        passwordHash,
+        isSuperAdmin: acc.isSuperAdmin,
+        platformRole: acc.platformRole,
+        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${acc.key}`,
+      },
+    });
+    userMap[acc.key] = user.id;
+  }
+  console.log('   ✅ Đã tạo 6 tài khoản người dùng mẫu (Mật khẩu: Demo@1234)!');
+
+  console.log('🏢 [4/6] Đang tạo Workspace "SmartTask Demo" và phân quyền thành viên...');
+  const ws = await prisma.workspace.create({
+    data: {
+      name: 'SmartTask Demo',
+      slug: 'smarttask-demo',
+      ownerId: userMap.Lan,
+      settings: defaultWorkspaceSettings(),
+      members: {
+        create: [
+          { userId: userMap.Lan, role: WorkspaceRole.OWNER, title: 'Project Manager', department: 'Ban Giám đốc' },
+          { userId: userMap.Long, role: WorkspaceRole.ADMIN, title: 'Platform Architect', department: 'Hạ tầng' },
+          { userId: userMap.Quang, role: WorkspaceRole.ADMIN, title: 'Engineering Lead', department: 'Phát triển' },
+          { userId: userMap.Minh, role: WorkspaceRole.MEMBER, title: 'Backend Developer', department: 'Phát triển', managerUserId: userMap.Quang },
+          { userId: userMap.Huy, role: WorkspaceRole.MEMBER, title: 'Frontend / QA', department: 'Phát triển', managerUserId: userMap.Quang },
+          { userId: userMap.Mai, role: WorkspaceRole.VIEWER, title: 'Khách hàng / Stakeholder', department: 'Đối tác' },
+        ],
+      },
+    },
+  });
   const wsId = ws.id;
 
-  // ── Kỹ năng cá nhân ──
-  const skills = await prisma.skill.findMany({ where: { workspaceId: wsId }, select: { id: true, name: true } });
-  const skillId = (name: string) => skills.find((s) => s.name === name)?.id;
-  const levels: Record<string, [string, number][]> = {
-    Lan: [['React', 4], ['Next.js', 4], ['TypeScript', 4], ['Scrum / Agile', 5], ['Phân tích nghiệp vụ', 4]],
-    Minh: [['NestJS', 5], ['Node.js', 4], ['PostgreSQL', 4], ['Prisma', 4], ['Docker', 3]],
-    Huy: [['React', 4], ['Tailwind CSS', 4], ['HTML/CSS', 5], ['UI Testing', 3], ['Figma', 3]],
-  };
-  for (const [name, list] of Object.entries(levels))
-    for (const [skill, level] of list) {
-      const sid = skillId(skill);
-      if (!sid) continue;
-      await prisma.userSkill.upsert({
-        where: { userId_skillId: { userId: ids[name], skillId: sid } },
-        update: {},
-        create: { userId: ids[name], skillId: sid, level },
-      });
-    }
-
-  // ── Dự án ──
-  let project = await prisma.project.findFirst({ where: { workspaceId: wsId, key: 'ST' } });
-  if (!project) {
-    project = await prisma.project.create({
+  // Nạp danh mục kỹ năng
+  for (const s of DEFAULT_SKILLS) {
+    await prisma.skill.create({
       data: {
         workspaceId: wsId,
-        key: 'ST',
-        name: 'SmartTask v1',
-        description: 'Nền tảng quản trị dự án Agile/Kanban cân bằng tải & AI Agent',
-        startDate: day(-14),
-        endDate: day(42),
-        taskCounter: 8,
-        members: {
-          create: [
-            { userId: ids.Lan, role: ProjectRole.PM },
-            { userId: ids.Minh, role: ProjectRole.MEMBER },
-            { userId: ids.Huy, role: ProjectRole.MEMBER },
-          ],
-        },
-        columns: { create: DEFAULT_COLUMNS },
-        labels: {
-          create: [
-            { name: 'backend', color: '#2563eb' },
-            { name: 'frontend', color: '#16a34a' },
-            { name: 'bug', color: '#dc2626' },
-          ],
-        },
+        name: s.name,
+        category: s.category,
+        aliases: { create: (s.aliases ?? []).map((alias) => ({ alias })) },
       },
     });
-    const columns = await prisma.boardColumn.findMany({ where: { projectId: project.id }, orderBy: { position: 'asc' } });
-    const col = (key: string) => columns.find((c) => c.statusKey === key)!.id;
-    const sprint1 = await prisma.sprint.create({
-      data: { projectId: project.id, name: 'Sprint 1', goal: 'Đăng nhập & bảng Kanban', startDate: day(-7), endDate: day(4), status: SprintStatus.ACTIVE, startedAt: day(-7), scopeHoursInitial: 52 },
-    });
-    const sprint2 = await prisma.sprint.create({
-      data: { projectId: project.id, name: 'Sprint 2', goal: 'Tải nhân sự & Trợ lý AI', startDate: day(7), endDate: day(18), status: SprintStatus.PLANNED },
-    });
-    const tasks: {
-      title: string; col: string; sprint: string | null; hours: number; difficulty: number; priority: Priority; assignee?: string; skill?: string; start: number; due: number; progress?: number; done?: boolean;
-    }[] = [
-      { title: 'Thiết kế schema người dùng & workspace', col: 'DONE', sprint: sprint1.id, hours: 8, difficulty: 3, priority: Priority.HIGH, assignee: 'Minh', skill: 'Prisma', start: -7, due: -5, progress: 100, done: true },
-      { title: 'API đăng nhập / refresh token', col: 'REVIEW', sprint: sprint1.id, hours: 12, difficulty: 4, priority: Priority.HIGH, assignee: 'Minh', skill: 'NestJS', start: -6, due: 1, progress: 80 },
-      { title: 'Màn đăng nhập & AppShell', col: 'IN_PROGRESS', sprint: sprint1.id, hours: 10, difficulty: 3, priority: Priority.MEDIUM, assignee: 'Huy', skill: 'React', start: -4, due: 2, progress: 50 },
-      { title: 'Bảng Kanban kéo thả có WIP', col: 'IN_PROGRESS', sprint: sprint1.id, hours: 16, difficulty: 4, priority: Priority.HIGH, assignee: 'Huy', skill: 'React', start: -3, due: 4, progress: 30 },
-      { title: 'Socket.io phòng dự án + presence', col: 'TODO', sprint: sprint1.id, hours: 6, difficulty: 3, priority: Priority.MEDIUM, assignee: 'Minh', skill: 'Socket.io', start: 0, due: 4 },
-      { title: 'Tính tải theo tuần & cảnh báo quá tải', col: 'TODO', sprint: sprint2.id, hours: 14, difficulty: 4, priority: Priority.HIGH, skill: 'NestJS', start: 7, due: 12 },
-      { title: 'Màn Workload heatmap', col: 'TODO', sprint: sprint2.id, hours: 10, difficulty: 3, priority: Priority.MEDIUM, skill: 'React', start: 8, due: 14 },
-      { title: 'Viết tài liệu API Swagger', col: 'TODO', sprint: null, hours: 4, difficulty: 2, priority: Priority.LOW, skill: 'Viết tài liệu', start: 0, due: 18 },
-    ];
-    let number = 1;
-    for (const t of tasks) {
-      const sid = t.skill ? skillId(t.skill) : undefined;
-      await prisma.task.create({
+  }
+
+  // Gán kỹ năng cho các thành viên
+  const skills = await prisma.skill.findMany({ where: { workspaceId: wsId } });
+  const getSkillId = (name: string) => skills.find((s) => s.name === name)?.id;
+
+  const memberSkills: Record<string, [string, number][]> = {
+    Lan: [['Scrum / Agile', 5], ['Phân tích nghiệp vụ', 5], ['React', 4]],
+    Long: [['Docker', 5], ['PostgreSQL', 5], ['NestJS', 5], ['Prisma', 5]],
+    Quang: [['NestJS', 5], ['Node.js', 5], ['Scrum / Agile', 4], ['Docker', 4]],
+    Minh: [['NestJS', 5], ['PostgreSQL', 4], ['Node.js', 4], ['Prisma', 4]],
+    Huy: [['React', 5], ['Next.js', 4], ['Tailwind CSS', 5], ['UI Testing', 4]],
+    Mai: [['Phân tích nghiệp vụ', 3]],
+  };
+
+  for (const [key, list] of Object.entries(memberSkills)) {
+    for (const [skillName, level] of list) {
+      const sid = getSkillId(skillName);
+      if (!sid) continue;
+      await prisma.userSkill.create({
         data: {
-          projectId: project.id,
-          sprintId: t.sprint,
-          columnId: col(t.col),
-          number: number++,
-          title: t.title,
-          priority: t.priority,
-          difficulty: t.difficulty,
-          estimateHours: t.hours,
-          remainingHours: t.done ? 0 : Math.round(t.hours * (1 - (t.progress ?? 0) / 100)),
-          progress: t.progress ?? 0,
-          position: number * 1000,
-          startDate: day(t.start),
-          dueDate: day(t.due),
-          createdById: ids.Lan,
-          startedAt: (t.progress ?? 0) > 0 ? day(t.start) : null,
-          completedAt: t.done ? day(t.due) : null,
-          assignees: t.assignee ? { create: [{ userId: ids[t.assignee] }] } : undefined,
-          skills: sid ? { create: [{ skillId: sid, minLevel: 3 }] } : undefined,
+          userId: userMap[key],
+          skillId: sid,
+          level,
         },
       });
     }
-    console.log(`Seed: dự án ST với ${tasks.length} task, 2 sprint`);
   }
+
+  console.log('🤖 [5/6] Đang cấu hình AI Workspace (DeepSeek V4 Flash & Gemini)...');
+  // Cấu hình AI cho workspace
+  const deepseekModel = await prisma.aiModelCatalog.findUnique({
+    where: { provider_model: { provider: AiProvider.DEEPSEEK, model: 'deepseek-v4-flash' } },
+  });
+  const geminiFlash = await prisma.aiModelCatalog.findUnique({
+    where: { provider_model: { provider: AiProvider.GEMINI, model: 'gemini-2.5-flash' } },
+  });
+  const geminiLite = await prisma.aiModelCatalog.findUnique({
+    where: { provider_model: { provider: AiProvider.GEMINI, model: 'gemini-2.5-flash-lite' } },
+  });
+
+  if (deepseekModel) {
+    await prisma.aiConfig.create({
+      data: {
+        workspaceId: wsId,
+        name: 'Cấu hình Mặc định (DeepSeek V4 Flash)',
+        purpose: AiPurpose.GENERAL,
+        catalogId: deepseekModel.id,
+        createdById: userMap.Lan,
+        advancedParams: { temperature: 0.7, maxOutputTokens: 4096 },
+      },
+    });
+    await prisma.aiConfig.create({
+      data: {
+        workspaceId: wsId,
+        name: 'Trợ lý Hội thoại (DeepSeek V4 Flash)',
+        purpose: AiPurpose.CHAT,
+        catalogId: deepseekModel.id,
+        createdById: userMap.Lan,
+        advancedParams: { temperature: 0.8, maxOutputTokens: 4096 },
+      },
+    });
+  }
+
+  if (geminiFlash) {
+    await prisma.aiConfig.create({
+      data: {
+        workspaceId: wsId,
+        name: 'Phân rã WBS & Đề xuất Task (Gemini 2.5 Flash)',
+        purpose: AiPurpose.DECOMPOSE,
+        catalogId: geminiFlash.id,
+        createdById: userMap.Lan,
+        advancedParams: { temperature: 0.4, maxOutputTokens: 4096 },
+      },
+    });
+  }
+
+  if (geminiLite) {
+    await prisma.aiConfig.create({
+      data: {
+        workspaceId: wsId,
+        name: 'Giải thích Tiến độ & Rủi ro (Gemini 2.5 Flash-Lite)',
+        purpose: AiPurpose.EXPLAIN,
+        catalogId: geminiLite.id,
+        createdById: userMap.Lan,
+        advancedParams: { temperature: 0.3, maxOutputTokens: 2048 },
+      },
+    });
+  }
+
+  // Tạo một số dòng AiTokenLog mẫu phục vụ FinOps
+  await prisma.aiTokenLog.createMany({
+    data: [
+      {
+        workspaceId: wsId,
+        userId: userMap.Lan,
+        provider: 'DEEPSEEK',
+        model: 'deepseek-v4-flash',
+        purpose: AiPurpose.GENERAL,
+        status: AiLogStatus.SUCCESS,
+        totalTokens: 1450,
+        inputTokens: 950,
+        outputTokens: 500,
+        estimatedCost: 0.00027,
+        durationMs: 420,
+        endpoint: '/chat/completions',
+        promptChars: 3800,
+        promptHash: 'hash_seed_01',
+      },
+      {
+        workspaceId: wsId,
+        userId: userMap.Minh,
+        provider: 'DEEPSEEK',
+        model: 'deepseek-v4-flash',
+        purpose: AiPurpose.CHAT,
+        status: AiLogStatus.SUCCESS,
+        totalTokens: 2300,
+        inputTokens: 1500,
+        outputTokens: 800,
+        estimatedCost: 0.00043,
+        durationMs: 510,
+        endpoint: '/chat/completions',
+        promptChars: 5600,
+        promptHash: 'hash_seed_02',
+      },
+      {
+        workspaceId: wsId,
+        userId: userMap.Quang,
+        provider: 'GEMINI',
+        model: 'gemini-2.5-flash',
+        purpose: AiPurpose.DECOMPOSE,
+        status: AiLogStatus.SUCCESS,
+        totalTokens: 4200,
+        inputTokens: 3000,
+        outputTokens: 1200,
+        estimatedCost: 0.0039,
+        durationMs: 980,
+        endpoint: '/models/gemini-2.5-flash:generateContent',
+        promptChars: 11200,
+        promptHash: 'hash_seed_03',
+      },
+    ],
+  });
+
+  console.log('📌 [6/6] Đang tạo Dự án ST "SmartTask v1", Sprints và 10 Task mẫu...');
+  const project = await prisma.project.create({
+    data: {
+      workspaceId: wsId,
+      key: 'ST',
+      name: 'SmartTask v1',
+      description: 'Nền tảng quản trị dự án Agile/Kanban cân bằng tải & AI Agent',
+      startDate: day(-14),
+      endDate: day(42),
+      taskCounter: 10,
+      members: {
+        create: [
+          { userId: userMap.Lan, role: ProjectRole.PM },
+          { userId: userMap.Long, role: ProjectRole.MEMBER },
+          { userId: userMap.Quang, role: ProjectRole.MEMBER },
+          { userId: userMap.Minh, role: ProjectRole.MEMBER },
+          { userId: userMap.Huy, role: ProjectRole.MEMBER },
+          { userId: userMap.Mai, role: ProjectRole.MEMBER },
+        ],
+      },
+      columns: { create: DEFAULT_COLUMNS },
+      labels: {
+        create: [
+          { name: 'backend', color: '#2563eb' },
+          { name: 'frontend', color: '#16a34a' },
+          { name: 'ai', color: '#8b5cf6' },
+          { name: 'security', color: '#dc2626' },
+        ],
+      },
+    },
+  });
+
+  const columns = await prisma.boardColumn.findMany({
+    where: { projectId: project.id },
+    orderBy: { position: 'asc' },
+  });
+  const colMap = (key: string) => columns.find((c) => c.statusKey === key)!.id;
+
+  const sprint1 = await prisma.sprint.create({
+    data: {
+      projectId: project.id,
+      name: 'Sprint 1',
+      goal: 'Kiến trúc RBAC, Cổng Admin & Tích hợp DeepSeek V4 Flash',
+      startDate: day(-7),
+      endDate: day(7),
+      status: SprintStatus.ACTIVE,
+      startedAt: day(-7),
+      scopeHoursInitial: 68,
+    },
+  });
+
+  const sprint2 = await prisma.sprint.create({
+    data: {
+      projectId: project.id,
+      name: 'Sprint 2',
+      goal: 'Cân bằng tải Workload & Trợ lý AI phân rã WBS',
+      startDate: day(8),
+      endDate: day(22),
+      status: SprintStatus.PLANNED,
+    },
+  });
+
+  const sampleTasks = [
+    {
+      title: 'Thiết kế schema đa người dùng & phân quyền RBAC 3 cấp',
+      col: 'DONE',
+      sprint: sprint1.id,
+      hours: 8,
+      difficulty: 4,
+      priority: Priority.HIGH,
+      assignee: 'Minh',
+      skill: 'Prisma',
+      start: -7,
+      due: -5,
+      progress: 100,
+      done: true,
+    },
+    {
+      title: 'API xác thực JWT & bảo vệ cổng quản trị /admin',
+      col: 'DONE',
+      sprint: sprint1.id,
+      hours: 12,
+      difficulty: 5,
+      priority: Priority.URGENT,
+      assignee: 'Minh',
+      skill: 'NestJS',
+      start: -6,
+      due: -2,
+      progress: 100,
+      done: true,
+    },
+    {
+      title: 'Cấu hình AI Catalog & tích hợp DeepSeek V4 Flash',
+      col: 'REVIEW',
+      sprint: sprint1.id,
+      hours: 10,
+      difficulty: 4,
+      priority: Priority.HIGH,
+      assignee: 'Minh',
+      skill: 'NestJS',
+      start: -4,
+      due: 1,
+      progress: 90,
+    },
+    {
+      title: 'Top Navbar Fixed & Workspace Switcher công thái học',
+      col: 'IN_PROGRESS',
+      sprint: sprint1.id,
+      hours: 8,
+      difficulty: 3,
+      priority: Priority.MEDIUM,
+      assignee: 'Huy',
+      skill: 'React',
+      start: -3,
+      due: 2,
+      progress: 60,
+    },
+    {
+      title: 'Bảng Kanban kéo thả với WIP limits & bộ lọc Việc của tôi',
+      col: 'IN_PROGRESS',
+      sprint: sprint1.id,
+      hours: 14,
+      difficulty: 4,
+      priority: Priority.HIGH,
+      assignee: 'Huy',
+      skill: 'React',
+      start: -2,
+      due: 4,
+      progress: 40,
+    },
+    // Các task chưa phân công (Unassigned) -> Dùng để test chức năng "+ Nhận task"
+    {
+      title: 'Nút nhận việc nhanh (+ Nhận task) cho các task chưa phân công',
+      col: 'TODO',
+      sprint: sprint1.id,
+      hours: 6,
+      difficulty: 2,
+      priority: Priority.MEDIUM,
+      skill: 'React',
+      start: 0,
+      due: 3,
+    },
+    {
+      title: 'Kiểm thử tự động E2E phân quyền các role với Puppeteer',
+      col: 'TODO',
+      sprint: sprint1.id,
+      hours: 8,
+      difficulty: 3,
+      priority: Priority.HIGH,
+      skill: 'UI Testing',
+      start: 1,
+      due: 5,
+    },
+    {
+      title: 'Cân bằng tải nhân sự theo ma trận kỹ năng phòng ban',
+      col: 'TODO',
+      sprint: sprint2.id,
+      hours: 16,
+      difficulty: 5,
+      priority: Priority.HIGH,
+      skill: 'NestJS',
+      start: 8,
+      due: 15,
+    },
+    {
+      title: 'Trợ lý AI phân rã WBS tự động bằng DeepSeek V4 Flash',
+      col: 'TODO',
+      sprint: sprint2.id,
+      hours: 12,
+      difficulty: 4,
+      priority: Priority.MEDIUM,
+      skill: 'React',
+      start: 10,
+      due: 18,
+    },
+    {
+      title: 'Xuất báo cáo tiến độ Sprint & kiểm toán mật mã HMAC',
+      col: 'TODO',
+      sprint: null,
+      hours: 6,
+      difficulty: 3,
+      priority: Priority.LOW,
+      assignee: 'Long',
+      skill: 'Docker',
+      start: 0,
+      due: 20,
+    },
+  ];
+
+  let taskNumber = 1;
+  for (const t of sampleTasks) {
+    const sid = t.skill ? getSkillId(t.skill) : undefined;
+    await prisma.task.create({
+      data: {
+        projectId: project.id,
+        sprintId: t.sprint,
+        columnId: colMap(t.col),
+        number: taskNumber++,
+        title: t.title,
+        priority: t.priority,
+        difficulty: t.difficulty,
+        estimateHours: t.hours,
+        remainingHours: t.done ? 0 : Math.round(t.hours * (1 - (t.progress ?? 0) / 100)),
+        progress: t.progress ?? 0,
+        position: taskNumber * 1000,
+        startDate: day(t.start),
+        dueDate: day(t.due),
+        createdById: userMap.Lan,
+        startedAt: (t.progress ?? 0) > 0 ? day(t.start) : null,
+        completedAt: t.done ? day(t.due) : null,
+        assignees: t.assignee ? { create: [{ userId: userMap[t.assignee] }] } : undefined,
+        skills: sid ? { create: [{ skillId: sid, minLevel: 3 }] } : undefined,
+      },
+    });
+  }
+
+  // Tạo Audit Log có mã băm HMAC hợp lệ mẫu
+  const secret = process.env.JWT_ACCESS_SECRET || 'smarttask_audit_secret_key';
+  const genesisHash = '0000000000000000000000000000000000000000000000000000000000000000';
+  const logDate1 = new Date(Date.now() - 3600000);
+  const logStr1 = [
+    genesisHash,
+    logDate1.toISOString(),
+    userMap.Long,
+    'SYSTEM_BOOTSTRAP',
+    'Platform',
+    'global',
+    JSON.stringify(null),
+    JSON.stringify({ status: 'INITIALIZED' }),
+    'Khởi tạo dữ liệu seed sạch và nạp danh mục model AI',
+  ].join('|');
+  const hash1 = crypto.createHmac('sha256', secret).update(logStr1).digest('hex');
+
+  await prisma.systemAuditLog.create({
+    data: {
+      createdAt: logDate1,
+      actorId: userMap.Long,
+      actorEmail: 'admin@smarttask.local',
+      action: 'SYSTEM_BOOTSTRAP',
+      targetType: 'Platform',
+      targetId: 'global',
+      reason: 'Khởi tạo dữ liệu seed sạch và nạp danh mục model AI',
+      afterState: { status: 'INITIALIZED' },
+      previousHash: genesisHash,
+      currentHash: hash1,
+    },
+  });
+
+  console.log('\n================================================================');
+  console.log('🎉 SEED DỮ LIỆU THÀNH CÔNG RỰC RỠ! THÔNG TIN CÁC TÀI KHOẢN:');
+  console.log('================================================================');
+  console.table([
+    {
+      Email: 'admin@smarttask.local',
+      Password: 'Demo@1234',
+      Tên: 'Bùi Hoàng Long',
+      'Platform Role': 'SUPER_ADMIN',
+      'Workspace Role': 'ADMIN',
+      'Project Role': 'PM',
+      'Đặc quyền test': 'Vào /admin (Mission Control, FinOps, Telemetry, Maintenance)',
+    },
+    {
+      Email: 'lan@smarttask.local',
+      Password: 'Demo@1234',
+      Tên: 'Nguyễn Thị Lan',
+      'Platform Role': 'None',
+      'Workspace Role': 'OWNER',
+      'Project Role': 'PM',
+      'Đặc quyền test': 'Toàn quyền Workspace Settings, AI Configs, Đổi role, Tạo Sprint',
+    },
+    {
+      Email: 'quang@smarttask.local',
+      Password: 'Demo@1234',
+      Tên: 'Đỗ Hồng Quang',
+      'Platform Role': 'None',
+      'Workspace Role': 'ADMIN',
+      'Project Role': 'PM',
+      'Đặc quyền test': 'Quản lý thành viên, Tải nhân sự, Tạo/quản lý Sprint & Task',
+    },
+    {
+      Email: 'minh@smarttask.local',
+      Password: 'Demo@1234',
+      Tên: 'Trần Quang Minh',
+      'Platform Role': 'None',
+      'Workspace Role': 'MEMBER',
+      'Project Role': 'MEMBER',
+      'Đặc quyền test': 'Test filter "Việc của tôi (Q)", "+ Nhận task", Kéo thả task BE',
+    },
+    {
+      Email: 'huy@smarttask.local',
+      Password: 'Demo@1234',
+      Tên: 'Lê Đức Huy',
+      'Platform Role': 'None',
+      'Workspace Role': 'MEMBER',
+      'Project Role': 'MEMBER',
+      'Đặc quyền test': 'Test nhận task FE, cập nhật tiến độ, chat AI với DeepSeek',
+    },
+    {
+      Email: 'mai@smarttask.local',
+      Password: 'Demo@1234',
+      Tên: 'Phạm Phương Mai',
+      'Platform Role': 'None',
+      'Workspace Role': 'VIEWER',
+      'Project Role': 'MEMBER',
+      'Đặc quyền test': 'Chỉ xem dữ liệu (Read-only), bị khóa quyền tạo/sửa/xóa',
+    },
+  ]);
+  console.log('================================================================\n');
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error('❌ Lỗi khi chạy seed:', e);
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
