@@ -345,8 +345,7 @@ export class AiProviderService {
         inputTokens: usage.prompt_tokens || 0,
         cachedInputTokens: usage.prompt_cache_hit_tokens || 0,
         outputTokens: usage.completion_tokens || 0,
-        reasoningTokens:
-          usage.completion_tokens_details?.reasoning_tokens || 0,
+        reasoningTokens: usage.completion_tokens_details?.reasoning_tokens || 0,
         totalTokens:
           usage.total_tokens ||
           (usage.prompt_tokens || 0) + (usage.completion_tokens || 0),

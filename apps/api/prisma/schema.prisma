@@ -1191,6 +1191,16 @@ model UserMetricsWeekly {
 
 // ───────────────────────── Quản trị Nền tảng (Platform Super Admin) ─────────────────────────
 
+/// Cài đặt cấp nền tảng (bảo trì...) — lưu DB để sống sót restart và đồng nhất khi chạy nhiều pod.
+model PlatformSetting {
+  key         String   @id @db.VarChar(64)
+  value       Json
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedBy   String?  @map("updated_by") @db.VarChar(255)
+
+  @@map("platform_settings")
+}
+
 /// Nhật ký kiểm toán hệ thống bất biến (SOC 2 Type II, HMAC Chaining)
 model SystemAuditLog {
   id           String   @id @default(uuid()) @db.Uuid

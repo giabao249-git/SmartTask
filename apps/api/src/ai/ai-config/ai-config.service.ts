@@ -144,6 +144,10 @@ export class AiConfigService implements OnModuleInit {
     workspaceId: string | null,
     purpose: AiPurpose,
   ): Promise<ResolvedAiConfig> {
+    // Công tắc môi trường: fake/mock luôn thắng cấu hình workspace để dev và e2e không gọi nhà cung cấp thật.
+    const envProvider = this.config.get('AI_PROVIDER', { infer: true });
+    if (envProvider === 'fake' || envProvider === 'mock')
+      return this.fromEnv(purpose);
     const rows = await this.prisma.aiConfig.findMany({
       where: {
         isActive: true,

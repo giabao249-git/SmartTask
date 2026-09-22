@@ -34,6 +34,26 @@ export function isApiError(e: unknown): e is ApiError {
 }
 
 /** Thông điệp tiếng Việt cho toast/Alert — ưu tiên bảng mã lỗi dùng chung. */
+/** Mã lỗi khiến toàn ứng dụng chỉ đọc / ngừng phục vụ — AppShell hiện banner. */
+export const PLATFORM_BLOCK_CODES = ["MAINTENANCE_MODE", "WORKSPACE_SUSPENDED", "WORKSPACE_READ_ONLY"] as const;
+export type PlatformBlock = { code: (typeof PLATFORM_BLOCK_CODES)[number]; message: string; details?: unknown };
+
+let platformBlock: PlatformBlock | null = null;
+const blockListeners = new Set<(b: PlatformBlock | null) => void>();
+
+export const platformBlockStore = {
+  get: () => platformBlock,
+  set(b: PlatformBlock | null) {
+    const same = platformBlock?.code === b?.code;
+    platformBlock = b;
+    if (!same) blockListeners.forEach((l) => l(b));
+  },
+  subscribe(l: (b: PlatformBlock | null) => void) {
+    blockListeners.add(l);
+    return () => blockListeners.delete(l);
+  },
+};
+
 export function describeError(e: unknown): { code: string; message: string } {
   if (isApiError(e)) return { code: e.code, message: e.message };
   if (e instanceof Error) return { code: "INTERNAL", message: e.message };
@@ -136,8 +156,12 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   const parsed = await parseBody(res);
   if (!res.ok) {
     const errBody = parsed && typeof parsed === "object" ? (parsed as Partial<ApiErrorShape>) : null;
-    throw new ApiError(res.status, errBody, typeof parsed === "string" ? parsed : undefined);
+    const err = new ApiError(res.status, errBody, typeof parsed === "string" ? parsed : undefined);
+    const blocked = PLATFORM_BLOCK_CODES.find((c) => c === err.code);
+    platformBlockStore.set(blocked ? { code: blocked, message: err.message, details: err.details } : null);
+    throw err;
   }
+  platformBlockStore.set(null);
   return parsed as T;
 }
 

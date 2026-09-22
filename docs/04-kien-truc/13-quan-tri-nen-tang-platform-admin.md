@@ -849,6 +849,39 @@ gantt
 
 ---
 
+## 6b. Cách thực thi đã hiện thực (cập nhật 22/09/2026)
+
+Bản đầu chỉ đổi cờ trong CSDL và giữ chế độ bảo trì trong RAM nên **không chặn được gì**. Hiện tại:
+
+### 6b.1. Vòng đời workspace có hiệu lực ở tầng truy cập
+
+`apps/api/src/common/access/workspace-access.service.ts` khai báo bảng quy tắc `LIFECYCLE` và hàm `assertLifecycle(status, 'read' | 'write')`:
+
+| Trạng thái | Đọc | Ghi | Mã lỗi trả về |
+| :--- | :---: | :---: | :--- |
+| `ACTIVE`, `WARNING_GRACE` | ✅ | ✅ | — |
+| `READ_ONLY_ENFORCED` | ✅ | ❌ | `403 WORKSPACE_READ_ONLY` |
+| `SOFT_SUSPENDED`, `COLD_STORAGE_ARCHIVED`, `PURGED` | ❌ | ❌ | `403 WORKSPACE_SUSPENDED` |
+
+Hai chốt gọi hàm này, phủ toàn bộ đường ghi:
+- `ProjectAccessService.assertRead / assertEdit / assertManage` — mọi API phạm vi dự án (task, bình luận, đính kèm, sprint, AI).
+- `WorkspaceRoleGuard` — mọi route `/workspaces/:wsId/*` gắn `@WorkspaceRoles`, phân biệt theo phương thức HTTP (POST/PUT/PATCH/DELETE = ghi).
+
+### 6b.2. Chế độ bảo trì lưu CSDL và có guard toàn cục
+
+- Bảng `platform_settings` (khoá `maintenance`) giữ `{ mode, reason, expectedDurationMinutes, updatedAt, updatedBy }` → sống sót restart, đồng nhất khi chạy nhiều pod. `PlatformStateService` cache 5 giây để guard không truy vấn mỗi request.
+- `MaintenanceGuard` (APP_GUARD, sau `JwtAuthGuard`): `READ_ONLY` chặn mọi phương thức ghi, `FULL` chặn cả đọc, trả `503 MAINTENANCE_MODE` kèm `details.mode/reason/since`.
+- Luôn mở: `/auth/*`, `/health`, `/me`, `/admin/*` — để còn đăng nhập, giám sát và tắt bảo trì. Người có `isSuperAdmin` hoặc bất kỳ `platformRole` nào đều đi xuyên được.
+- Web hiển thị banner toàn cục (`apps/web/src/components/app/PlatformBanner.tsx`) khi bắt được ba mã `MAINTENANCE_MODE`, `WORKSPACE_READ_ONLY`, `WORKSPACE_SUSPENDED`.
+
+### 6b.3. Siết vai nền tảng
+
+Đổi vòng đời workspace giới hạn cho `ROOT_ADMIN` và `FINOPS_OPERATOR` (trước đó `CUSTOMER_SUPPORT` cũng đình chỉ được). Bật/tắt bảo trì vẫn chỉ `ROOT_ADMIN`.
+
+Kiểm chứng: `apps/api/test/admin.e2e-spec.ts` (6 ca) — xem `docs/test-reports/platform-admin-test-plan.md` §4.
+
+---
+
 ## 7. Kết luận & Khuyến nghị Kỹ thuật
 
 1. **Sự kết hợp Hybrid là lựa chọn đúng đắn duy nhất**:

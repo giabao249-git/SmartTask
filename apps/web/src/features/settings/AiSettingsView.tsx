@@ -8,6 +8,7 @@ import { AiConfigsTab } from "./AiConfigsTab";
 import { AiModelsTab } from "./AiModelsTab";
 import { AiUsageTab } from "./AiUsageTab";
 import { AiPolicyView } from "./AiPolicyView";
+import { cn } from "@/lib/utils";
 
 interface AiSettingsViewProps {
   workspaceId: string;
@@ -46,13 +47,13 @@ export function AiSettingsView({ workspaceId, canEdit }: AiSettingsViewProps) {
           <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <AlertTitle className="text-xs font-semibold">Chế độ xem (Chỉ đọc)</AlertTitle>
           <AlertDescription className="text-xs">
-            Bạn đang đăng nhập với vai trò Thành viên. Bạn có thể xem danh mục model, gọi thử kết nối và kiểm toán token. Để thêm mới, chỉnh sửa khóa API hoặc chính sách prompt, vui lòng liên hệ Quản trị viên (OWNER / ADMIN) của workspace.
+            Bạn đang đăng nhập với vai trò Thành viên: chỉ xem được cấu hình (khoá API luôn được che) và danh mục model. Gọi thử kết nối, sổ token, sửa khoá API hay chính sách prompt cần vai OWNER / ADMIN của workspace.
           </AlertDescription>
         </Alert>
       )}
 
       <Tabs value={subTab} onValueChange={setSubTab} className="w-full space-y-4">
-        <TabsList className="grid w-full sm:w-[680px] grid-cols-4 bg-muted/60 p-1">
+        <TabsList className={cn("grid w-full bg-muted/60 p-1", canEdit ? "sm:w-[680px] grid-cols-4" : "sm:w-[510px] grid-cols-3")}>
           <TabsTrigger value="configs" className="text-xs gap-1.5 data-[state=active]:font-semibold">
             <KeyRound className="h-3.5 w-3.5" />
             Cấu hình API
@@ -61,10 +62,12 @@ export function AiSettingsView({ workspaceId, canEdit }: AiSettingsViewProps) {
             <Cpu className="h-3.5 w-3.5" />
             Danh mục Model
           </TabsTrigger>
-          <TabsTrigger value="usage" className="text-xs gap-1.5 data-[state=active]:font-semibold">
-            <BarChart3 className="h-3.5 w-3.5" />
-            Sổ Token & Chi phí
-          </TabsTrigger>
+          {canEdit && (
+            <TabsTrigger value="usage" className="text-xs gap-1.5 data-[state=active]:font-semibold">
+              <BarChart3 className="h-3.5 w-3.5" />
+              Sổ Token & Chi phí
+            </TabsTrigger>
+          )}
           <TabsTrigger value="policy" className="text-xs gap-1.5 data-[state=active]:font-semibold">
             <UserCog className="h-3.5 w-3.5" />
             Chính sách & Danh tính
@@ -79,9 +82,11 @@ export function AiSettingsView({ workspaceId, canEdit }: AiSettingsViewProps) {
           <AiModelsTab canEdit={canEdit} />
         </TabsContent>
 
-        <TabsContent value="usage" className="space-y-4 outline-none">
-          <AiUsageTab workspaceId={workspaceId} />
-        </TabsContent>
+        {canEdit && (
+          <TabsContent value="usage" className="space-y-4 outline-none">
+            <AiUsageTab workspaceId={workspaceId} />
+          </TabsContent>
+        )}
 
         <TabsContent value="policy" className="space-y-4 outline-none">
           <AiPolicyView workspaceId={workspaceId} canEdit={canEdit} />

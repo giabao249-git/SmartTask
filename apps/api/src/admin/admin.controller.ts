@@ -61,7 +61,7 @@ export class AdminController {
     summary:
       'Cập nhật trạng thái vòng đời Workspace (Active, Suspended, Grace)',
   })
-  @RequirePlatformRole('ROOT_ADMIN', 'FINOPS_OPERATOR', 'CUSTOMER_SUPPORT')
+  @RequirePlatformRole('ROOT_ADMIN', 'FINOPS_OPERATOR')
   updateWorkspaceStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateWorkspaceStatusDto,

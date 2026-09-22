@@ -65,6 +65,21 @@ Không đổi logic API. Hai chỉnh nhỏ phục vụ chạy web thật:
 
 Bảng màn ↔ endpoint và các mục "chờ backend": `docs/05-hien-thuc/web-tich-hop.md`.
 
+## Rà soát & sửa lỗi phần Quản trị Nền tảng (22/09/2026)
+
+Kiểm thử lại nhánh Platform Admin / DeepSeek (commit `e192301` → `b193264`) trên API và web thật, đã sửa:
+
+| Lỗi | Hiện trạng trước | Cách sửa |
+| :--- | :--- | :--- |
+| Thiếu migration | `schema.prisma` có `is_super_admin`, `platform_role`, vòng đời workspace, `system_audit_logs`, `support_access_sessions`, enum `DEEPSEEK` nhưng không có migration → **toàn bộ 8 bộ e2e chết** (`users.is_super_admin does not exist`), deploy Supabase cũng chết | Sinh `20260921120000_platform_admin_deepseek` bằng `prisma migrate diff` |
+| Đình chỉ workspace không có hiệu lực | Đổi cờ trong DB nhưng member vẫn đọc và **tạo task được** | `assertLifecycle` trong `WorkspaceAccessService`, gọi từ `ProjectAccessService` và `WorkspaceRoleGuard` → `403 WORKSPACE_READ_ONLY` / `WORKSPACE_SUSPENDED` |
+| Bảo trì không có hiệu lực, mất khi restart | `maintenanceState` chỉ nằm trong RAM một tiến trình, không guard nào đọc | Bảng `platform_settings` + `PlatformStateService` (cache 5 s) + `MaintenanceGuard` toàn cục → `503 MAINTENANCE_MODE`; migration `20260922140000_platform_settings` |
+| Seed vô hiệu hoá `AI_PROVIDER=fake` | Seed tạo `ai_configs` (CHAT → DeepSeek) mà `resolve()` ưu tiên config workspace → Trợ lý AI dev **503 vì thiếu khoá DeepSeek**, và sẽ gọi provider thật nếu có khoá | `AiConfigService.resolve()` trả về provider `fake`/`mock` ngay khi `.env` đặt như vậy (công tắc dev/e2e thắng cấu hình workspace) |
+| Sổ token lộ cho MEMBER | `GET /workspaces/:id/ai-usage` mở cho MEMBER → ca e2e "sổ token" fail | Trả lại `@WorkspaceRoles(OWNER, ADMIN)`; web ẩn tab "Sổ Token & Chi phí" và khoá nút "Gọi thử" khi không đủ vai |
+| CSKH đình chỉ được workspace | `@RequirePlatformRole('ROOT_ADMIN','FINOPS_OPERATOR','CUSTOMER_SUPPORT')` | Bỏ `CUSTOMER_SUPPORT` khỏi route đổi vòng đời |
+| Nhãn model cứng | Thanh tiêu đề Trợ lý AI luôn ghi "Gemini 1.5 Flash" | Hiện `provider · model` lấy từ `usage` của lượt gần nhất |
+| Báo cáo kiểm thử giả | `scripts/platform-admin-puppeteer-test.mjs` tự dựng server mock cổng 4005 với route không tồn tại, xuất "5/5 PASSED" | Xoá script và báo cáo/ảnh kèm theo; thay bằng `test/admin.e2e-spec.ts` (6 ca chạy trên API thật) |
+
 ## Chưa làm / phase sau
 
 - Đổi cột/trạng thái task qua chat (`patch.status`) — cảnh báo "chưa hỗ trợ" (cần `move` với vị trí).

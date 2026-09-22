@@ -1,11 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { ProjectRole, WorkspaceRole } from '@prisma/client';
+import {
+  ProjectRole,
+  ProjectStatus,
+  WorkspaceRole,
+  type WorkspaceLifecycleStatus,
+} from '@prisma/client';
 import { AppError } from '../app-error';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertLifecycle } from './workspace-access.service';
 
 export interface ProjectAccess {
   projectId: string;
   workspaceId: string;
+  workspaceStatus: WorkspaceLifecycleStatus;
+  projectArchived: boolean;
   workspaceRole: WorkspaceRole;
   projectRole: ProjectRole | null;
   /** PM của dự án hoặc OWNER/ADMIN workspace */
@@ -29,9 +37,11 @@ export class ProjectAccessService {
       where: { id: projectId },
       select: {
         workspaceId: true,
+        status: true,
         workspace: {
           select: {
             archivedAt: true,
+            status: true,
             members: { where: { userId }, select: { role: true } },
           },
         },
@@ -49,6 +59,8 @@ export class ProjectAccessService {
     return {
       projectId,
       workspaceId: project.workspaceId,
+      workspaceStatus: project.workspace.status,
+      projectArchived: project.status === ProjectStatus.ARCHIVED,
       workspaceRole,
       projectRole,
       canManage: isWsAdmin || projectRole === ProjectRole.PM,
@@ -57,11 +69,14 @@ export class ProjectAccessService {
   }
 
   async assertRead(userId: string, projectId: string): Promise<ProjectAccess> {
-    return this.resolve(userId, projectId);
+    const a = await this.resolve(userId, projectId);
+    assertLifecycle(a.workspaceStatus, 'read');
+    return a;
   }
 
   async assertEdit(userId: string, projectId: string): Promise<ProjectAccess> {
     const a = await this.resolve(userId, projectId);
+    assertLifecycle(a.workspaceStatus, 'write');
     if (!a.canEdit) throw AppError.forbidden({ required: 'thành viên dự án' });
     return a;
   }
@@ -71,6 +86,7 @@ export class ProjectAccessService {
     projectId: string,
   ): Promise<ProjectAccess> {
     const a = await this.resolve(userId, projectId);
+    assertLifecycle(a.workspaceStatus, 'write');
     if (!a.canManage)
       throw AppError.forbidden({ required: 'PM hoặc quản trị workspace' });
     return a;

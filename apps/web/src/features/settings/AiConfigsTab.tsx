@@ -414,7 +414,8 @@ export function AiConfigsTab({ workspaceId, canEdit }: AiConfigsTabProps) {
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={isTesting}
+                              disabled={isTesting || !canEdit}
+                              title={canEdit ? "Gọi thử một lượt ngắn tới nhà cung cấp" : "Cần vai OWNER/ADMIN để gọi thử"}
                               onClick={() => testConnection(c.id)}
                               className="h-7 text-xs gap-1"
                             >

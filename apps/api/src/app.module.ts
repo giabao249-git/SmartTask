@@ -22,6 +22,7 @@ import { SprintsModule } from './sprints/sprints.module';
 import { TasksModule } from './tasks/tasks.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { AdminModule } from './admin/admin.module';
+import { MaintenanceGuard } from './common/guards/maintenance.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { validateEnv, type Env } from './config/env.schema';
@@ -68,6 +69,7 @@ import { UsersModule } from './users/users.module';
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: MaintenanceGuard },
     { provide: APP_GUARD, useClass: WorkspaceRoleGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],

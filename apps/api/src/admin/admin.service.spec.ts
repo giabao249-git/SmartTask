@@ -4,9 +4,11 @@ import { WorkspaceLifecycleStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminAuditService } from './admin-audit.service';
 import { AdminService } from './admin.service';
+import { PlatformStateService } from './platform-state.service';
 
 describe('AdminService', () => {
   let service: AdminService;
+  let stored: { key: string; value: unknown } | null = null;
 
   const mockPrisma = {
     workspace: {
@@ -49,6 +51,16 @@ describe('AdminService', () => {
     refreshToken: {
       deleteMany: jest.fn().mockResolvedValue({ count: 3 }),
     },
+    // Giả lập bảng platform_settings có trạng thái để kiểm tra bảo trì lưu và đọc lại được
+    platformSetting: {
+      findUnique: jest.fn().mockImplementation(() => Promise.resolve(stored)),
+      upsert: jest
+        .fn()
+        .mockImplementation(({ create }: { create: { value: unknown } }) => {
+          stored = create as typeof stored;
+          return Promise.resolve(stored);
+        }),
+    },
     $queryRaw: jest.fn().mockResolvedValue([{ 1: 1 }]),
   };
 
@@ -57,12 +69,14 @@ describe('AdminService', () => {
   };
 
   beforeEach(async () => {
+    stored = null;
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdminService,
         AdminAuditService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: ConfigService, useValue: mockConfig },
+        PlatformStateService,
       ],
     }).compile();
 

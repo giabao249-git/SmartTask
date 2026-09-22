@@ -19,6 +19,11 @@ export const ERROR_CODES = {
   PASSWORD_MISMATCH: 'Mật khẩu hiện tại không đúng',
   // Workspace & thành viên
   WORKSPACE_SLUG_TAKEN: 'Tên rút gọn workspace đã tồn tại',
+  WORKSPACE_READ_ONLY:
+    'Workspace đang ở chế độ chỉ đọc, không thực hiện được thay đổi',
+  WORKSPACE_SUSPENDED:
+    'Workspace đã bị đình chỉ, liên hệ quản trị nền tảng để mở lại',
+  MAINTENANCE_MODE: 'Hệ thống đang bảo trì, vui lòng quay lại sau',
   INVITATION_EXPIRED: 'Lời mời đã hết hạn hoặc không tồn tại',
   LAST_OWNER: 'Workspace phải có ít nhất một chủ sở hữu',
   SKILL_MERGE_SAME: 'Không thể gộp kỹ năng vào chính nó',

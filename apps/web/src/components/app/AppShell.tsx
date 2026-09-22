@@ -33,6 +33,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { ShortcutsDialog } from "@/components/app/ShortcutsDialog";
+import { PlatformBanner } from "@/components/app/PlatformBanner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -907,6 +908,8 @@ export function AppShell({ children }: AppShellProps) {
             </div>
           </div>
         </header>
+
+        <PlatformBanner />
 
         {/* Page Content Container: max-w-screen-2xl p-6 */}
         <main className={cn("flex-1 w-full max-w-screen-2xl mx-auto p-4 sm:p-6 space-y-6", isAssistantPage && "space-y-0")}>

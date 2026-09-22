@@ -164,6 +164,8 @@ export function AssistantView() {
   const sprintsQuery = useSprints(project.id);
   const skillsQuery = useSkills(project.workspaceId);
   const quota = useQuota(project.workspaceId);
+  // Nhãn model hiển thị = model của lượt gần nhất (server quyết định theo cấu hình AI của workspace/.env)
+  const [lastModel, setLastModel] = React.useState<string | null>(null);
   const sessionMut = useSessionMutations(project.id);
   const turn = useChatTurn(project.id, project.workspaceId);
   const apply = useApplyProposal(activeSessionId);
@@ -265,6 +267,7 @@ export function AssistantView() {
       { sessionId: activeSessionId ?? undefined, text: t, selectedCode, sprintId: activeSprintId },
       {
         onSuccess: (res) => {
+          if (res.usage?.model) setLastModel(`${res.usage.provider} · ${res.usage.model}`);
           if (!activeSessionId) setActiveSessionId(res.sessionId);
           // Phiên tạo bằng nút "Phiên mới" chưa có tên → đặt theo tin đầu
           if (!res.session.title) sessionMut.patch.mutate({ id: res.sessionId, title: t.slice(0, 80) });
@@ -410,7 +413,7 @@ export function AssistantView() {
             <h1 className="text-lg font-semibold tracking-tight">Trợ lý AI · {project.key}</h1>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono gap-1 text-muted-foreground border-border/70">
               <Sparkles className="h-2.5 w-2.5 text-info" />
-              <span>Gemini 1.5 Flash</span>
+              <span>{lastModel ?? "model theo cấu hình"}</span>
             </Badge>
             <Badge variant={quota.data && quota.data.remaining <= 3 ? "warning" : "secondary"} className="text-[10px] px-1.5 py-0 font-mono">
               {quota.data ? `${quota.data.used}/${quota.data.limit}` : "7/20"} lượt hôm nay

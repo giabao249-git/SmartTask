@@ -207,11 +207,7 @@ export class AiAdminController {
   // ── Sổ token ───────────────────────────────────────────────
 
   @Get('workspaces/:wsId/ai-usage')
-  @WorkspaceRoles(
-    WorkspaceRole.OWNER,
-    WorkspaceRole.ADMIN,
-    WorkspaceRole.MEMBER,
-  )
+  @WorkspaceRoles(WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
   @ApiOperation({
     summary: 'Chi phí/token theo ngày | mục đích | người (UC-32, 40)',
   })

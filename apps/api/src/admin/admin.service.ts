@@ -12,9 +12,9 @@ import type { JwtUser } from '../common/decorators/current-user.decorator';
 import type { Env } from '../config/env.schema';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminAuditService } from './admin-audit.service';
+import { PlatformStateService } from './platform-state.service';
 import type {
   CreateSupportSessionDto,
-  MaintenanceLevel,
   QueryUsersDto,
   QueryWorkspacesDto,
   SetMaintenanceModeDto,
@@ -22,28 +22,15 @@ import type {
   UpdateWorkspaceStatusDto,
 } from './dto/admin.dto';
 
-export interface MaintenanceState {
-  mode: MaintenanceLevel;
-  reason?: string;
-  expectedDurationMinutes?: number;
-  updatedAt: string;
-  updatedBy?: string;
-}
-
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
-
-  // Trạng thái bảo trì toàn hệ thống trong bộ nhớ (có thể đồng bộ qua Redis khi scale đa pod)
-  private maintenanceState: MaintenanceState = {
-    mode: 'DISABLED',
-    updatedAt: new Date().toISOString(),
-  };
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService<Env, true>,
     private readonly audit: AdminAuditService,
+    private readonly platformState: PlatformStateService,
   ) {}
 
   /** Thống kê Tổng quan Nền tảng (Mission Control KPIs) */
@@ -118,7 +105,7 @@ export class AdminService {
         totalCostUsd: Math.round(totalCostUsd * 1000) / 1000,
         totalCostVnd: Math.round(totalCostUsd * usdVnd),
       },
-      maintenance: this.maintenanceState,
+      maintenance: await this.platformState.getMaintenance(true),
     };
   }
 
@@ -489,25 +476,25 @@ export class AdminService {
         provider: 'postgresql',
         status: dbStatus,
       },
-      maintenance: this.maintenanceState,
+      maintenance: await this.platformState.getMaintenance(true),
     };
   }
 
-  /** Cấu hình Chế độ Bảo trì Toàn sàn */
+  /** Cấu hình Chế độ Bảo trì Toàn sàn — lưu DB, guard đọc lại sau tối đa 5 giây */
   async setMaintenanceMode(
     dto: SetMaintenanceModeDto,
     actor: JwtUser,
     ip?: string,
     ua?: string,
   ) {
-    const before = { ...this.maintenanceState };
-    this.maintenanceState = {
+    const before = await this.platformState.getMaintenance(true);
+    const next = await this.platformState.setMaintenance({
       mode: dto.mode,
       reason: dto.reason,
       expectedDurationMinutes: dto.expectedDurationMinutes,
       updatedAt: new Date().toISOString(),
       updatedBy: actor.email,
-    };
+    });
 
     await this.audit.log({
       actorId: actor.id,
@@ -516,12 +503,12 @@ export class AdminService {
       targetType: 'System',
       ipAddress: ip,
       userAgent: ua,
-      beforeState: before,
-      afterState: this.maintenanceState as unknown as Prisma.InputJsonValue,
+      beforeState: before as unknown as Prisma.InputJsonValue,
+      afterState: next as unknown as Prisma.InputJsonValue,
       reason: dto.reason,
     });
 
-    return this.maintenanceState;
+    return next;
   }
 
   /** Lấy Nhật ký Kiểm toán Toàn sàn có kèm Kiểm tra Tính Toàn vẹn */

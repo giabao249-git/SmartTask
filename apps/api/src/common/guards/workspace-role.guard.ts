@@ -4,7 +4,12 @@ import type { WorkspaceRole } from '@prisma/client';
 import type { Request } from 'express';
 import type { JwtUser } from '../decorators/current-user.decorator';
 import { WORKSPACE_ROLES_KEY } from '../decorators/workspace-roles.decorator';
-import { WorkspaceAccessService } from '../access/workspace-access.service';
+import {
+  assertLifecycle,
+  WorkspaceAccessService,
+} from '../access/workspace-access.service';
+
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 /**
  * Kiểm quyền theo DỮ LIỆU: đọc :wsId từ URL, tra workspace_members. Không tin workspaceId trong body.
@@ -30,6 +35,10 @@ export class WorkspaceRoleGuard implements CanActivate {
     const wsId = req.params.wsId;
     if (typeof wsId !== 'string' || !wsId) return true;
     req.workspaceRole = await this.access.assertRole(req.user.id, wsId, roles);
+    assertLifecycle(
+      await this.access.statusOf(wsId),
+      WRITE_METHODS.has(req.method) ? 'write' : 'read',
+    );
     return true;
   }
 }

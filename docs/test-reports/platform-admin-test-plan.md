@@ -10,13 +10,14 @@
 1. **Bảo mật Ranh giới Phân quyền (Security & Zero-Trust RBAC):** Đảm bảo tuyệt đối không có kẽ hở phân quyền ngang (Horizontal Privilege Escalation) hoặc phân quyền dọc (Vertical Privilege Escalation). Người dùng thông thường (Member, Viewer) và Workspace Owner **không thể** truy cập giao diện `/admin` hoặc gọi các API `/api/v1/admin/*`.
 2. **Kiểm thử Hiệu ứng Thác (Cascade Effects) của các Vận hành Nhạy cảm:** Xác minh tính chính xác, nhất quán dữ liệu và trải nghiệm người dùng khi Super Admin thực hiện các hành động có mức độ ảnh hưởng rộng: Khóa Workspace, Khóa Người dùng (Global Ban), Kích hoạt Chế độ Bảo trì (Maintenance Mode), Kích hoạt Ngắt mạch FinOps (AI Budget Circuit Breaker).
 3. **Độ tin cậy & Bất biến (Immutability):** Đảm bảo mọi tác động của Super Admin đều được ghi nhận đầy đủ vào System Audit Trail và không thể bị sửa/xóa.
-4. **Tự động hóa Kiểm thử (Test Automation):** Cung cấp bộ kịch bản E2E Puppeteer tự động chạy trên môi trường CI/CD và local để phát hiện hồi quy sớm.
+4. **Tự động hóa Kiểm thử (Test Automation):** Bộ e2e Jest + supertest chạy trên CSDL dựng sạch từ migration (CI/CD và local) để phát hiện hồi quy sớm; kiểm thử giao diện bằng Puppeteer chạy trên web + API thật.
 
 ### 1.2 Môi trường Kiểm thử (Test Environments)
 - **Web Client:** `http://localhost:3001` (Next.js 15, App Router)
 - **API Server:** `http://localhost:3000/api/v1` (NestJS, Prisma, Socket.io)
 - **Database:** PostgreSQL 16 + Redis 7 (Pub/Sub & Token Blacklist)
-- **Browser Automation:** Headless Chromium / Google Chrome via Puppeteer-core
+- **API E2E:** Jest + supertest (`apps/api/test/*.e2e-spec.ts`), schema `smarttask_test` dựng lại từ migration mỗi lần chạy
+- **Browser Automation:** Headless Chromium / Google Chrome via Puppeteer-core (chỉ cho kiểm thử giao diện, luôn trỏ vào web 3001 + API 3000 thật)
 
 ---
 
@@ -159,27 +160,36 @@ sequenceDiagram
 
 ---
 
-## 4. Kịch bản Puppeteer Tự Động Hóa (Puppeteer Automated Test Suite)
+## 4. Bộ kiểm thử tự động (E2E trên API thật)
 
-Kịch bản kiểm thử tự động được xây dựng độc lập tại file [`SmartTask/scripts/platform-admin-puppeteer-test.mjs`](file:///home/dthai24/SmartTask/scripts/platform-admin-puppeteer-test.mjs) với các tính năng:
-1. **Kiểm thử Multi-context:** Chạy đồng thời các phiên duyệt web biệt lập giữa **Super Admin**, **Workspace Owner**, và **Regular Member**.
-2. **Kiểm chứng Rào cản Bảo mật Phân quyền:** Xác minh Member và Owner khi cố truy cập `/admin` bị chặn hoặc chuyển hướng an toàn.
-3. **Kiểm chứng Giao diện Platform Admin:** Xác minh hiển thị đầy đủ các thành phần:
-   - Thẻ số thống kê KPI Sức khỏe hệ thống & Doanh thu.
-   - Bảng Quản trị Danh sách Workspace với các nút hành động (Cấp phép, Đình chỉ, Nâng hạng gói).
-   - Module FinOps AI với bảng Model Catalog và biểu đồ Token.
-   - Bảng Kiểm toán Nhật ký Hệ thống (System Audit Trail).
-4. **Kiểm chứng Vận hành Nhạy cảm:** Thử nghiệm tương tác đình chỉ Workspace và bật Chế độ bảo trì, chụp ảnh bằng chứng (screenshots) và xuất báo cáo `report.json`.
+Kịch bản Puppeteer cũ (`scripts/platform-admin-puppeteer-test.mjs`) **đã bị gỡ ngày 22/09/2026**: nó tự dựng một HTTP server giả ở cổng 4005 với dữ liệu cứng và các route không tồn tại trong API (`/admin/overview`, `/admin/workspaces/:id/suspend`, `/admin/maintenance/toggle`), nên báo cáo "5/5 PASSED" và các ảnh chụp kèm theo **không kiểm chứng phần mềm thật**.
+
+Thay thế bằng `apps/api/test/admin.e2e-spec.ts` (Jest + supertest, chạy trên CSDL dựng sạch từ migration — cùng chuẩn với 8 bộ e2e còn lại):
+
+| Ca kiểm thử | Nội dung kiểm chứng |
+| :--- | :--- |
+| Ranh giới `/admin` | ROOT_ADMIN 200; Workspace Owner và Member 403; ẩn danh 401 trên `stats`, `workspaces`, `users`, `audit-logs` |
+| Vai nền tảng hẹp | CUSTOMER_SUPPORT bị 403 khi đổi vòng đời workspace và khi bật bảo trì (chỉ ROOT_ADMIN / FINOPS_OPERATOR) |
+| `READ_ONLY_ENFORCED` | Đọc vẫn 200; tạo task và sửa cài đặt workspace đều 403 `WORKSPACE_READ_ONLY` |
+| `SOFT_SUSPENDED` | Cả đọc lẫn ghi 403 `WORKSPACE_SUSPENDED`; trả về ACTIVE thì ghi lại được ngay |
+| Bảo trì | `READ_ONLY` chặn ghi, `FULL` chặn cả đọc (503 `MAINTENANCE_MODE`); `/auth`, `/me`, `/admin` vẫn mở; trạng thái nằm trong bảng `platform_settings` nên sống sót restart |
+| Kiểm toán | Đủ 5 hành động nhạy cảm trong `system_audit_logs`, `integrityCheck.isCompromised = false` |
+
+Chạy: `npx jest --config test/jest-e2e.json --runInBand test/admin.e2e-spec.ts` trong `apps/api`.
+
+Kiểm thử giao diện phân quyền vẫn dùng `scripts/rbac-puppeteer-test.mjs` (chạy trên web 3001 + API 3000 thật, báo cáo ở `docs/test-reports/rbac/`).
 
 ---
 
 ## 5. Tiêu chí Hoàn thành & Đánh giá Chất lượng (Acceptance & Sign-off Criteria)
 
-| Tiêu chí | Ngưỡng yêu cầu (Threshold) | Trạng thái đạt được |
+| Tiêu chí | Ngưỡng yêu cầu (Threshold) | Trạng thái (22/09/2026) |
 | :--- | :--- | :---: |
-| **Bảo mật phân quyền (RBAC)** | 100% Test Cases TC-SEC-01 đến TC-SEC-08 đều PASS. 0% rò rỉ dữ liệu hoặc vượt quyền. | **ĐẠT** |
-| **Tính sẵn sàng của API Guard** | 100% route `/api/v1/admin/*` được bảo vệ bởi `JwtAuthGuard` và `PlatformAdminGuard`. | **ĐẠT** |
-| **Độ trễ phản ứng sự kiện nhạy cảm** | WebSocket disconnect & Redis flag có hiệu lực < 200ms trên toàn hệ thống. | **ĐẠT** |
-| **Tính bất biến của Audit Log** | 100% hành vi Super Admin được ghi nhận, cơ sở dữ liệu cấm UPDATE/DELETE log. | **ĐẠT** |
-| **Tự động hóa kiểm thử** | Kịch bản Puppeteer chạy ổn định, tự động lưu screenshot và sinh báo cáo kết quả. | **ĐẠT** |
+| **Bảo mật phân quyền (RBAC)** | Owner/Member/ẩn danh không chạm được `/admin` (UI + API) | **ĐẠT** — `admin.e2e-spec.ts` ca 1–2 |
+| **Tính sẵn sàng của API Guard** | Mọi route `/api/v1/admin/*` qua `JwtAuthGuard` + `SystemAdminGuard` | **ĐẠT** |
+| **Đình chỉ workspace có hiệu lực thật** | Trạng thái vòng đời chặn đọc/ghi ở tầng API, không chỉ đổi cờ hiển thị | **ĐẠT** — thực thi trong `ProjectAccessService` và `WorkspaceRoleGuard` |
+| **Bảo trì có hiệu lực thật & bền vững** | READ_ONLY chặn ghi, FULL chặn đọc; trạng thái lưu CSDL, đồng nhất khi nhiều pod | **ĐẠT** — `MaintenanceGuard` + bảng `platform_settings` (cache 5 giây) |
+| **Tính bất biến của Audit Log** | 100% hành vi Super Admin được ghi, chuỗi HMAC kiểm tra không bị phá | **ĐẠT** |
+| **Tự động hóa kiểm thử** | Bộ e2e chạy được trên CSDL sạch dựng từ migration | **ĐẠT** — 9 bộ, 82 ca xanh |
 
+> Các mục OPS-03 (khoá tài khoản toàn cục) và OPS-04 (ngắt mạch FinOps) trong §3 **chưa triển khai** ở backend — giữ lại làm kế hoạch, chưa được tính là ĐẠT.
