@@ -9,7 +9,21 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PageHeader } from "@/components/app/PageHeader";
+import { cn } from "@/lib/utils";
+import { ArrowLeft, Building2, Cpu, Gauge, RefreshCw, ShieldAlert, Users2 } from "lucide-react";
 import { BlastRadiusDrawer } from "./BlastRadiusDrawer";
+
+const ADMIN_TABS = [
+  { key: "overview", label: "Tổng quan", icon: Gauge },
+  { key: "workspaces", label: "Workspaces", icon: Building2 },
+  { key: "users", label: "Người dùng", icon: Users2 },
+  { key: "finops", label: "AI FinOps", icon: Cpu },
+  { key: "telemetry", label: "Hạ tầng & Audit", icon: ShieldAlert },
+] as const;
 import type {
   AdminUserItem,
   AdminWorkspaceItem,
@@ -146,58 +160,76 @@ export function AdminConsoleView() {
   });
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Platform Super Admin Header */}
-      <header className="sticky top-0 z-40 border-b border-border bg-card/90 backdrop-blur px-6 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/workspaces"
-            className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-          >
-            ← Về Workspace
-          </Link>
-          <span className="text-border">|</span>
-          <div className="flex items-center gap-2">
-            <span className="font-bold tracking-tight text-base">SmartTask Mission Control</span>
-            <Badge variant="default" className="bg-primary/90 text-primary-foreground font-mono text-[11px]">
-              PLATFORM SUPER ADMIN
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      {/* Thanh trên: cùng chiều cao/nền với header các màn khác */}
+      <header className="sticky top-0 z-40 h-14 border-b border-border/80 bg-card/95 backdrop-blur px-4 sm:px-6 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <Button asChild variant="ghost" size="sm" className="h-8 text-xs gap-1.5">
+            <Link href="/workspaces">
+              <ArrowLeft className="h-3.5 w-3.5" /> Về Workspace
+            </Link>
+          </Button>
+          <Separator orientation="vertical" className="h-5" />
+          <div className="flex items-center gap-2 min-w-0">
+            <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
+            <span className="font-semibold tracking-tight text-sm truncate">SmartTask Mission Control</span>
+            <Badge variant="destructive" className="font-mono text-[10px] px-1.5 py-0 hidden sm:inline-flex">
+              PLATFORM ADMIN
             </Badge>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {telemetry?.maintenance?.mode !== "DISABLED" && (
-            <Badge variant="destructive" className="animate-pulse">
-              HỆ THỐNG ĐANG BẢO TRÌ: {telemetry?.maintenance?.mode}
+        <div className="flex items-center gap-2 shrink-0">
+          {telemetry?.maintenance?.mode !== "DISABLED" && telemetry?.maintenance?.mode && (
+            <Badge variant="warning" className="text-[10px] font-mono">
+              ĐANG BẢO TRÌ · {telemetry.maintenance.mode}
             </Badge>
           )}
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            Đăng nhập: <strong>{auth.user?.email}</strong>
-          </span>
-          <Button variant="outline" size="sm" onClick={loadAllData} disabled={isLoading}>
-            {isLoading ? "Đang đồng bộ..." : "Làm mới dữ liệu"}
+          <span className="text-xs text-muted-foreground hidden lg:inline">{auth.user?.email}</span>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={loadAllData} disabled={isLoading}>
+            <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
+            {isLoading ? "Đang đồng bộ…" : "Làm mới"}
           </Button>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto p-6 space-y-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid grid-cols-5 max-w-2xl bg-muted/60">
-            <TabsTrigger value="overview">Tổng quan</TabsTrigger>
-            <TabsTrigger value="workspaces">Workspaces</TabsTrigger>
-            <TabsTrigger value="users">Người dùng</TabsTrigger>
-            <TabsTrigger value="finops">AI FinOps</TabsTrigger>
-            <TabsTrigger value="telemetry">Hạ tầng & Audit</TabsTrigger>
+      <main className="flex-1 w-full max-w-screen-2xl mx-auto p-4 sm:p-6 space-y-6">
+        <PageHeader
+          title="Quản trị nền tảng"
+          description="Giám sát toàn sàn: vòng đời workspace, tài khoản, chi phí AI, hạ tầng và nhật ký kiểm toán."
+          breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: "Quản trị nền tảng" }]}
+        />
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList className="h-9 hidden sm:inline-flex">
+            {ADMIN_TABS.map((t) => (
+              <TabsTrigger key={t.key} value={t.key} className="text-xs gap-1.5">
+                <t.icon className="h-3.5 w-3.5" />
+                {t.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
+          <Select value={activeTab} onValueChange={setActiveTab}>
+            <SelectTrigger className="h-9 text-xs w-56 sm:hidden">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ADMIN_TABS.map((t) => (
+                <SelectItem key={t.key} value={t.key} className="text-xs">
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           {/* TAB 1: OVERVIEW */}
           <TabsContent value="overview" className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card>
-                <CardHeader className="pb-2">
+              <Card className="border-border/80">
+                <CardHeader className="p-4 pb-2">
                   <CardDescription className="text-xs font-semibold uppercase">Tổ chức / Workspaces</CardDescription>
-                  <CardTitle className="text-3xl font-bold">{stats?.workspaces?.total ?? 0}</CardTitle>
+                  <CardTitle className="text-2xl font-semibold tabular-nums">{stats?.workspaces?.total ?? 0}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-muted-foreground flex justify-between">
                   <span>Hoạt động: <strong className="text-foreground">{stats?.workspaces?.active ?? 0}</strong></span>
@@ -205,10 +237,10 @@ export function AdminConsoleView() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="pb-2">
+              <Card className="border-border/80">
+                <CardHeader className="p-4 pb-2">
                   <CardDescription className="text-xs font-semibold uppercase">Người dùng Toàn sàn</CardDescription>
-                  <CardTitle className="text-3xl font-bold">{stats?.users?.total ?? 0}</CardTitle>
+                  <CardTitle className="text-2xl font-semibold tabular-nums">{stats?.users?.total ?? 0}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-muted-foreground flex justify-between">
                   <span>Khả dụng: <strong className="text-foreground">{stats?.users?.active ?? 0}</strong></span>
@@ -216,10 +248,10 @@ export function AdminConsoleView() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="pb-2">
+              <Card className="border-border/80">
+                <CardHeader className="p-4 pb-2">
                   <CardDescription className="text-xs font-semibold uppercase">Tác vụ & Dự án</CardDescription>
-                  <CardTitle className="text-3xl font-bold">{stats?.tasks?.total ?? 0}</CardTitle>
+                  <CardTitle className="text-2xl font-semibold tabular-nums">{stats?.tasks?.total ?? 0}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-muted-foreground flex justify-between">
                   <span>Hoàn thành: <strong className="text-foreground">{stats?.tasks?.completed ?? 0}</strong></span>
@@ -227,10 +259,10 @@ export function AdminConsoleView() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="pb-2">
+              <Card className="border-border/80">
+                <CardHeader className="p-4 pb-2">
                   <CardDescription className="text-xs font-semibold uppercase">Tiêu thụ AI FinOps (30d)</CardDescription>
-                  <CardTitle className="text-3xl font-bold">
+                  <CardTitle className="text-2xl font-semibold tabular-nums">
                     ${stats?.aiFinOps?.totalCostUsd?.toFixed(2) ?? "0.00"}
                   </CardTitle>
                 </CardHeader>
@@ -273,57 +305,61 @@ export function AdminConsoleView() {
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 <Input
-                  placeholder="Tìm kiếm theo tên hoặc slug..."
+                  placeholder="Tìm theo tên hoặc slug…"
                   value={workspaceSearch}
                   onChange={(e) => setWorkspaceSearch(e.target.value)}
-                  className="w-full sm:w-72"
+                  className="h-8 text-xs w-full sm:w-72"
                 />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
-                >
-                  <option value="ALL">Tất cả trạng thái</option>
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="WARNING_GRACE">WARNING_GRACE</option>
-                  <option value="READ_ONLY_ENFORCED">READ_ONLY_ENFORCED</option>
-                  <option value="SOFT_SUSPENDED">SOFT_SUSPENDED</option>
-                </select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="h-8 text-xs w-52">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL" className="text-xs">
+                      Tất cả trạng thái
+                    </SelectItem>
+                    {["ACTIVE", "WARNING_GRACE", "READ_ONLY_ENFORCED", "SOFT_SUSPENDED"].map((st) => (
+                      <SelectItem key={st} value={st} className="text-xs font-mono">
+                        {st}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="text-xs text-muted-foreground">
                 Hiển thị <strong>{filteredWorkspaces.length}</strong> / {workspaces.length} tổ chức
               </div>
             </div>
 
-            <Card className="overflow-hidden">
+            <Card className="border-border/80 overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-muted/50 border-b border-border text-xs font-semibold text-muted-foreground uppercase">
-                    <tr>
-                      <th className="p-3">Tổ chức (Workspace)</th>
-                      <th className="p-3">Chủ sở hữu</th>
-                      <th className="p-3 text-center">Thành viên</th>
-                      <th className="p-3 text-center">Dự án</th>
-                      <th className="p-3 text-center">AI Calls</th>
-                      <th className="p-3">Trạng thái</th>
-                      <th className="p-3 text-right">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs ">Tổ chức (Workspace)</TableHead>
+                      <TableHead className="text-xs ">Chủ sở hữu</TableHead>
+                      <TableHead className="text-xs text-center">Thành viên</TableHead>
+                      <TableHead className="text-xs text-center">Dự án</TableHead>
+                      <TableHead className="text-xs text-center">AI Calls</TableHead>
+                      <TableHead className="text-xs ">Trạng thái</TableHead>
+                      <TableHead className="text-xs text-right">Thao tác</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {filteredWorkspaces.map((ws) => (
-                      <tr key={ws.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="p-3">
+                      <TableRow key={ws.id} className="text-xs">
+                        <TableCell className="">
                           <div className="font-semibold text-foreground">{ws.name}</div>
                           <div className="text-xs font-mono text-muted-foreground">{ws.slug}</div>
-                        </td>
-                        <td className="p-3">
+                        </TableCell>
+                        <TableCell className="">
                           <div className="text-foreground">{ws.owner?.fullName || "—"}</div>
                           <div className="text-xs text-muted-foreground">{ws.owner?.email}</div>
-                        </td>
-                        <td className="p-3 text-center font-mono">{ws.membersCount}</td>
-                        <td className="p-3 text-center font-mono">{ws.projectsCount}</td>
-                        <td className="p-3 text-center font-mono">{ws.aiCallsCount}</td>
-                        <td className="p-3">
+                        </TableCell>
+                        <TableCell className="text-center font-mono">{ws.membersCount}</TableCell>
+                        <TableCell className="text-center font-mono">{ws.projectsCount}</TableCell>
+                        <TableCell className="text-center font-mono">{ws.aiCallsCount}</TableCell>
+                        <TableCell className="">
                           <Badge
                             variant={
                               ws.status === "ACTIVE"
@@ -341,8 +377,8 @@ export function AdminConsoleView() {
                               {ws.suspendReason}
                             </div>
                           )}
-                        </td>
-                        <td className="p-3 text-right">
+                        </TableCell>
+                        <TableCell className="text-right">
                           <Button
                             variant="outline"
                             size="sm"
@@ -353,11 +389,11 @@ export function AdminConsoleView() {
                           >
                             Điều phối Vòng đời
                           </Button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </Card>
           </TabsContent>
@@ -376,26 +412,26 @@ export function AdminConsoleView() {
               </div>
             </div>
 
-            <Card className="overflow-hidden">
+            <Card className="border-border/80 overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-muted/50 border-b border-border text-xs font-semibold text-muted-foreground uppercase">
-                    <tr>
-                      <th className="p-3">Người dùng</th>
-                      <th className="p-3">Vai trò Nền tảng</th>
-                      <th className="p-3 text-center">Workspaces</th>
-                      <th className="p-3">Ngày tạo</th>
-                      <th className="p-3 text-right">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs ">Người dùng</TableHead>
+                      <TableHead className="text-xs ">Vai trò Nền tảng</TableHead>
+                      <TableHead className="text-xs text-center">Workspaces</TableHead>
+                      <TableHead className="text-xs ">Ngày tạo</TableHead>
+                      <TableHead className="text-xs text-right">Thao tác</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {filteredUsers.map((u) => (
-                      <tr key={u.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="p-3">
+                      <TableRow key={u.id} className="text-xs">
+                        <TableCell className="">
                           <div className="font-semibold text-foreground">{u.fullName}</div>
                           <div className="text-xs text-muted-foreground">{u.email}</div>
-                        </td>
-                        <td className="p-3">
+                        </TableCell>
+                        <TableCell className="">
                           {u.isSuperAdmin ? (
                             <Badge variant="default" className="text-xs bg-indigo-600">
                               {u.platformRole || "SUPER_ADMIN"}
@@ -405,12 +441,12 @@ export function AdminConsoleView() {
                               MEMBER
                             </Badge>
                           )}
-                        </td>
-                        <td className="p-3 text-center font-mono">{u.workspacesCount}</td>
-                        <td className="p-3 text-xs text-muted-foreground">
+                        </TableCell>
+                        <TableCell className="text-center font-mono">{u.workspacesCount}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
                           {new Date(u.createdAt).toLocaleDateString("vi-VN")}
-                        </td>
-                        <td className="p-3 text-right space-x-2">
+                        </TableCell>
+                        <TableCell className="text-right space-x-2">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -427,11 +463,11 @@ export function AdminConsoleView() {
                           >
                             Thu hồi phiên
                           </Button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </Card>
           </TabsContent>
@@ -447,38 +483,38 @@ export function AdminConsoleView() {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-muted/50 border-b border-border text-xs font-semibold text-muted-foreground uppercase">
-                      <tr>
-                        <th className="p-3">Nhà cung cấp</th>
-                        <th className="p-3">Mô hình (Model)</th>
-                        <th className="p-3 text-center">Lượt gọi</th>
-                        <th className="p-3 text-center">Tổng Tokens</th>
-                        <th className="p-3 text-right">Chi phí USD</th>
-                        <th className="p-3 text-right">Chi phí VND</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs ">Nhà cung cấp</TableHead>
+                        <TableHead className="text-xs ">Mô hình (Model)</TableHead>
+                        <TableHead className="text-xs text-center">Lượt gọi</TableHead>
+                        <TableHead className="text-xs text-center">Tổng Tokens</TableHead>
+                        <TableHead className="text-xs text-right">Chi phí USD</TableHead>
+                        <TableHead className="text-xs text-right">Chi phí VND</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {aiCosts.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                        <TableRow>
+                          <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                             Chưa có dữ liệu lượt gọi AI trong 30 ngày qua
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ) : (
                         aiCosts.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-muted/30">
-                            <td className="p-3 font-semibold">{item.provider}</td>
-                            <td className="p-3 font-mono text-xs">{item.model}</td>
-                            <td className="p-3 text-center font-mono">{item.calls}</td>
-                            <td className="p-3 text-center font-mono">{item.tokens.toLocaleString()}</td>
-                            <td className="p-3 text-right font-mono">${item.costUsd.toFixed(3)}</td>
-                            <td className="p-3 text-right font-mono">{item.costVnd.toLocaleString()} ₫</td>
-                          </tr>
+                          <TableRow key={idx} className="text-xs">
+                            <TableCell className="font-semibold">{item.provider}</TableCell>
+                            <TableCell className="font-mono text-xs">{item.model}</TableCell>
+                            <TableCell className="text-center font-mono">{item.calls}</TableCell>
+                            <TableCell className="text-center font-mono">{item.tokens.toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-mono">${item.costUsd.toFixed(3)}</TableCell>
+                            <TableCell className="text-right font-mono">{item.costVnd.toLocaleString()} ₫</TableCell>
+                          </TableRow>
                         ))
                       )}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>
@@ -579,48 +615,48 @@ export function AdminConsoleView() {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-muted/50 border-b border-border text-xs font-semibold text-muted-foreground uppercase">
-                      <tr>
-                        <th className="p-3">Thời gian</th>
-                        <th className="p-3">Người thực hiện</th>
-                        <th className="p-3">Hành động</th>
-                        <th className="p-3">Đối tượng</th>
-                        <th className="p-3">Lý do</th>
-                        <th className="p-3 font-mono text-right">Hash (SHA-256)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs ">Thời gian</TableHead>
+                        <TableHead className="text-xs ">Người thực hiện</TableHead>
+                        <TableHead className="text-xs ">Hành động</TableHead>
+                        <TableHead className="text-xs ">Đối tượng</TableHead>
+                        <TableHead className="text-xs ">Lý do</TableHead>
+                        <TableHead className="text-xs font-mono text-right">Hash (SHA-256)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {auditLogs.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                        <TableRow>
+                          <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                             Chưa có bản ghi nhật ký kiểm toán nào
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ) : (
                         auditLogs.map((log) => (
-                          <tr key={log.id} className="hover:bg-muted/30">
-                            <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                          <TableRow key={log.id} className="text-xs">
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                               {new Date(log.createdAt).toLocaleString("vi-VN")}
-                            </td>
-                            <td className="p-3 text-xs font-medium">{log.actorEmail || "Hệ thống"}</td>
-                            <td className="p-3">
+                            </TableCell>
+                            <TableCell className="text-xs font-medium">{log.actorEmail || "Hệ thống"}</TableCell>
+                            <TableCell className="">
                               <Badge variant="outline" className="text-[11px] font-mono">
                                 {log.action}
                               </Badge>
-                            </td>
-                            <td className="p-3 text-xs">
+                            </TableCell>
+                            <TableCell className="text-xs">
                               {log.targetType} {log.targetId ? `(#${log.targetId.slice(0, 8)})` : ""}
-                            </td>
-                            <td className="p-3 text-xs text-muted-foreground truncate max-w-xs">{log.reason || "—"}</td>
-                            <td className="p-3 text-right font-mono text-[11px] text-muted-foreground">
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground truncate max-w-xs">{log.reason || "—"}</TableCell>
+                            <TableCell className="text-right font-mono text-[11px] text-muted-foreground">
                               {log.currentHash ? `${log.currentHash.slice(0, 10)}...` : "—"}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ))
                       )}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>

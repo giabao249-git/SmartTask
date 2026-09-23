@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DraftPatch } from "@smarttask/shared";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
-import type { ApplyResponse, ChatSessionView, ChatTurnResponse, ProposalView, QuotaView, SessionDetail } from "@/lib/types";
+import type { AiConfigItem, ApplyResponse, ChatSessionView, ChatTurnResponse, ProposalView, QuotaView, SessionDetail } from "@/lib/types";
 
 /** Khoá query cho chat (docs 12 §5): danh sách phiên theo dự án, chi tiết phiên (session + messages + proposals). */
 export const aiKeys = {
@@ -32,6 +32,23 @@ export function useSessionDetail(sessionId: string | null) {
 
 export function useQuota(wsId: string) {
   return useQuery({ queryKey: aiKeys.quota(wsId), queryFn: () => api.get<QuotaView>("/ai/quota", { workspaceId: wsId }), staleTime: 60_000 });
+}
+
+/**
+ * Model đang dùng cho lượt chat, đọc từ cấu hình AI của workspace (CHAT → GENERAL → mặc định .env).
+ * Nhờ vậy nhãn model hiển thị đúng ngay khi mở/tải lại trang, không phải đợi gửi một lượt.
+ */
+export function useChatModelLabel(wsId: string): string | null {
+  const q = useQuery({
+    queryKey: ["workspaces", wsId, "ai-configs"],
+    queryFn: () => api.get<AiConfigItem[]>(`/workspaces/${wsId}/ai-configs`),
+    enabled: !!wsId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const list = (q.data ?? []).filter((c) => c.isActive);
+  const pick = list.find((c) => c.purpose === "CHAT") ?? list.find((c) => c.purpose === "GENERAL");
+  return pick ? `${pick.catalog.provider} · ${pick.catalog.model}` : null;
 }
 
 /** Thay proposal trong cache chi tiết phiên (sau apply/patch/socket). */

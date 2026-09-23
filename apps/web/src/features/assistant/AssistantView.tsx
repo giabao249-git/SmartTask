@@ -86,6 +86,7 @@ import {
   useAssistantRealtime,
   useChatTurn,
   usePatchItem,
+  useChatModelLabel,
   useQuota,
   useRejectProposal,
   useSessionDetail,
@@ -166,6 +167,7 @@ export function AssistantView() {
   const quota = useQuota(project.workspaceId);
   // Nhãn model hiển thị = model của lượt gần nhất (server quyết định theo cấu hình AI của workspace/.env)
   const [lastModel, setLastModel] = React.useState<string | null>(null);
+  const configuredModel = useChatModelLabel(project.workspaceId);
   const sessionMut = useSessionMutations(project.id);
   const turn = useChatTurn(project.id, project.workspaceId);
   const apply = useApplyProposal(activeSessionId);
@@ -413,7 +415,7 @@ export function AssistantView() {
             <h1 className="text-lg font-semibold tracking-tight">Trợ lý AI · {project.key}</h1>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono gap-1 text-muted-foreground border-border/70">
               <Sparkles className="h-2.5 w-2.5 text-info" />
-              <span>{lastModel ?? "model theo cấu hình"}</span>
+              <span>{lastModel ?? configuredModel ?? "model theo cấu hình"}</span>
             </Badge>
             <Badge variant={quota.data && quota.data.remaining <= 3 ? "warning" : "secondary"} className="text-[10px] px-1.5 py-0 font-mono">
               {quota.data ? `${quota.data.used}/${quota.data.limit}` : "7/20"} lượt hôm nay
