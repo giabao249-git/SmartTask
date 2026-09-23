@@ -47,7 +47,8 @@ export class CreateTaskDto {
   @ApiPropertyOptional({
     enum: TaskType,
     default: 'TASK',
-    description: 'Loại công việc: STORY (tính năng) | TASK (việc chung) | BUG (lỗi)',
+    description:
+      'Loại công việc: STORY (tính năng) | TASK (việc chung) | BUG (lỗi)',
   })
   @IsOptional()
   @IsEnum(TaskType)

@@ -7,51 +7,81 @@ import { Loader2 } from "lucide-react";
 import { CommandGroup, CommandItem } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
-import { priorityToVariant } from "@/lib/status";
-import type { TaskListResponse } from "@/lib/types";
+
+/** Hình trả về của `GET /workspaces/:wsId/tasks/search` (TasksService.search). */
+interface TaskSearchHit {
+  id: string;
+  number: number;
+  title: string;
+  key: string;
+  completedAt: string | null;
+  project: { id: string; key: string; name: string };
+}
 
 /**
- * Nhóm kết quả task cho bảng lệnh: GET /projects/:id/tasks?q= (backend chưa có endpoint tìm kiếm toàn cục — docs web-tich-hop §4).
- * Nhúng vào CommandDialog của AppShell: `<TaskSearchGroup projectId={…} projectKey={…} query={q} onPick={() => setOpen(false)} />`.
+ * Nhóm kết quả công việc trong bảng lệnh (Ctrl/Super + K).
+ *
+ * Dùng `GET /workspaces/:wsId/tasks/search?q=&limit=` — endpoint xuyên dự án đã có từ Phase 3
+ * nhưng trước đây web chưa gọi tới, nên bảng lệnh chỉ điều hướng được chứ không tìm ra việc nào.
+ * Tìm cả các dự án khác trong workspace, không chỉ dự án đang mở.
  */
-export function TaskSearchGroup({ projectId, projectKey, query, onPick }: { projectId: string | null; projectKey: string; query: string; onPick?: () => void }) {
+export function TaskSearchGroup({
+  workspaceId,
+  currentProjectId,
+  query,
+  onPick,
+}: {
+  workspaceId: string | undefined;
+  currentProjectId?: string | null;
+  query: string;
+  onPick?: () => void;
+}) {
   const router = useRouter();
   const [debounced, setDebounced] = React.useState(query);
   React.useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 250);
     return () => clearTimeout(t);
   }, [query]);
+
   const q = useQuery({
-    queryKey: ["projects", projectId, "tasks", "search", debounced],
-    queryFn: () => api.get<TaskListResponse>(`/projects/${projectId}/tasks`, { q: debounced }),
-    enabled: !!projectId && debounced.length >= 2,
-    select: (r) => r.items.slice(0, 8),
+    queryKey: ["workspaces", workspaceId, "tasks", "search", debounced] as const,
+    queryFn: () => api.get<TaskSearchHit[]>(`/workspaces/${workspaceId}/tasks/search`, { q: debounced, limit: 8 }),
+    enabled: !!workspaceId && debounced.length >= 2,
+    staleTime: 30_000,
   });
-  if (!projectId || debounced.length < 2) return null;
+
+  if (!workspaceId || debounced.length < 2) return null;
+
+  const items = q.data ?? [];
   return (
-    <CommandGroup heading={q.isFetching ? "Công việc · đang tìm…" : `Công việc (${q.data?.length ?? 0})`}>
+    <CommandGroup heading={q.isFetching ? "Công việc · đang tìm…" : `Công việc (${items.length})`}>
       {q.isPending && (
         <CommandItem disabled>
           <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Đang tìm
         </CommandItem>
       )}
-      {(q.data ?? []).map((t) => (
+      {!q.isPending && items.length === 0 && (
+        <CommandItem disabled className="text-xs text-muted-foreground">
+          Không có công việc nào khớp “{debounced}”
+        </CommandItem>
+      )}
+      {items.map((t) => (
         <CommandItem
           key={t.id}
-          value={`${projectKey}-${t.number} ${t.title}`}
+          value={`${t.key} ${t.title} ${t.project.name}`}
           className="cursor-pointer gap-2"
           onSelect={() => {
             onPick?.();
-            router.push(`/projects/${projectId}/work?task=${t.id}`);
+            router.push(`/projects/${t.project.id}/work?task=${t.id}`);
           }}
         >
-          <span className="font-mono text-xs text-muted-foreground">
-            {projectKey}-{t.number}
-          </span>
-          <span className="truncate">{t.title}</span>
-          <Badge variant={priorityToVariant(t.priority)} className="ml-auto text-[9px] px-1 py-0">
-            {t.priority}
-          </Badge>
+          <span className="font-mono text-xs text-muted-foreground">{t.key}</span>
+          <span className={t.completedAt ? "truncate line-through text-muted-foreground" : "truncate"}>{t.title}</span>
+          {t.project.id !== currentProjectId && (
+            <Badge variant="outline" className="ml-auto text-[9px] px-1 py-0 font-normal">
+              {t.project.name}
+            </Badge>
+          )}
         </CommandItem>
       ))}
     </CommandGroup>

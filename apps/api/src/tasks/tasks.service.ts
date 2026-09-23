@@ -937,7 +937,7 @@ export class TasksService {
         priority: true,
         isUrgent: true,
         difficulty: true,
-              startDate: true,
+        startDate: true,
         dueDate: true,
         estimateHours: true,
         remainingHours: true,

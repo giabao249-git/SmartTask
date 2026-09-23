@@ -50,6 +50,16 @@ export function TaskListView() {
   useBoardRealtime(project.id);
   const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
   const [sheetOpen, setSheetOpen] = React.useState(!!params.get("task"));
+  /**
+   * `?task=` phải mở Sheet cả khi điều hướng trong trang (bảng lệnh, thông báo, link đã chia sẻ),
+   * không chỉ lúc tải lần đầu — trước đây state chỉ đọc param một lần khi mount.
+   */
+  const urlTaskId = params.get("task");
+  React.useEffect(() => {
+    if (!urlTaskId) return;
+    setSelectedId(urlTaskId);
+    setSheetOpen(true);
+  }, [urlTaskId]);
 
   const rows = React.useMemo(() => {
     const list = f

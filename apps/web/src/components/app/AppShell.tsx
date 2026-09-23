@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { ShortcutsDialog } from "@/components/app/ShortcutsDialog";
 import { useModKey } from "@/lib/hooks/use-mod-key";
+import { TaskSearchGroup } from "@/features/search/TaskSearchGroup";
 import { PlatformBanner } from "@/components/app/PlatformBanner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -92,6 +93,7 @@ export function AppShell({ children }: AppShellProps) {
   const leaveTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const [commandOpen, setCommandOpen] = React.useState(false);
+  const [commandQuery, setCommandQuery] = React.useState("");
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
   const mod = useModKey();
   const [isDark, setIsDark] = React.useState(false);
@@ -425,10 +427,57 @@ export function AppShell({ children }: AppShellProps) {
       )}
     >
       {/* Bảng lệnh Ctrl/Super + K */}
-      <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
-        <CommandInput placeholder={`Tìm kiếm nhanh công việc, thành viên, điều hướng (${mod}+K)...`} />
+      <CommandDialog
+        open={commandOpen}
+        onOpenChange={(o) => {
+          setCommandOpen(o);
+          if (!o) setCommandQuery("");
+        }}
+      >
+        <CommandInput
+          value={commandQuery}
+          onValueChange={setCommandQuery}
+          placeholder={`Tìm công việc, điều hướng, tạo nhanh (${mod}+K)...`}
+        />
         <CommandList>
           <CommandEmpty>Không tìm thấy kết quả phù hợp</CommandEmpty>
+
+          {/* Tìm việc xuyên dự án — GET /workspaces/:wsId/tasks/search (docs 11 §3.6) */}
+          <TaskSearchGroup
+            workspaceId={workspace?.id}
+            currentProjectId={project?.id}
+            query={commandQuery}
+            onPick={() => setCommandOpen(false)}
+          />
+
+          {projectBase && (
+            <CommandGroup heading="Tạo">
+              <CommandItem
+                value="tạo công việc mới tao cong viec moi create task new"
+                onSelect={() => {
+                  setCommandOpen(false);
+                  router.push(`${projectBase}/work?view=board&compose=1`);
+                }}
+                className="cursor-pointer"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                <span>Tạo công việc mới…</span>
+                <kbd className="ml-auto text-[10px] font-mono bg-background border px-1 rounded">C</kbd>
+              </CommandItem>
+              <CommandItem
+                value="tạo công việc đầy đủ tao cong viec day du full form"
+                onSelect={() => {
+                  setCommandOpen(false);
+                  router.push(`${projectBase}/work?view=board&compose=full`);
+                }}
+                className="cursor-pointer"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                <span>Tạo công việc — điền đầy đủ…</span>
+              </CommandItem>
+            </CommandGroup>
+          )}
+
           <CommandGroup heading="Điều hướng nhanh">
             {navItems.map((item) => (
               <CommandItem

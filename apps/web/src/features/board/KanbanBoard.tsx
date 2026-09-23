@@ -147,6 +147,16 @@ export function KanbanBoard() {
   const [activeTask, setActiveTask] = React.useState<TaskListItem | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
   const [sheetOpen, setSheetOpen] = React.useState(!!params.get("task"));
+  /**
+   * `?task=` phải mở Sheet cả khi điều hướng trong trang (bảng lệnh, thông báo, link đã chia sẻ),
+   * không chỉ lúc tải lần đầu — trước đây state chỉ đọc param một lần khi mount.
+   */
+  const urlTaskId = params.get("task");
+  React.useEffect(() => {
+    if (!urlTaskId) return;
+    setSelectedId(urlTaskId);
+    setSheetOpen(true);
+  }, [urlTaskId]);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [selectedColumnId, setSelectedColumnId] = React.useState<string>("");
   /** Cột nào đang mở ô tạo nhanh (mỗi lúc chỉ một). */
@@ -208,6 +218,20 @@ export function KanbanBoard() {
     },
     [columns],
   );
+
+  /**
+   * Bảng lệnh (Ctrl/Super + K) mở màn này kèm `?compose=1` (ô tạo nhanh) hoặc `?compose=full`
+   * (hộp thoại đầy đủ). Dọn tham số ngay sau khi mở để F5 không bật lại.
+   */
+  const compose = params.get("compose");
+  React.useEffect(() => {
+    if (!compose || !project.canEdit) return;
+    if (compose === "full") openCreateDialog();
+    else openComposer();
+    const next = new URLSearchParams(params.toString());
+    next.delete("compose");
+    router.replace(`?${next.toString()}`, { scroll: false });
+  }, [compose, project.canEdit, openCreateDialog, openComposer, params, router]);
 
   // Shortcuts: Q để bật/tắt "Việc của tôi", C để mở ô tạo nhanh ở cột đầu
   React.useEffect(() => {
