@@ -80,6 +80,7 @@ import { toast } from "sonner";
 import { ActionCard, parseAction } from "./ActionCard";
 import { DraftRail } from "./DraftRail";
 import { ACTION_LABEL, fmtDate, makeResolver } from "./codes";
+import { ThinkingDots, TypewriterText } from "./Typing";
 import {
   aiKeys,
   useApplyProposal,
@@ -168,6 +169,10 @@ export function AssistantView() {
   // Nhãn model hiển thị = model của lượt gần nhất (server quyết định theo cấu hình AI của workspace/.env)
   const [lastModel, setLastModel] = React.useState<string | null>(null);
   const configuredModel = useChatModelLabel(project.workspaceId);
+  // Chỉ tin trợ lý vừa trả về mới chạy hiệu ứng gõ; mở lại phiên cũ thì hiện ngay
+  const [typingMessageId, setTypingMessageId] = React.useState<string | null>(null);
+  // Tin vừa gửi hiện ngay (lạc quan) trong lúc chờ AI, thay vì đợi lượt trả về mới thấy
+  const [pendingText, setPendingText] = React.useState<string | null>(null);
   const sessionMut = useSessionMutations(project.id);
   const turn = useChatTurn(project.id, project.workspaceId);
   const apply = useApplyProposal(activeSessionId);
@@ -260,6 +265,7 @@ export function AssistantView() {
     if (!t || busy) return;
     setTurnError(null);
     setInput("");
+    setPendingText(t);
     setSlashDismissed(false);
     setSelectedSlashIndex(0);
     if (textareaRef.current) {
@@ -269,6 +275,8 @@ export function AssistantView() {
       { sessionId: activeSessionId ?? undefined, text: t, selectedCode, sprintId: activeSprintId },
       {
         onSuccess: (res) => {
+          setPendingText(null);
+          setTypingMessageId(res.message.id);
           if (res.usage?.model) setLastModel(`${res.usage.provider} · ${res.usage.model}`);
           if (!activeSessionId) setActiveSessionId(res.sessionId);
           // Phiên tạo bằng nút "Phiên mới" chưa có tên → đặt theo tin đầu
@@ -291,6 +299,7 @@ export function AssistantView() {
         },
         onError: (e) => {
           const { code, message } = describeError(e);
+          setPendingText(null);
           setInput(t);
           if (code === "AI_PROVIDER_UNAVAILABLE" || code === "AI_RESPONSE_INVALID" || code === "AI_PURPOSE_DISABLED") {
             setTurnError({ code, message });
@@ -589,9 +598,32 @@ export function AssistantView() {
                     myAvatar={auth.user?.avatarUrl ?? undefined}
                     resolver={resolver}
                     busy={busy}
+                    typing={m.id === typingMessageId}
+                    onTypingDone={() => setTypingMessageId(null)}
                     onSelectOption={(code, label) => send(label, code)}
                   />
                 ))}
+                {turn.isPending && pendingText && (
+                  <div className="flex gap-3 max-w-[85%] ml-auto items-end flex-row-reverse text-xs">
+                    <UserAvatar
+                      name={auth.user?.shortName ?? auth.user?.fullName ?? "Bạn"}
+                      avatar={auth.user?.avatarUrl ?? undefined}
+                      size="default"
+                      className="shrink-0 mb-1 ring-1 ring-border/50 shadow-xs"
+                      showTooltip={false}
+                    />
+                    <div className="flex flex-col gap-1 items-end min-w-0">
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground px-1 flex-row-reverse">
+                        <span className="font-semibold text-foreground">{auth.user?.shortName ?? auth.user?.fullName ?? "Bạn"}</span>
+                        <span>·</span>
+                        <span>đang gửi…</span>
+                      </div>
+                      <div className="rounded-2xl rounded-tr-xs px-4 py-3 bg-primary/90 text-primary-foreground shadow-xs text-xs leading-relaxed break-words max-w-full">
+                        <p className="whitespace-pre-wrap">{pendingText}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {turn.isPending && (
                   <div className="flex gap-3 max-w-[85%] mr-auto items-start flex-row text-xs">
                     <div className="h-8 w-8 rounded-full bg-info/10 text-info border border-info/25 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
@@ -600,11 +632,10 @@ export function AssistantView() {
                     <div className="flex flex-col gap-1 items-start min-w-0">
                       <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground px-1">
                         <Sparkles className="h-3 w-3 text-info animate-spin" />
-                        <span className="font-semibold text-foreground">Trợ lý AI đang suy luận…</span>
+                        <span>{fmtDate(new Date().toISOString())}</span>
                       </div>
-                      <div className="rounded-2xl rounded-tl-xs px-4 py-3 bg-muted/60 text-foreground border border-border/60 space-y-2 w-72 shadow-xs">
-                        <Skeleton className="h-3 w-48" />
-                        <Skeleton className="h-3 w-36" />
+                      <div className="rounded-2xl rounded-tl-xs px-4 py-3 bg-muted/60 text-foreground border border-border/60 shadow-xs">
+                        <ThinkingDots className="text-xs" />
                       </div>
                     </div>
                   </div>
@@ -883,6 +914,8 @@ function MessageBubble({
   myAvatar,
   resolver,
   busy,
+  typing = false,
+  onTypingDone,
   onSelectOption,
 }: {
   m: ChatMessageView;
@@ -890,10 +923,17 @@ function MessageBubble({
   myAvatar?: string;
   resolver: ReturnType<typeof makeResolver>;
   busy: boolean;
+  typing?: boolean;
+  onTypingDone?: () => void;
   onSelectOption: (code: string, label: string) => void;
 }) {
   const isUser = m.role === "USER";
   const action = !isUser ? parseAction(m.structuredData) : null;
+  // Thẻ hành động/đề xuất chỉ hiện sau khi gõ xong để không nhảy giật
+  const [revealed, setRevealed] = React.useState(!typing);
+  React.useEffect(() => {
+    if (!typing) setRevealed(true);
+  }, [typing]);
   const [copied, setCopied] = React.useState(false);
 
   const handleCopy = () => {
@@ -961,10 +1001,17 @@ function MessageBubble({
               : "rounded-tl-xs bg-muted/60 text-foreground border border-border/60"
           )}
         >
-          <p className="whitespace-pre-wrap">{m.text || (action ? "(không có văn bản)" : "")}</p>
-          {action && <ActionCard action={action} resolver={resolver} onSelectOption={onSelectOption} disabled={busy} />}
+          <TypewriterText
+            text={m.text || (action ? "(không có văn bản)" : "")}
+            enabled={typing}
+            onDone={() => {
+              setRevealed(true);
+              onTypingDone?.();
+            }}
+          />
+          {action && revealed && <ActionCard action={action} resolver={resolver} onSelectOption={onSelectOption} disabled={busy} />}
 
-          {!isUser && (
+          {!isUser && revealed && (
             <div className="flex items-center gap-2 pt-1 border-t border-border/40 text-[11px]">
               <Button
                 variant="ghost"
