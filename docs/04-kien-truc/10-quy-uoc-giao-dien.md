@@ -62,8 +62,8 @@ variants: { variant: {
 | `Button` | `default` (hành động chính, 1 nút/màn), `secondary`, `outline`, `ghost` (icon, hàng bảng), `destructive`, `link`; size `sm` trong bảng/thẻ, `default` ở form, `icon` cho nút icon | Nút đang xử lý: `disabled` + `<Loader2 className="animate-spin" />`, nhãn giữ nguyên |
 | `Badge` | `secondary` (nhãn), `outline` (mã task ST-12), `success/warning/destructive` (mức tải, hạn), `info` (AI) | Không dùng Badge làm nút |
 | `Card` | Mặc định; thẻ Kanban dùng `Card` với `p-3` qua `className` — không đổi `rounded` | |
-| `Sheet` | Chi tiết task (side right, `sm:max-w-xl`), chi tiết tải | Đóng bằng Esc, có tiêu đề |
-| `Dialog` | Form ngắn (tạo sprint, mời thành viên); `AlertDialog` cho hành động không hoàn tác | |
+| `Sheet` | Chi tiết tải (side right, `sm:max-w-lg`) | Đóng bằng Esc, có tiêu đề |
+| `Dialog` | Form ngắn (tạo sprint, mời thành viên); **chi tiết công việc** (`sm:max-w-3xl`, `max-h-[88vh]`, thân cuộn trong) — đổi từ `Sheet` sang modal giữa màn vì nội dung dàn hai cột cần bề ngang; `AlertDialog` cho hành động không hoàn tác | Chi tiết công việc còn có trang riêng `/projects/:id/tasks/ST-n` dùng chung `TaskDetailBody` |
 | `Sonner` | Mọi phản hồi kết quả: "Đã tạo 9 công việc", "Thẻ vừa được Lan cập nhật" | Không dùng toast cho lỗi form (hiện tại chỗ) |
 | `Combobox` (Command + Popover) | Chọn người, kỹ năng, sprint; hiển thị avatar + bảng sự thật nhỏ khi giao việc | Mẫu shadcn "Combobox" |
 | `Table` | Danh sách, xem trước AI, heatmap kỹ năng | Số dùng `tabular-nums` |

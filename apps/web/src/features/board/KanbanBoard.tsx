@@ -16,7 +16,8 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot, Filter, Loader2, ChevronDown, Copy, Trash2, UserPlus, Flag, CalendarDays } from "lucide-react";
+import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot, Filter, Loader2, ChevronDown, Copy, Trash2, UserPlus, Flag, CalendarDays, Maximize2 } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -42,7 +43,7 @@ import {
 import { TaskCard, taskKeyOf } from "@/components/app/TaskCard";
 import { AssigneePicker, LabelPicker, SkillPicker } from "@/components/app/TaskFieldPickers";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
+import { TaskDetailModal } from "@/components/app/TaskDetailModal";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
@@ -160,16 +161,16 @@ export function KanbanBoard() {
   }, [tasksQuery.data]);
   const [activeTask, setActiveTask] = React.useState<TaskListItem | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
-  const [sheetOpen, setSheetOpen] = React.useState(!!params.get("task"));
+  const [detailOpen, setDetailOpen] = React.useState(!!params.get("task"));
   /**
-   * `?task=` phải mở Sheet cả khi điều hướng trong trang (bảng lệnh, thông báo, link đã chia sẻ),
+   * `?task=` phải mở modal chi tiết cả khi điều hướng trong trang (bảng lệnh, thông báo, link đã chia sẻ),
    * không chỉ lúc tải lần đầu — trước đây state chỉ đọc param một lần khi mount.
    */
   const urlTaskId = params.get("task");
   React.useEffect(() => {
     if (!urlTaskId) return;
     setSelectedId(urlTaskId);
-    setSheetOpen(true);
+    setDetailOpen(true);
   }, [urlTaskId]);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [selectedColumnId, setSelectedColumnId] = React.useState<string>("");
@@ -411,12 +412,12 @@ export function KanbanBoard() {
 
   const openTask = React.useCallback((t: TaskListItem) => {
     setSelectedId(t.id);
-    setSheetOpen(true);
+    setDetailOpen(true);
   }, []);
 
   /**
    * Phím tắt trên bảng, kiểu Jira/Linear (docs 02/05 §C1). Bỏ qua khi con trỏ đang ở ô nhập,
-   * khi có phím bổ trợ, hoặc khi đang mở Sheet/hộp thoại/menu — để không giành phím của Radix.
+   * khi có phím bổ trợ, hoặc khi đang mở modal chi tiết/hộp thoại/menu — để không giành phím của Radix.
    */
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -425,7 +426,7 @@ export function KanbanBoard() {
       if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // Radix giữ node lại lúc chạy hiệu ứng đóng (data-state="closed"), nên phải loại trừ,
-      // không thì đóng Sheet xong là mọi phím tắt chết cho tới khi render lại.
+      // không thì đóng modal xong là mọi phím tắt chết cho tới khi render lại.
       if (document.querySelector('[role="dialog"]:not([data-state="closed"]),[role="alertdialog"]:not([data-state="closed"]),[role="menu"],[cmdk-root]')) return;
 
       const focused = focusedId ? local.find((t) => t.id === focusedId) ?? null : null;
@@ -504,7 +505,7 @@ export function KanbanBoard() {
       }
     };
     // Bắt ở pha capture: Radix xử lý Escape trước rồi đặt data-state="closed", nên nếu nghe ở
-    // pha bubble thì đúng phím Escape đóng Sheet sẽ lọt qua guard và xoá luôn ô trỏ thẻ.
+    // pha bubble thì đúng phím Escape đóng modal sẽ lọt qua guard và xoá luôn ô trỏ thẻ.
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [focusedId, local, f, project.canEdit, openComposer, moveFocus, auth.user?.id, quickAssign, openTask, sel, grid]);
@@ -687,6 +688,7 @@ export function KanbanBoard() {
                   key={col.id}
                   col={col}
                   tasks={colTasks(col.id)}
+                  projectId={project.id}
                   projectKey={project.key}
                   columns={columns}
                   onOpen={openTask}
@@ -730,15 +732,15 @@ export function KanbanBoard() {
         </DndContext>
       )}
 
-      <TaskDetailSheet
+      <TaskDetailModal
         taskId={selectedId}
         project={project}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
         onOpenFullPage={() => {
           const t = (tasksQuery.data ?? []).find((x) => x.id === selectedId);
           if (!t) return;
-          setSheetOpen(false);
+          setDetailOpen(false);
           router.push(`/projects/${project.id}/tasks/${taskKeyOf(project.key, t)}`);
         }}
       />
@@ -1108,6 +1110,7 @@ function ColumnComposer({
 function Column({
   col,
   tasks,
+  projectId,
   projectKey,
   columns,
   onOpen,
@@ -1133,6 +1136,7 @@ function Column({
 }: {
   col: BoardColumn;
   tasks: TaskListItem[];
+  projectId: string;
   projectKey: string;
   columns: BoardColumn[];
   onOpen: (t: TaskListItem) => void;
@@ -1206,7 +1210,26 @@ function Column({
                 </div>
               )}
               {canEdit && (
-                <div className={cn("absolute top-2 right-2 transition-opacity", focusedId === task.id ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+                <div
+                  className={cn(
+                    "absolute top-2 right-2 flex items-center gap-1 transition-opacity",
+                    focusedId === task.id ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                  )}
+                >
+                  {/* Mở thẳng trang chi tiết, không phải qua modal rồi bấm thêm lần nữa */}
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 rounded bg-background/90 shadow-xs hover:bg-muted"
+                    aria-label={`Mở trang chi tiết ${taskKeyOf(projectKey, task)}`}
+                    title="Mở trang chi tiết (Ctrl+click để mở tab mới)"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Link href={`/projects/${projectId}/tasks/${taskKeyOf(projectKey, task)}`}>
+                      <Maximize2 className="h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
                   <DropdownMenu open={menuTaskId === task.id ? true : undefined} onOpenChange={(o) => !o && menuTaskId === task.id && onMenuOpenChange(null)}>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-6 w-6 rounded bg-background/90 shadow-xs hover:bg-muted" onClick={(e) => e.stopPropagation()} aria-label="Tuỳ chọn thẻ">

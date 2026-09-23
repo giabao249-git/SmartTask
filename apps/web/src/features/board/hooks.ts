@@ -26,7 +26,7 @@ export interface TaskFilters {
 /**
  * GET /projects/:id/tasks → { items, deletedIds, serverTime } (docs 11 §3.6); task gốc, không phân trang.
  * `enabled: false` cho nơi chỉ cần danh sách khi người dùng mở ô chọn (xem DependencyPicker) —
- * trước đây mỗi lần mở Sheet là kéo lại toàn bộ danh sách chỉ để đổ combobox phụ thuộc.
+ * trước đây mỗi lần mở modal chi tiết là kéo lại toàn bộ danh sách chỉ để đổ combobox phụ thuộc.
  */
 export function useTasks(projectId: string, filters: TaskFilters = {}, opts: { enabled?: boolean } = {}) {
   return useQuery({

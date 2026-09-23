@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { UserAvatar } from "@/components/app/UserAvatar";
-import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
+import { TaskDetailModal } from "@/components/app/TaskDetailModal";
 import { taskKeyOf } from "@/components/app/TaskCard";
 import { describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
@@ -574,7 +574,7 @@ export function TimelineGanttView() {
           </Card>
         )}
 
-        <TaskDetailSheet
+        <TaskDetailModal
           taskId={selectedId}
           project={project}
           open={!!selectedId}

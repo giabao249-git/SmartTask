@@ -95,7 +95,7 @@ const buildSections = (mod: string): ShortcutSection[] => [
       },
       {
         keys: ["Esc"],
-        description: "Đóng cửa sổ phụ, Sheet chi tiết hoặc Popover đang mở",
+        description: "Đóng cửa sổ phụ, modal chi tiết hoặc Popover đang mở",
       },
     ],
   },

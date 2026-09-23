@@ -51,7 +51,7 @@ export function useActivity(projectId: string, taskId?: string, limit = 30) {
   });
 }
 
-/** Dòng hoạt động (UC-16): GET /projects/:id/activity?taskId= — dùng trong Sheet task và Dashboard. */
+/** Dòng hoạt động (UC-16): GET /projects/:id/activity?taskId= — dùng trong modal chi tiết task và Dashboard. */
 export function ActivityList({ projectId, taskId, compact = false, limit = 30 }: { projectId: string; taskId?: string; compact?: boolean; limit?: number }) {
   const q = useActivity(projectId, taskId, limit);
   if (q.isPending) return <Skeleton className={compact ? "h-32 w-full" : "h-56 w-full"} />;

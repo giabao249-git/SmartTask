@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { TaskCard } from "@/components/app/TaskCard";
-import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
+import { TaskDetailModal } from "@/components/app/TaskDetailModal";
 import { describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useAuth } from "@/lib/auth";
@@ -93,7 +93,7 @@ export function EisenhowerMatrixView() {
           ))}
         </div>
       )}
-      <TaskDetailSheet taskId={selectedId} project={project} open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)} />
+      <TaskDetailModal taskId={selectedId} project={project} open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)} />
     </div>
   );
 }

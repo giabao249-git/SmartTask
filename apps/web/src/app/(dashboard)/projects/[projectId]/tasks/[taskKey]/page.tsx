@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/app/ErrorState";
 import { PageHeader } from "@/components/app/PageHeader";
-import { TaskDetailBody } from "@/components/app/TaskDetailSheet";
+import { TaskDetailBody } from "@/components/app/TaskDetailModal";
 import { api, describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { taskKeys } from "@/features/board/hooks";

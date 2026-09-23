@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpDown, Sparkles, ListTodo } from "lucide-react";
+import { ArrowUpDown, Sparkles, ListTodo, Maximize2 } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -15,7 +17,7 @@ import { TaskTypeBadge } from "@/components/app/TaskTypeBadge";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
-import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
+import { TaskDetailModal } from "@/components/app/TaskDetailModal";
 import { fmtDay, taskKeyOf } from "@/components/app/TaskCard";
 import { describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
@@ -70,16 +72,16 @@ export function TaskListView() {
   const patchRow = (t: TaskListItem, patch: Record<string, unknown>, what: string) =>
     mut.update.mutate({ id: t.id, version: t.version, patch }, { onError: (e) => fail(e, what, taskKeyOf(project.key, t)) });
   const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
-  const [sheetOpen, setSheetOpen] = React.useState(!!params.get("task"));
+  const [detailOpen, setDetailOpen] = React.useState(!!params.get("task"));
   /**
-   * `?task=` phải mở Sheet cả khi điều hướng trong trang (bảng lệnh, thông báo, link đã chia sẻ),
+   * `?task=` phải mở modal chi tiết cả khi điều hướng trong trang (bảng lệnh, thông báo, link đã chia sẻ),
    * không chỉ lúc tải lần đầu — trước đây state chỉ đọc param một lần khi mount.
    */
   const urlTaskId = params.get("task");
   React.useEffect(() => {
     if (!urlTaskId) return;
     setSelectedId(urlTaskId);
-    setSheetOpen(true);
+    setDetailOpen(true);
   }, [urlTaskId]);
 
   const rows = React.useMemo(() => {
@@ -126,7 +128,7 @@ export function TaskListView() {
     </TableHead>
   );
   const today = new Date().toISOString().slice(0, 10);
-  /** Ô sửa tại chỗ không được để click lan ra làm mở Sheet. */
+  /** Ô sửa tại chỗ không được để click lan ra làm mở modal chi tiết. */
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
@@ -219,7 +221,7 @@ export function TaskListView() {
                     className="cursor-pointer text-xs"
                     onClick={() => {
                       setSelectedId(t.id);
-                      setSheetOpen(true);
+                      setDetailOpen(true);
                     }}
                   >
                     {editable && (
@@ -236,6 +238,20 @@ export function TaskListView() {
                       <span className="inline-flex items-center gap-1">
                         {taskKeyOf(project.key, t)}
                         {t.source === "AI" && <Sparkles className="h-3 w-3 text-info" />}
+                        {/* Mở thẳng trang chi tiết, không phải qua modal rồi bấm thêm lần nữa */}
+                        <Button
+                          asChild
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                          aria-label={`Mở trang chi tiết ${taskKeyOf(project.key, t)}`}
+                          title="Mở trang chi tiết (Ctrl+click để mở tab mới)"
+                          onClick={stop}
+                        >
+                          <Link href={`/projects/${project.id}/tasks/${taskKeyOf(project.key, t)}`}>
+                            <Maximize2 className="h-3 w-3" />
+                          </Link>
+                        </Button>
                       </span>
                     </TableCell>
                     <TableCell className="font-medium max-w-md truncate">{t.title}</TableCell>
@@ -326,15 +342,15 @@ export function TaskListView() {
         </div>
       )}
 
-      <TaskDetailSheet
+      <TaskDetailModal
         taskId={selectedId}
         project={project}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
         onOpenFullPage={() => {
           const t = (tasksQuery.data ?? []).find((x) => x.id === selectedId);
           if (!t) return;
-          setSheetOpen(false);
+          setDetailOpen(false);
           router.push(`/projects/${project.id}/tasks/${taskKeyOf(project.key, t)}`);
         }}
       />

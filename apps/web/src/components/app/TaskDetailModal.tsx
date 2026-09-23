@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,21 +39,27 @@ import {
 } from "@/features/board/hooks";
 import { fmtDay, taskKeyOf } from "./TaskCard";
 
-export interface TaskDetailSheetProps {
+export interface TaskDetailModalProps {
   taskId: string | null;
   project: ProjectDetail;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Bấm nút phóng to trong Sheet — nơi gọi tự điều hướng sang trang riêng. */
+  /** Bấm nút phóng to trong modal — nơi gọi tự điều hướng sang trang riêng. */
   onOpenFullPage?: () => void;
 }
 
-/** Chi tiết task từ GET /tasks/:id — sửa trường qua PATCH có version (409 → toast + tải lại), subtask, bình luận @mention, đính kèm. */
-export function TaskDetailSheet({ taskId, project, open, onOpenChange, onOpenFullPage }: TaskDetailSheetProps) {
+/**
+ * Chi tiết task từ GET /tasks/:id — sửa trường qua PATCH có version (409 → toast + tải lại),
+ * subtask, bình luận @mention, đính kèm.
+ *
+ * Mở dạng modal giữa màn chứ không phải ngăn trượt bên phải: nội dung dàn hai cột nên cần bề
+ * ngang, và modal giữ được mạch "xem rồi đóng, bảng vẫn nguyên chỗ cũ".
+ */
+export function TaskDetailModal({ taskId, project, open, onOpenChange, onOpenFullPage }: TaskDetailModalProps) {
   const q = useTask(open ? taskId : null);
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-3xl p-0 flex flex-col overflow-hidden">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-full sm:max-w-3xl p-0 flex flex-col max-h-[88vh] overflow-hidden gap-0">
         {q.isPending || !taskId ? (
           <div className="p-6 space-y-4">
             <Skeleton className="h-6 w-40" />
@@ -67,44 +73,44 @@ export function TaskDetailSheet({ taskId, project, open, onOpenChange, onOpenFul
         ) : (
           <TaskDetailBody task={q.data} project={project} onRefresh={() => q.refetch()} onOpenFullPage={onOpenFullPage} />
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-type Variant = "sheet" | "page";
+type Variant = "modal" | "page";
 const HeaderWrap = ({ variant, children }: { variant: Variant; children: React.ReactNode }) =>
-  variant === "sheet" ? (
-    <SheetHeader className="p-4 pb-3 border-b border-border/60 space-y-2">{children}</SheetHeader>
+  variant === "modal" ? (
+    <DialogHeader className="p-4 pb-3 border-b border-border/60 space-y-2">{children}</DialogHeader>
   ) : (
     <div className="p-4 pb-3 border-b border-border/60 space-y-2">{children}</div>
   );
 const TitleWrap = ({ variant, children }: { variant: Variant; children: React.ReactNode }) =>
-  variant === "sheet" ? <SheetTitle className="text-left">{children}</SheetTitle> : <h1 className="text-left">{children}</h1>;
+  variant === "modal" ? <DialogTitle className="text-left">{children}</DialogTitle> : <h1 className="text-left">{children}</h1>;
 const DescWrap = ({ variant, children }: { variant: Variant; children: React.ReactNode }) =>
-  variant === "sheet" ? (
-    <SheetDescription className="text-left text-[11px]">{children}</SheetDescription>
+  variant === "modal" ? (
+    <DialogDescription className="text-left text-[11px]">{children}</DialogDescription>
   ) : (
     <p className="text-left text-[11px] text-muted-foreground">{children}</p>
   );
 
 /**
- * Thân màn chi tiết — dùng chung cho CẢ Sheet (bấm thẻ trên bảng) và trang riêng
+ * Thân màn chi tiết — dùng chung cho CẢ modal (bấm thẻ trên bảng) và trang riêng
  * /projects/:id/tasks/ST-n. Một nguồn sự thật, hai khung chứa: `variant` chỉ đổi phần
- * tiêu đề, vì SheetTitle/SheetDescription của Radix cần context Dialog nên không dùng
- * được ngoài Sheet (docs 02/05 §D2).
+ * tiêu đề, vì DialogTitle/DialogDescription của Radix cần context Dialog nên không dùng
+ * được ngoài modal (docs 02/05 §D2).
  */
 export function TaskDetailBody({
   task,
   project,
   onRefresh,
-  variant = "sheet",
+  variant = "modal",
   onOpenFullPage,
 }: {
   task: TaskDetail;
   project: ProjectDetail;
   onRefresh: () => void;
-  variant?: "sheet" | "page";
+  variant?: "modal" | "page";
   onOpenFullPage?: () => void;
 }) {
   const m = useTaskMutations(project.id);
@@ -132,7 +138,8 @@ export function TaskDetailBody({
   return (
     <>
       <HeaderWrap variant={variant}>
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* pr-8 chừa chỗ cho nút đóng của Dialog (absolute right-4) khỏi đè lên nút phóng to */}
+        <div className={cn("flex items-center gap-2 flex-wrap", variant === "modal" && "pr-8")}>
           <Badge variant="outline" className="font-mono text-xs">
             {taskKeyOf(project.key, task)}
           </Badge>
@@ -151,7 +158,7 @@ export function TaskDetailBody({
             </Badge>
           )}
           <span className="text-[10px] text-muted-foreground ml-auto font-mono">v{task.version}</span>
-          {variant === "sheet" && onOpenFullPage && (
+          {variant === "modal" && onOpenFullPage && (
             <Button
               variant="ghost"
               size="icon"
@@ -701,7 +708,7 @@ function AttachmentsPanel({ taskId, canEdit }: { taskId: string; canEdit: boolea
 /** Phụ thuộc: chọn task cùng dự án phải xong trước (PUT /tasks/:id/dependencies; 422 khi tạo vòng). */
 function DependencyPicker({ taskId, value, projectId, projectKey, disabled, onChange }: { taskId: string; value: string[]; projectId: string; projectKey: string; disabled: boolean; onChange: (ids: string[]) => void }) {
   const [open, setOpen] = React.useState(false);
-  // Chỉ kéo danh sách khi người dùng thật sự mở ô chọn phụ thuộc, không phải mỗi lần mở Sheet.
+  // Chỉ kéo danh sách khi người dùng thật sự mở ô chọn phụ thuộc, không phải mỗi lần mở modal.
   const tasks = useTasks(projectId, {}, { enabled: open });
   const [draft, setDraft] = React.useState<string[]>(value);
   const [q, setQ] = React.useState("");

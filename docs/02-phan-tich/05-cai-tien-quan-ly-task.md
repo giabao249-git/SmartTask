@@ -383,6 +383,10 @@ Kết luận: nới rộng và **tái cấu trúc bố cục** giải quyết đ
 - **Công sức:** M (sắp xếp lại ~250 dòng JSX trong `TaskDetailSheet.tsx`, không đổi logic).
 - **Rủi ro:** thấp. Phải làm cùng C4 (không khoá cả Sheet) thì mới thấy hết hiệu quả.
 
+> **Đã đổi 23/09/2026 theo yêu cầu:** bấm thẻ mở **modal giữa màn** (`Dialog`, `sm:max-w-3xl`) chứ không
+> phải ngăn trượt bên phải; và thẻ Kanban lẫn dòng Danh sách có **icon mở thẳng trang chi tiết**, không
+> phải mở modal rồi bấm thêm lần nữa. Docs 10 §4 đã cập nhật theo.
+
 ### D2 · Trang toàn màn hình cho một công việc 🟠
 
 - **Câu hỏi của anh:** "click vào thì tách ra màn hình riêng đúng chứ?"
