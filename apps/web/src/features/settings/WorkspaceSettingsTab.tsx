@@ -143,7 +143,7 @@ export function WorkspaceSettingsTab({ workspaceId, canEdit }: { workspaceId: st
       <Card className="border-border/80">
         <CardHeader className="p-4 pb-2">
           <CardTitle className="text-sm">Trợ lý AI</CardTitle>
-          <CardDescription className="text-xs">Hạn mức lượt/ngày mỗi người và các mục đích được bật. Provider/model cấu hình ở server (.env), không đổi từ đây.</CardDescription>
+          <CardDescription className="text-xs">Hạn mức lượt/ngày mỗi người và các mục đích được bật. Chọn nhà cung cấp/model ở tab &quot;Cấu hình Trợ lý AI&quot;.</CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-2 grid grid-cols-2 md:grid-cols-4 gap-3">
           {num("Lượt AI/ngày/người", "dailyLimitPerUser", "1", "0 = tắt")}
