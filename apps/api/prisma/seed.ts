@@ -460,7 +460,16 @@ async function main(): Promise<void> {
     where: { projectId: project.id },
     orderBy: { position: 'asc' },
   });
-  const colMap = (key: string) => columns.find((c) => c.statusKey === key)!.id;
+  const colMap = (key: string) => {
+    const col = columns.find((c) => c.statusKey === key);
+    // `!` ở đây từng cho ra "Cannot read properties of undefined (reading 'id')" — không nói được
+    // sai ở đâu. Báo thẳng mã sai và các mã hợp lệ.
+    if (!col)
+      throw new Error(
+        `Seed: statusKey "${key}" không có trong dự án. Mã hợp lệ: ${columns.map((c) => c.statusKey).join(', ')}`,
+      );
+    return col.id;
+  };
 
   const sprint1 = await prisma.sprint.create({
     data: {
@@ -626,7 +635,7 @@ async function main(): Promise<void> {
     {
       title: 'Lỗi: kéo thẻ sang cột vượt WIP vẫn hiện toast thành công rồi mới hoàn tác',
       type: TaskType.BUG,
-      col: 'DOING',
+      col: 'IN_PROGRESS',
       sprint: sprint1.id,
       hours: 3,
       difficulty: 2,
