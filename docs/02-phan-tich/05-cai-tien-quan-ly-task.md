@@ -630,6 +630,8 @@ gọi tuần tự với giới hạn 50, đo thấy đủ nhanh mà giữ nguyê
 
 ## 13. Gợi ý chia phase
 
+> **Lưu ý đánh số:** "Phase 9 / 10 / 11" dưới đây là cách chia lô của RIÊNG đợt cải tiến giao diện này, không liên quan tới Phase 9 (AI chat, memory) và Phase 10 (đóng gói, deploy) trong [kế hoạch backend](../05-hien-thuc/00-ke-hoach-backend.md). Kết quả hiện thực ghi ở [05/web-cai-tien-task.md](../05-hien-thuc/web-cai-tien-task.md).
+
 | Phase | Tên | Nội dung | Ước lượng | Mốc |
 |---|---|---|---|---|
 | **Phase 9** ✅ | Tạo task nhanh & màn chi tiết | A7 → B8 → A6 → A1 → A2 → A3 → B3 → **D1** → **D3**; đồng thời C2 (mục 1–2), C3, E2, E3. Chỉ sửa `apps/web`, backend **không đổi**. | 5–6 ngày | xong trước 15/10 |

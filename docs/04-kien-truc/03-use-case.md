@@ -36,12 +36,12 @@ Phân loại theo hướng dẫn xác định chi phí phần mềm nội bộ (
 |---|---|---|---|---|---|
 | UC-08 | Quản lý dự án | Admin/PM | tạo, mã dự án [ĐV]; sửa, lưu trữ [ĐV]; thành viên, PM [ĐV]; danh sách [TQ]; tổng quan [TQ] | 5 | M |
 | UC-09 | Sprint / phase | PM | tạo [ĐV]; kéo backlog vào [ĐV]; bắt đầu (một ACTIVE) [ĐV]; kết thúc, chuyển việc dở [DB]; danh sách [TQ] | 5 | M |
-| UC-10 | Công việc | PM/Thành viên | tạo đủ trường [ĐV]; giao người [ĐV]; sửa/xoá mềm [ĐV]; mã ST-n [DB]; chi tiết [TQ]; tiến độ/giờ còn lại [ĐV]; sao chép [ĐV]; version [DB] | 8 | M |
+| UC-10 | Công việc | PM/Thành viên | tạo đủ trường (gồm **loại** STORY/TASK/BUG) [ĐV]; giao người [ĐV]; sửa/xoá mềm [ĐV]; mã ST-n [DB]; chi tiết — modal và trang riêng `/tasks/ST-n` [TQ]; tiến độ/giờ còn lại [ĐV]; sao chép [ĐV]; version [DB] | 8 | M |
 | UC-11 | Subtask & phụ thuộc | PM/Thành viên | subtask [ĐV]; tiến độ cha [DB]; bị chặn bởi [ĐV]; phát hiện vòng [TV]; huy hiệu bị chặn [ĐR] | 5 | M (subtask) · S (phụ thuộc) |
-| UC-12 | Kanban | PM/Thành viên/Viewer | bảng theo cột [TQ]; kéo thả [ĐV]; cột & WIP [ĐV]; cảnh báo WIP [ĐR]; lọc/tìm [TV]; tạo nhanh [ĐV]; huy hiệu quá hạn/bị chặn/quá tải [ĐR] | 7 | M |
+| UC-12 | Kanban | PM/Thành viên/Viewer | bảng theo cột [TQ]; kéo thả [ĐV]; cột & WIP [ĐV]; cảnh báo WIP [ĐR]; lọc/tìm [TV]; tạo nhanh [ĐV]; nhóm theo người/ưu tiên [TQ]; chọn nhiều + thao tác hàng loạt [ĐV]; huy hiệu quá hạn/bị chặn/quá tải [ĐR] | 9 | M |
 | UC-13 | Gantt | PM/Thành viên | thanh theo ngày [ĐR]; hôm nay/quá hạn [ĐR]; mũi tên phụ thuộc [ĐR]; thu phóng [TV]; kéo giãn [ĐV] | 5 | M (đọc) · S (kéo) |
 | UC-14 | Eisenhower | PM/Thành viên | 4 góc [ĐR]; kéo đổi ưu tiên/khẩn [ĐV]; việc của tôi [TV] | 3 | S |
-| UC-15 | Danh sách & bộ lọc | Mọi người dùng | bảng, sắp xếp [TQ]; bộ lọc lưu [TV]; tìm toàn văn [TV]; việc của tôi xuyên dự án [TQ] | 4 | M |
+| UC-15 | Danh sách & bộ lọc | Mọi người dùng | bảng, sắp xếp, sửa tại chỗ [TQ/ĐV]; bộ lọc lưu (URL + đặt tên) [TV]; tìm toàn văn [TV]; backlog riêng [TQ]; việc của tôi xuyên dự án [TQ] | 6 | M |
 | UC-16 | Nhật ký hoạt động | Mọi người dùng | ghi diff [DB]; lịch sử task [TQ]; dòng hoạt động dự án [TQ] | 3 | S |
 
 ### C · Cộng tác thời gian thực

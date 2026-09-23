@@ -83,6 +83,23 @@ variants: { variant: {
 - Icon-only button bắt buộc `aria-label`; `Tooltip` kèm theo.
 - Kiểm tra bằng axe DevTools ở Tuần 09; tương phản AA cho các token thêm (`--warning` trên nền sáng dùng chữ tối).
 
+### 6.1 Phím tắt (bổ sung 23/09/2026)
+
+**Nhãn phím theo hệ điều hành, không in ký hiệu Mac.** Dùng `useModKey()` (`lib/hooks/use-mod-key.ts`): Windows/Linux hiện `Ctrl`, macOS mới hiện `⌘`. Hook trả `"Ctrl"` ở lần render đầu cho khớp HTML dựng trên server rồi mới đổi — đọc `navigator` lúc render sẽ lệch hydration. Phần bắt phím **không** đổi theo nhãn: vẫn nhận `metaKey || ctrlKey`, mà trên Windows/Linux `metaKey` chính là phím Super, nên cả hai đều ăn.
+
+| Phạm vi | Phím |
+|---|---|
+| Toàn cục (AppShell) | `Ctrl/Super + K` bảng lệnh · `+ J` Trợ lý AI · `+ B` ghim sidebar · `?` bảng tra phím tắt |
+| Màn Công việc | `F` chế độ tập trung |
+| Bảng Kanban | `C` ô tạo nhanh · `Q` lọc việc của tôi · `J`/`K` (hoặc ↓↑) đi trong cột · `N`/`P` (hoặc →←) sang cột · `Enter`/`O` mở chi tiết · `I` giao cho mình · `A` menu thẻ · `X` chọn để làm hàng loạt · `Esc` bỏ chọn / bỏ trỏ |
+| Trợ lý AI | `Ctrl/Super + H` ngăn lịch sử phiên |
+
+Ba quy tắc bắt buộc khi thêm phím tắt mới:
+
+1. **Nghe ở pha capture** (`addEventListener("keydown", fn, true)`). Radix xử lý `Escape` trước rồi đặt `data-state="closed"`; nghe ở pha bubble thì phím Escape dùng để đóng modal sẽ lọt qua guard và chạy cả hành động của mình.
+2. **Guard đủ bốn điều kiện**: bỏ qua khi con trỏ ở `input`/`textarea`/`contentEditable`, khi có phím bổ trợ, khi đang mở `[role="dialog"]`/`[role="alertdialog"]`/`[role="menu"]`/`[cmdk-root]` — và phải loại trừ node đang chạy hiệu ứng đóng (`:not([data-state="closed"])`), nếu không thì đóng modal xong là mọi phím tắt chết.
+3. **`ShortcutsDialog` chỉ liệt kê phím CÓ THẬT.** Bảng tra cứu từng liệt kê 12 phím trong khi chỉ 2 phím chạy — bấm thử trước hội đồng là lộ. Thêm phím thì sửa bảng trong cùng commit.
+
 ## 7. Kiểm tra tự động
 
 `eslint.config.mjs` của `apps/web` thêm quy tắc cấm phần tử thô trong `features/` và `app/`:

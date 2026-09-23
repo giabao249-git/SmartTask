@@ -18,6 +18,8 @@ Mỗi phase là một nhánh `feature/be-p<N>-<tên>`, một PR, kết thúc b�
 | **9** | Chat theo phiên, `ASSIGN_PROPOSAL`/`REBALANCE`/`UPDATE_TASK_DRAFT`, memory/habit, quản trị cấu hình AI (catalog, purpose, prompt có phiên bản, cache, sổ token/chi phí) | `ai`, `memory`, `ai-config` | 3.11 S, 3.12 | Kịch bản 7b của 05 chạy được; bộ hồi quy 20 kịch bản | «TV4» |
 | **10** | Đóng gói & vận hành: Dockerfile, seed demo 3 tuần, deploy Render + Supabase (`migrate deploy`), keep-alive, k6, security review, README cài đặt | `infra` | — | Link API online; k6 p95 đạt mục tiêu 01 §5 | «TV5» |
 
+> **Nhánh frontend đánh số riêng**, không dùng chung số phase ở bảng trên: [web-tich-hop.md](web-tich-hop.md) (bước 0–8 nối API thật) và [web-cai-tien-task.md](web-cai-tien-task.md) (đợt cải tiến tạo & quản lý công việc 23/09). "Phase 9 / Phase 10" trong bản đề xuất [02/05](../02-phan-tich/05-cai-tien-quan-ly-task.md) là cách đánh số của riêng đợt giao diện đó.
+
 Nguyên tắc chung khi code (từ [01](../04-kien-truc/01-kien-truc-he-thong.md) §2 và [05](../04-kien-truc/05-ai-agent.md) §1):
 
 1. Controller chỉ DTO + Swagger; Service chứa nghiệp vụ; hàm tính toán thuần nằm trong `domain/` không đụng Prisma.

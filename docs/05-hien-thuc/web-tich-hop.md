@@ -1,6 +1,8 @@
 # Tích hợp apps/web ↔ API thật
 
-> Trạng thái: **hoàn tất bước 0–7** trên `main` (18/09/2026). Mock chỉ còn `src/mocks/notifications.ts` (AppShell bản đang sửa dở của phiên khác vẫn import — xem §4).
+> Trạng thái: **hoàn tất bước 0–8** trên `main` (23/09/2026). Bước 8 = đợt cải tiến tạo/quản lý task theo
+> [02/05](../02-phan-tich/05-cai-tien-quan-ly-task.md) — chi tiết ở [web-cai-tien-task](web-cai-tien-task.md).
+> Mock chỉ còn `src/mocks/notifications.ts` (AppShell vẫn import — xem §4).
 > Quy ước giữ nguyên docs 10: chỉ `components/ui`, màu qua `lib/status.ts`, TypeScript strict không `any`, mỗi màn 4 trạng thái (loading / empty / error theo mã / data) từ dữ liệu thật.
 
 ## 1. Hạ tầng (bước 0)
@@ -21,11 +23,12 @@ Sidebar dự án từ 8 mục còn 4. Hai nhóm được gộp vì **cùng một
 
 | Màn mới | Tab | Màn cũ (vẫn redirect) |
 |---|---|---|
-| `/projects/:id/work` | `?view=board` \| `list` \| `timeline` \| `eisenhower` | `/board`, `/tasks`, `/timeline`, `/eisenhower` |
+| `/projects/:id/work` | `?view=board` \| `list` \| `timeline` \| `eisenhower` \| `backlog` | `/board`, `/tasks`, `/timeline`, `/eisenhower` |
 | `/projects/:id/people` | `?tab=workload` \| `balance` \| `skills` \| `mine` | `/workload`, `/rebalance`, `/skills` |
 
-- **Bộ lọc dùng chung** (`features/work/filters.tsx`): sprint, người, từ khoá, lọc nhanh (Tất cả / Việc của tôi / Chưa giao) nằm trong URL `?view=&sprint=&assignee=&q=&quick=&task=` → đổi cách nhìn không mất lọc, F5 và chia sẻ link ra đúng khung nhìn.
-- **Một lần gọi API cho cả màn**: 4 view dùng chung khoá TanStack Query `["projects", id, "tasks", filters]`; đo thực tế đổi 3 tab = **0 request** thêm.
+- **Bộ lọc dùng chung** (`features/work/filters.tsx`): sprint, người, **loại**, từ khoá, lọc nhanh (Tất cả / Việc của tôi / Chưa giao) và **nhóm** nằm trong URL `?view=&sprint=&assignee=&type=&q=&quick=&group=&task=` → đổi cách nhìn không mất lọc, F5 và chia sẻ link ra đúng khung nhìn.
+- **Một lần gọi API cho cả màn**: 5 view dùng chung khoá TanStack Query `["projects", id, "tasks", filters]`; đo thực tế đổi 3 tab = **0 request** thêm. Màn Backlog ép `backlog=true` nên có khoá riêng, và ẩn ô lọc sprint.
+- **Lựa chọn nhiều dùng chung** (`features/work/selection.tsx`) và **chế độ tập trung** (`features/work/focus.tsx`) cũng đặt ở tầng này, nên đổi giữa Bảng ↔ Danh sách ↔ Backlog không mất những gì đang chọn.
 - **Đường cũ không chết**: 7 route cũ chuyển hướng sang tab tương ứng và **giữ nguyên `?task=`** — thông báo, ⌘K, link đã chia sẻ và ảnh trong tài liệu vẫn mở đúng công việc.
 - Màn hẹp (< 640px) đổi tab bằng `Select` thay cho `TabsList`.
 - Giữ riêng: Dashboard (điểm vào), Trợ lý AI (layout 3 cột), Cấu hình dự án (đã là tabs).
@@ -44,14 +47,17 @@ Ký hiệu: ✅ nối API thật · 🟡 tính trên web từ dữ liệu API (k
 | Màn (route) | Feature | Endpoint | Realtime | Trạng thái |
 |---|---|---|---|---|
 | Đăng nhập / đăng ký `/login` | `(auth)/login/page.tsx` | `POST /auth/login`, `POST /auth/register`, `POST /auth/refresh`, `POST /auth/logout` | — | ✅ |
-| AppShell (tên, workspace, vai, đăng xuất) | `components/app/AppShell.tsx` | `GET /me`, `GET /projects/:id` | — | ✅ (chuông thông báo: xem §4) |
+| AppShell (tên, workspace, vai, đăng xuất) | `components/app/AppShell.tsx` | `GET /me`, `GET /projects/:id`, `GET /workspaces/:wsId/tasks/search?q=` (bảng lệnh) | — | ✅ — bảng lệnh Ctrl/Super + K tìm việc **xuyên dự án** và có nhóm lệnh "Tạo"; nhãn phím theo hệ điều hành (`lib/hooks/use-mod-key.ts`), không còn ký hiệu ⌘ (chuông thông báo: xem §4) |
 | Workspace & dự án `/workspaces` | `workspaces/page.tsx` | `GET /workspaces`, `POST /workspaces`, `GET /workspaces/:id/projects`, `POST /workspaces/:id/projects`, `GET /workspaces/:id/members`, `POST /workspaces/:id/invitations` | — | ✅ |
 | Trợ lý AI `/projects/:id/assistant` | `features/assistant/*` | `GET/POST/PATCH/DELETE /ai/sessions[/:id]`, `GET /ai/sessions/:id/proposals`, `POST /ai/chat`, `PATCH /ai/proposals/:id/items/:draftKey`, `POST /ai/proposals/:id/apply {draftKeys?, version}`, `POST …/reject {draftKeys?}`, `GET /ai/quota` | `ai:proposal:updated`, `ai:session:updated` | ✅ — 409 `AI_TURN_IN_PROGRESS`/429 → toast; 503 `AI_PROVIDER_UNAVAILABLE` → Alert; 409 `PROPOSAL_VERSION_CONFLICT` → Alert "đã đổi ở tab khác" + tải lại; item duyệt xanh lá với key task thật |
 | Cài đặt › Trợ lý AI | `features/settings/AiPolicyView.tsx` | `GET/PUT /workspaces/:id/ai/prompt`, `GET/POST/DELETE /workspaces/:id/member-aliases`, `PATCH /workspaces/:id/members/:userId/identity` | — | ✅ (409 alias trùng, 422 quản lý là chính mình) |
 | AI phân rã `/projects/:id/ai-decompose` | `features/ai-decompose/AIDecomposeView.tsx` | `POST /projects/:id/ai/decompose`, `GET /ai/proposals/:id`, `POST …/apply`, `POST …/reject` | — | ✅ — form một lượt; sửa từng mục chuyển sang Trợ lý AI (nút "Chat nhiều lượt" mang prompt) |
-| Công việc › Bảng `/projects/:id/work?view=board` | `features/board/*` | `GET /projects/:id/tasks {items, deletedIds, serverTime}`, `POST /projects/:id/tasks`, `PATCH /tasks/:id/move {columnId, position, version}`, `GET /projects/:id/sprints` | `task:*` (bỏ qua actorId của mình, debounce 300 ms) | ✅ — 409 `TASK_VERSION_CONFLICT`/422 WIP → hoàn tác + toast |
-| Chi tiết task (Sheet) | `components/app/TaskDetailSheet.tsx` | `GET/PATCH/DELETE /tasks/:id` (mọi PATCH kèm `version`, gồm `isUrgent`), `PUT /tasks/:id/assignees`, `PUT /tasks/:id/labels`, `PUT /tasks/:id/skills`, `PUT /tasks/:id/dependencies` (mới — 422 `DEPENDENCY_CYCLE`), `PATCH /tasks/:id/progress`, `POST /tasks/:id/subtasks`, `GET/POST/PATCH/DELETE /tasks/:id/comments`, `GET /projects/:id/members/suggest?q=`, `GET/POST /tasks/:id/attachments` (sign → PUT → confirm), `GET /attachments/:id/download-url`, `DELETE /attachments/:id`, `GET /projects/:id/activity?taskId=` (tab Hoạt động) | `comment:*` | ✅ |
-| Công việc › Danh sách `?view=list` | `features/tasks/TaskListView.tsx` | `GET /projects/:id/tasks` (lọc/sắp xếp trong URL) | `task:*` | ✅ |
+| Công việc › Bảng `/projects/:id/work?view=board` | `features/board/*` | `GET /projects/:id/tasks {items, deletedIds, serverTime}`, `POST /projects/:id/tasks` (đủ trường: `type`, nhãn, kỹ năng, độ khó, nhiều người), `PATCH /tasks/:id` , `PATCH /tasks/:id/move {columnId, position, version}`, `PUT /tasks/:id/assignees`, `POST /tasks/:id/duplicate`, `DELETE /tasks/:id`, `GET /projects/:id/sprints` | `task:*` (bỏ qua actorId của mình, debounce 300 ms) | ✅ — 409 `TASK_VERSION_CONFLICT`/422 WIP → hoàn tác + toast; tạo nhanh trong cột, dán nhiều dòng, cú pháp `@# ! h`, phím tắt J/K/N/P/Enter/I/A/X/C/Q/F, swimlane theo người/ưu tiên, hoàn tác |
+| Công việc › Backlog `?view=backlog` | `features/backlog/BacklogView.tsx` | `GET /projects/:id/tasks?backlog=true`, `PATCH /tasks/:id/move {position, version}` (xếp thứ tự), `POST /sprints/:id/tasks {taskIds}` (đưa vào sprint hàng loạt) | `task:*` | ✅ — danh sách phẳng việc chưa vào sprint, kéo xếp thứ tự bền qua F5 |
+| Chi tiết task — **trang riêng** `/projects/:id/tasks/ST-n` | `app/(dashboard)/projects/[projectId]/tasks/[taskKey]/page.tsx` | `GET /tasks/by-key/:projectKey/:number` + mọi endpoint của modal | `task:*` | ✅ — dùng chung `TaskDetailBody` với modal (`variant="page"`); vào từ icon trên thẻ/dòng, hoặc nút phóng to trong modal |
+| Thao tác hàng loạt (Bảng / Danh sách / Backlog) | `features/work/BulkActionBar.tsx` | `PUT /tasks/:id/assignees`, `PATCH /tasks/:id`, `PATCH /tasks/:id/move`, `PUT /tasks/:id/labels`, `DELETE /tasks/:id` — **tuần tự ≤ 50, mỗi việc mang `version` riêng**; riêng đổi sprint dùng `POST /sprints/:id/tasks` (1 request) | `task:*` | ✅ — 409 giữa lô không dừng cả lô, báo "n−k đã đổi · k vừa được người khác sửa" |
+| Chi tiết task (**modal**) | `components/app/TaskDetailModal.tsx` | `GET/PATCH/DELETE /tasks/:id` (mọi PATCH kèm `version`, gồm `isUrgent`), `PUT /tasks/:id/assignees`, `PUT /tasks/:id/labels`, `PUT /tasks/:id/skills`, `PUT /tasks/:id/dependencies` (mới — 422 `DEPENDENCY_CYCLE`), `PATCH /tasks/:id/progress`, `POST /tasks/:id/subtasks`, `GET/POST/PATCH/DELETE /tasks/:id/comments`, `GET /projects/:id/members/suggest?q=`, `GET/POST /tasks/:id/attachments` (sign → PUT → confirm), `GET /attachments/:id/download-url`, `DELETE /attachments/:id`, `GET /projects/:id/activity?taskId=` (tab Hoạt động) | `comment:*` | ✅ — `Dialog` giữa màn (đổi từ `Sheet`, docs 10 §4), hai cột nội dung/thuộc tính, ghi qua hàng đợi tuần tự nên sửa nhiều trường liên tiếp không khoá cả màn |
+| Công việc › Danh sách `?view=list` | `features/tasks/TaskListView.tsx` | `GET /projects/:id/tasks` (lọc/sắp xếp trong URL), `PATCH /tasks/:id`, `PATCH /tasks/:id/move`, `PUT /tasks/:id/assignees` | `task:*` | ✅ — sửa tại chỗ 4 cột (cột, ưu tiên, người, hạn), chọn nhiều + Shift-click |
 | Công việc › Timeline `?view=timeline` | `features/timeline/TimelineGanttView.tsx` | `GET /projects/:id/tasks`, `GET /projects/:id/sprints`, `PATCH /tasks/:id {startDate, dueDate, version}` | `task:*` | ✅ Gantt vẽ trên web; kéo thanh dời ngày, kéo mép phải đổi hạn (409 → tải lại) |
 | Công việc › Eisenhower `?view=eisenhower` | `features/eisenhower/EisenhowerMatrixView.tsx` | `GET /projects/:id/tasks?sprintId=` | `task:*` | 🟡 4 ô tính trên web: khẩn = `isUrgent` hoặc hạn ≤ 3 ngày; quan trọng = ưu tiên HIGH/URGENT hoặc độ khó ≥ 4 |
 | Dashboard `/projects/:id/dashboard` | `features/dashboard/ProjectDashboardView.tsx` | `GET /projects/:id/dashboard`, `GET /sprints/:id/burndown`, `GET /sprints/:id/forecast`, `POST /sprints/:id/forecast/explain`, `GET /projects/:id/activity` | — | ✅ (thẻ RISK_EXPLANATION parse zod; thẻ Hoạt động gần đây UC-16; nút Cấu hình dự án) |
@@ -77,11 +83,13 @@ Ký hiệu: ✅ nối API thật · 🟡 tính trên web từ dữ liệu API (k
 | Hạng mục | Tình trạng | Việc cần |
 |---|---|---|
 | Chuông thông báo trên AppShell | `useBellCount()` + `NotificationsPanel compact` đã có (`features/notifications`), **chưa gắn** vì `AppShell.tsx` đang được phiên khác viết lại (sidebar Zen/Arc) — bản đó vẫn import `mocks/notifications.ts` | Khi AppShell ổn định: thay `MOCK_NOTIFICATIONS` bằng `useBellCount()` + Popover `NotificationsPanel compact`, rồi xoá `src/mocks/notifications.ts` |
-| Tìm kiếm ⌘K theo task | `features/search/TaskSearchGroup.tsx` đã có (dùng `GET /projects/:id/tasks?q=`, debounce) — **chưa gắn** vào CommandDialog của AppShell (file đang được phiên khác sửa) | Nhúng `<TaskSearchGroup projectId projectKey query onPick />` vào CommandList; tìm thành viên/toàn workspace: ⏳ backend |
+| ~~Tìm kiếm theo task trong bảng lệnh~~ | ✅ **xong 23/09** — `TaskSearchGroup` đã nhúng vào `CommandDialog`, và đổi sang `GET /workspaces/:wsId/tasks/search` nên tìm **xuyên dự án** chứ không chỉ dự án đang mở | Còn lại: tìm thành viên trong bảng lệnh (⏳ backend chưa có endpoint) |
 | Mục sidebar "Cấu hình dự án" | Trang `/projects/:id/settings` đã có, vào từ Dashboard | Thêm nav item khi AppShell ổn định |
-| Kéo task vào sprint hàng loạt | API `POST /sprints/:id/tasks {taskIds}`; web đổi sprint từng task trong Sheet | Chọn nhiều ở danh sách task (làm nếu kịp) |
+| ~~Kéo task vào sprint hàng loạt~~ | ✅ **xong 23/09** — chọn nhiều ở Bảng / Danh sách / Backlog rồi dùng thanh thao tác; đổi sprint đi đúng 1 request `POST /sprints/:id/tasks` | — |
 | Cấu hình AI provider/model | API `ai-config/*` (admin hệ thống); web không có màn | Ngoài phạm vi đồ án (đổi qua `.env`) |
-| Ghi nhớ (`MEMORY_PROPOSAL`) | Chỉ hiển thị thẻ; API ghi memory là Phase 9 | ⏳ backend |
+| Ghi nhớ (`MEMORY_PROPOSAL`) | Chỉ hiển thị thẻ; API ghi memory chưa có | ⏳ backend |
+| Khôi phục task đã xoá mềm | Xoá đi qua `AlertDialog` và **không hứa hoàn tác**, vì API chưa có đường khôi phục | `POST /tasks/:id/restore` — xếp ở hướng phát triển ([02/05 §B4](../02-phan-tich/05-cai-tien-quan-ly-task.md)) |
+| Kết quả xử lý (huỷ / không làm) | Việc bỏ giữa chừng hiện chỉ có hai đường: kéo sang Hoàn thành (sai burn-down) hoặc xoá mềm (mất dấu vết) | Mục E4 — hướng phát triển, vì kéo theo `completedAt`, `recomputeParentProgress`, `BurndownSnapshot` |
 
 ## 5. Cách chạy & tự kiểm
 
@@ -91,7 +99,12 @@ npm run api:dev                          # 3000, AI_PROVIDER=fake (hỏi trướ
 PORT=3001 npm run web:dev                # hoặc cấu hình "web" trong .claude/launch.json
 ```
 
-Tài khoản seed: `lan@smarttask.local` (OWNER/PM), `minh@`, `huy@` — `Demo@1234`. Chụp màn hình tự động bằng Playwright headless (script `shot.mjs` trong scratchpad của phiên Claude: đăng nhập lan → mở route → chụp), vì pane trình duyệt trong môi trường này không chụp được.
+Tài khoản seed: `lan@smarttask.local` (OWNER/PM), `minh@`, `huy@` — `Demo@1234`. Sau seed có **12 công việc**: 6 STORY, 4 TASK, 2 BUG.
+
+Chụp màn hình tự động bằng Chrome headless qua `puppeteer-core` có sẵn trong repo (pane trình duyệt trong môi trường này không chụp được). Hai bẫy đã vấp:
+
+- Ô email `/login` **điền sẵn** `lan@smarttask.local` và là input React controlled — `page.type()` sẽ nối chuỗi thành email sai và HTML5 chặn submit. Phải đặt value qua native setter rồi `dispatchEvent(new Event("input",{bubbles:true}))`.
+- **`npm run web:build` phá tiến trình `next start` đang chạy** (cùng ghi `apps/web/.next-build`): tiến trình cũ giữ BUILD_ID cũ nên trình duyệt báo `ChunkLoadError` hoặc lặng lẽ phục vụ bundle CŨ. Đối chiếu giờ của `.next-build/BUILD_ID` với `ps -o lstart=` của tiến trình; lệch thì khởi động lại `npm run start -w apps/web` và Ctrl+Shift+R.
 
 ## 6. Commit theo bước
 
@@ -108,3 +121,26 @@ Tài khoản seed: `lan@smarttask.local` (OWNER/PM), `minh@`, `huy@` — `Demo@1
 | 7 dòng hoạt động, ⌘K task group | `9b6f8ab` |
 | 7 `PUT /tasks/:id/dependencies` (API) + Sheet sửa nhãn/kỹ năng/phụ thuộc/khẩn | `44b9bfa` |
 | 7 Gantt kéo dời ngày / đổi hạn | `9c2149e` |
+| **8** sửa lỗi lọc Backlog + lọc rỗng nuốt bảng | `a612661` |
+| **8** `TaskType` STORY/TASK/BUG (migration `20260923052501_task_type`) | `a9472d5` |
+| **8** dọn `TaskSize` chết, tách nghĩa "Rất cao" ↔ cờ Khẩn | `c7efcb6` |
+| **8** cập nhật lạc quan khi tạo & sửa | `f12661a` |
+| **8** tạo nhanh trong cột + dán nhiều dòng | `74d81e6` |
+| **8** Sheet chi tiết chia hai cột | `517378b` |
+| **8** bỏ ký hiệu phím Mac, hiện Ctrl theo hệ điều hành | `c13bafb` |
+| **8** form tạo đủ trường (tách `TaskFieldPickers`) | `3100403` |
+| **8** thao tác nhanh trên thẻ + bớt request khi mở chi tiết | `4f03b52` |
+| **8** trang riêng `/tasks/ST-n` | `83c8c74` |
+| **8** chọn nhiều + thao tác hàng loạt | `3dcbd77` |
+| **8** bảng lệnh tìm & tạo công việc | `4523ea7` |
+| **8** bộ phím tắt trên bảng | `e04568d` |
+| **8** hoàn tác | `eed08cc` |
+| **8** sửa tại chỗ trên Danh sách | `197681e` |
+| **8** chi tiết mở dạng modal + icon mở thẳng trang | `64ccd87` |
+| **8** không khoá cả màn khi lưu một trường | `37c3396` |
+| **8** cú pháp nhanh `@ # ! h` (parser + 15 unit test) | `8f27631` |
+| **8** bộ lọc lưu được | `c199d37` |
+| **8** chế độ tập trung (phím F) | `335e77f` |
+| **8** swimlane theo người / ưu tiên | `444bb38` |
+| **8** màn Backlog riêng | `e6fc66b` |
+| **8** sửa mã cột sai trong seed | `91f351d` |

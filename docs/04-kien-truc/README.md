@@ -25,6 +25,7 @@ Nguồn: `~/Table_Calendar/docs/ai-scheduling-architecture/01-target-architectur
 | [01-kien-truc-he-thong.md](01-kien-truc-he-thong.md) | Kiến trúc triển khai, tầng, quyết định công nghệ (ADR), realtime | Chương 2 mục 2.6; Tuần 07 |
 | [02-module.md](02-module.md) | Danh sách module backend/frontend, trách nhiệm, sự kiện, phụ thuộc | Tuần 07–08, phân công WBS |
 | [03-use-case.md](03-use-case.md) | 41 use case theo 7 phân hệ, đặc tả 4 UC trọng tâm | Tuần 05; Chương 2 mục 2.3–2.4 |
+| [../02-phan-tich/05-cai-tien-quan-ly-task.md](../02-phan-tich/05-cai-tien-quan-ly-task.md) | Đối chiếu Jira/Trello/Linear cho UC-10/11/12/15; 19 ma sát đo được và 27 đề xuất | Chương 2 (khảo sát), Chương 4 (kết quả) |
 | [04-cong-thuc-tinh-toan.md](04-cong-thuc-tinh-toan.md) | Mọi công thức backend tính: tải, năng lực, burnout, EAR, vận tốc, giờ trống, công bằng | Tuần 07 (test đơn vị); Chương 3 |
 | [05-ai-agent.md](05-ai-agent.md) | Ranh giới LLM/backend, prompt 4 tầng, structured action, hiển thị JSON, đoán mention, tạo task từ chat, giờ trống | Tuần 08; Chương 3 mục 3.5 |
 | [06-tri-nho-ai.md](06-tri-nho-ai.md) | Trí nhớ cá nhân, trí nhớ sắp lịch/sắp việc/năng lực, thói quen: quyền sở hữu, vòng đời, cách vào prompt | Tuần 08 (Should) |

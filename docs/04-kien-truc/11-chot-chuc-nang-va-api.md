@@ -14,8 +14,8 @@ Bản chốt ngày 15/09/2026 (Tuần 01), dùng làm phạm vi cho đề cươn
 | 4 | Dự án | Tạo/sửa/lưu trữ; mã dự án (ST); thành viên dự án, đúng một PM; cột Kanban tuỳ chỉnh + WIP; nhãn; dòng hoạt động | 08 | «TV2» |
 | 5 | Sprint | Tạo/sửa; một ACTIVE mỗi dự án; bắt đầu; kết thúc chuyển việc dở về backlog hoặc sprint sau | 09 | «TV2» |
 | 6 | Công việc | Task/subtask; tiêu đề, mô tả markdown, **loại (STORY/TASK/BUG — enum cố định, không cấu hình được)**, ưu tiên (mức cao nhất hiển thị "Rất cao" — mức **quan trọng**, khác cờ `isUrgent` là **gấp về thời gian**), độ khó 1–5, nhãn, ngày bắt đầu, hạn, ước lượng giờ, giờ còn lại, tiến độ, kỹ năng yêu cầu (mức tối thiểu), nhiều người thực hiện; mã ST-n; xoá mềm; sao chép; version | 10, 11 (subtask) | «TV2» API · «TV3» UI |
-| 7 | Kanban | Cột theo trạng thái; kéo thả đổi cột/thứ tự (vị trí phân số); WIP limit + cảnh báo; tạo nhanh; lọc người/nhãn/sprint/hạn; tìm kiếm; huy hiệu quá hạn/bị chặn/người nhận quá tải | 12 | «TV3» |
-| 8 | Danh sách & việc của tôi | Bảng có sắp xếp, bộ lọc lưu trong URL, tìm toàn văn; "Việc của tôi" xuyên dự án | 15 | «TV3» |
+| 7 | Kanban | Cột theo trạng thái; kéo thả đổi cột/thứ tự (vị trí phân số); WIP limit + cảnh báo; **tạo nhanh trong cột (Enter tạo liên tiếp, dán nhiều dòng, cú pháp `@# ! h`)**; lọc người/nhãn/loại/sprint/hạn; tìm kiếm; **chọn nhiều + thao tác hàng loạt ≤ 50**; **nhóm theo người/ưu tiên**; huy hiệu quá hạn/bị chặn/người nhận quá tải | 12 | «TV3» |
+| 8 | Danh sách & việc của tôi | Bảng có sắp xếp **và sửa tại chỗ**, bộ lọc lưu trong URL **+ đặt tên lưu lại (localStorage)**, tìm toàn văn; **màn Backlog riêng** (xếp thứ tự, đưa vào sprint hàng loạt); "Việc của tôi" xuyên dự án | 15 | «TV3» |
 | 9 | Gantt chỉ đọc | Thanh theo ngày bắt đầu–hạn, nhóm theo sprint, đường hôm nay, quá hạn, thu phóng ngày/tuần/tháng; mũi tên phụ thuộc (nếu UC-11 phụ thuộc kịp) | 13 (đọc) | «TV3» |
 | 10 | Realtime | Socket.io phòng dự án và người dùng; sự kiện task/bình luận/thông báo/tải; optimistic + hoàn tác; 409 version; presence; reconnect đồng bộ `since` | 17 | «TV4» |
 | 11 | Bình luận & @mention | Markdown nhẹ, sửa/xoá của mình, gợi ý @ từ thành viên dự án, mention → thông báo | 18 | «TV5» API · «TV3» UI |
@@ -249,6 +249,8 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 | `GET /docs` · `GET /docs-json` | — | Swagger UI / OpenAPI JSON | M |
 
 **Tổng:** 146 operation (phương thức × đường dẫn) — 100 MVP, 46 làm nếu kịp; gộp theo tài nguyên còn khoảng 75 đường dẫn.
+
+> **Đối chiếu sau đợt cải tiến task 23/09/2026** ([02/05](../02-phan-tich/05-cai-tien-quan-ly-task.md), [05/web-cai-tien-task](../05-hien-thuc/web-cai-tien-task.md)): **không endpoint mới nào được thêm**, chỉ bổ sung trường `type` vào các DTO của §3.6 và `byType[]` vào payload dashboard. Ba đường dẫn đã có từ Phase 3 mà web chưa từng gọi nay đều dùng tới — `POST /tasks/:id/duplicate` (nút Nhân bản), `GET /tasks/by-key/:projectKey/:number` (trang chi tiết `/projects/:id/tasks/ST-n`), `GET /workspaces/:wsId/tasks/search` (bảng lệnh Ctrl/Super + K). Hai endpoint hàng loạt từng cân nhắc (`POST /tasks/bulk`, `PATCH /tasks/bulk`) **không cần**: client gửi tuần tự ≤ 50 lời gọi, mỗi lời mang `version` riêng, nên giữ nguyên được khoá lạc quan.
 
 ## 4. Sự kiện Socket.io
 
