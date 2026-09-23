@@ -21,3 +21,5 @@ process.env.JWT_REFRESH_SECRET ??= 'e2e-refresh-secret-0123456789abcdef';
 process.env.AI_PROVIDER = 'mock'; // hàng đợi action cho e2e chat; rỗng → fake
 process.env.APP_KEY ??= 'e2e-app-key-phase-7';
 process.env.SYSTEM_ADMIN_EMAILS ??= '';
+// e2e không bao giờ gọi nhà cung cấp thật, kể cả khi ca kiểm thử tạo cấu hình AI cho workspace
+process.env.AI_FORCE_FAKE ??= '1';

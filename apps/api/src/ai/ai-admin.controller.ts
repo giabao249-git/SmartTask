@@ -52,23 +52,29 @@ export class AiAdminController {
   }
 
   @Post('ai-config/models')
-  @ApiOperation({ summary: 'Thêm/cập nhật model (SYSTEM_ADMIN_EMAILS)' })
-  upsertModel(
+  @ApiOperation({
+    summary:
+      'Thêm/cập nhật model — SYSTEM_ADMIN_EMAILS hoặc tài khoản Platform Admin (ROOT_ADMIN)',
+  })
+  async upsertModel(
     @CurrentUser() user: JwtUser,
     @Body() dto: UpsertModelCatalogDto,
   ) {
-    this.aiConfig.assertSystemAdmin(user.email);
+    await this.aiConfig.assertSystemAdmin(user);
     return this.aiConfig.upsertModel(dto);
   }
 
   @Patch('ai-config/models/:id')
-  @ApiOperation({ summary: 'Sửa giá/năng lực model (SYSTEM_ADMIN_EMAILS)' })
-  updateModel(
+  @ApiOperation({
+    summary:
+      'Sửa giá/năng lực model — SYSTEM_ADMIN_EMAILS hoặc tài khoản Platform Admin (ROOT_ADMIN)',
+  })
+  async updateModel(
     @CurrentUser() user: JwtUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateModelCatalogDto,
   ) {
-    this.aiConfig.assertSystemAdmin(user.email);
+    await this.aiConfig.assertSystemAdmin(user);
     return this.aiConfig.updateModel(id, dto);
   }
 

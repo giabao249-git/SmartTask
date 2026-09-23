@@ -60,6 +60,11 @@ export const envSchema = z.object({
   OLLAMA_MODEL: z.string().default('qwen2.5:7b'),
   AI_DAILY_LIMIT_PER_USER: z.coerce.number().int().positive().default(20),
   /** Email (phân cách dấu phẩy) được sửa danh mục model toàn hệ thống — tạm thời cho tới Phase 7b (phân quyền động) */
+  /** Ép Trợ lý AI dùng provider giả (e2e/CI) kể cả khi workspace đã cấu hình khoá thật. */
+  AI_FORCE_FAKE: z
+    .string()
+    .optional()
+    .transform((v) => v === '1' || v === 'true'),
   SYSTEM_ADMIN_EMAILS: z
     .string()
     .default('')

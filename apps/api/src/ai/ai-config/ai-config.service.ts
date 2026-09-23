@@ -6,6 +6,7 @@ import {
   AiPromptType,
   AiProvider,
   AiPurpose,
+  PlatformRole,
   Prisma,
   WorkspaceRole,
 } from '@prisma/client';
@@ -144,9 +145,8 @@ export class AiConfigService implements OnModuleInit {
     workspaceId: string | null,
     purpose: AiPurpose,
   ): Promise<ResolvedAiConfig> {
-    // Công tắc môi trường: fake/mock luôn thắng cấu hình workspace để dev và e2e không gọi nhà cung cấp thật.
-    const envProvider = this.config.get('AI_PROVIDER', { infer: true });
-    if (envProvider === 'fake' || envProvider === 'mock')
+    // Chỉ e2e/CI mới ép provider giả; môi trường thường ưu tiên cấu hình AI của workspace.
+    if (this.config.get('AI_FORCE_FAKE', { infer: true }))
       return this.fromEnv(purpose);
     const rows = await this.prisma.aiConfig.findMany({
       where: {
@@ -299,10 +299,25 @@ export class AiConfigService implements OnModuleInit {
     });
   }
 
-  assertSystemAdmin(email: string): void {
+  /**
+   * Danh mục model là dữ liệu toàn nền tảng: cho phép hai lớp (docs 13 §2 "Dual-Tier Hybrid") —
+   * email trong SYSTEM_ADMIN_EMAILS (lá chắn hạ tầng) HOẶC tài khoản Platform Admin trong CSDL.
+   */
+  async assertSystemAdmin(user: { id: string; email: string }): Promise<void> {
     const admins = this.config.get('SYSTEM_ADMIN_EMAILS', { infer: true });
-    if (!admins.includes(email.toLowerCase()))
-      throw AppError.forbidden({ required: 'SYSTEM_ADMIN_EMAILS' });
+    if (admins.includes(user.email.toLowerCase())) return;
+    const row = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { isSuperAdmin: true, platformRole: true, isActive: true },
+    });
+    const ok =
+      !!row &&
+      row.isActive &&
+      (row.isSuperAdmin || row.platformRole === PlatformRole.ROOT_ADMIN);
+    if (!ok)
+      throw AppError.forbidden({
+        required: 'Quản trị nền tảng (SYSTEM_ADMIN_EMAILS hoặc ROOT_ADMIN)',
+      });
   }
 
   upsertModel(dto: UpsertModelCatalogDto) {

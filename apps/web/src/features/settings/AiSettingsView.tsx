@@ -8,6 +8,7 @@ import { AiConfigsTab } from "./AiConfigsTab";
 import { AiModelsTab } from "./AiModelsTab";
 import { AiUsageTab } from "./AiUsageTab";
 import { AiPolicyView } from "./AiPolicyView";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 interface AiSettingsViewProps {
@@ -24,6 +25,9 @@ interface AiSettingsViewProps {
  * 4. Chính sách Prompt & Nhận diện nhân sự (Workspace prompt versioning, Bí danh thành viên)
  */
 export function AiSettingsView({ workspaceId, canEdit }: AiSettingsViewProps) {
+  const auth = useAuth();
+  // Danh mục model là dữ liệu toàn nền tảng: chỉ Platform Admin sửa được (API chặn OWNER/ADMIN workspace)
+  const canEditCatalog = auth.user?.isSuperAdmin === true;
   const [subTab, setSubTab] = React.useState<string>("configs");
 
   return (
@@ -79,7 +83,16 @@ export function AiSettingsView({ workspaceId, canEdit }: AiSettingsViewProps) {
         </TabsContent>
 
         <TabsContent value="models" className="space-y-4 outline-none">
-          <AiModelsTab canEdit={canEdit} />
+          {!canEditCatalog && (
+            <Alert className="py-2">
+              <Cpu className="h-4 w-4" />
+              <AlertTitle className="text-xs font-semibold">Danh mục dùng chung toàn nền tảng</AlertTitle>
+              <AlertDescription className="text-xs">
+                Bạn xem được năng lực và biểu giá của mọi model. Thêm/sửa model là việc của đội vận hành nền tảng (trang <span className="font-mono">/admin</span>) vì giá và năng lực áp dụng cho tất cả workspace.
+              </AlertDescription>
+            </Alert>
+          )}
+          <AiModelsTab canEdit={canEditCatalog} />
         </TabsContent>
 
         {canEdit && (

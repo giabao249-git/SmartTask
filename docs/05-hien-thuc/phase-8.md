@@ -78,6 +78,10 @@ Kiểm thử lại nhánh Platform Admin / DeepSeek (commit `e192301` → `b1932
 | Sổ token lộ cho MEMBER | `GET /workspaces/:id/ai-usage` mở cho MEMBER → ca e2e "sổ token" fail | Trả lại `@WorkspaceRoles(OWNER, ADMIN)`; web ẩn tab "Sổ Token & Chi phí" và khoá nút "Gọi thử" khi không đủ vai |
 | CSKH đình chỉ được workspace | `@RequirePlatformRole('ROOT_ADMIN','FINOPS_OPERATOR','CUSTOMER_SUPPORT')` | Bỏ `CUSTOMER_SUPPORT` khỏi route đổi vòng đời |
 | Nhãn model cứng | Thanh tiêu đề Trợ lý AI luôn ghi "Gemini 1.5 Flash" | Hiện `provider · model` lấy từ `usage` của lượt gần nhất |
+| Trợ lý AI trả dữ liệu giả | Sửa lần trước cho `AI_PROVIDER=fake` thắng cấu hình workspace nên mọi lượt đều là provider giả | Thêm cờ riêng `AI_FORCE_FAKE=1` (chỉ e2e/CI dùng, đặt trong `test/env-e2e.ts`); trả lại thứ tự ưu tiên **cấu hình workspace > .env**; dev `.env` đổi sang `AI_PROVIDER=gemini` |
+| Seed tạo cấu hình cho provider không có khoá | CHAT/GENERAL trỏ DeepSeek trong khi `.env` không có `DEEPSEEK_API_KEY` → Trợ lý AI 503 | Seed chỉ tạo cấu hình cho provider **có khoá thật**; thiếu khoá DeepSeek thì Gemini gánh cả GENERAL/CHAT |
+| Danh mục model không sửa được | `assertSystemAdmin` chỉ so `SYSTEM_ADMIN_EMAILS` (rỗng) → nút "Thêm Model Mới"/"Sửa" luôn 403, kể cả tài khoản ROOT_ADMIN | Chấp nhận cả Platform Admin trong CSDL (`isSuperAdmin`/`ROOT_ADMIN`) đúng mô hình Dual-Tier ở docs 13; web chỉ bật nút cho Platform Admin, kèm ghi chú danh mục là dữ liệu toàn nền tảng |
+| ErrorState luôn ghi "xung đột phiên bản" | Mọi lỗi (404/403/mạng) đều hiện tiêu đề xung đột phiên bản | Tiêu đề tra theo mã lỗi |
 | Báo cáo kiểm thử giả | `scripts/platform-admin-puppeteer-test.mjs` tự dựng server mock cổng 4005 với route không tồn tại, xuất "5/5 PASSED" | Xoá script và báo cáo/ảnh kèm theo; thay bằng `test/admin.e2e-spec.ts` (6 ca chạy trên API thật) |
 
 ## Chưa làm / phase sau

@@ -256,7 +256,13 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log('🤖 [5/6] Đang cấu hình AI Workspace (DeepSeek V4 Flash & Gemini)...');
+  // Chỉ tạo cấu hình cho nhà cung cấp THỰC SỰ có khoá trong .env — nếu không, Trợ lý AI sẽ 503
+  // ngay ở lượt đầu (cấu hình workspace được ưu tiên hơn AI_PROVIDER).
+  const hasDeepSeekKey = !!process.env.DEEPSEEK_API_KEY;
+  const hasGeminiKey = !!process.env.GEMINI_API_KEY;
+  console.log(
+    `🤖 [5/6] Đang cấu hình AI Workspace (DeepSeek: ${hasDeepSeekKey ? 'có khoá' : 'chưa có khoá → bỏ qua'}, Gemini: ${hasGeminiKey ? 'có khoá' : 'chưa có khoá → bỏ qua'})...`,
+  );
   // Cấu hình AI cho workspace
   const deepseekModel = await prisma.aiModelCatalog.findUnique({
     where: { provider_model: { provider: AiProvider.DEEPSEEK, model: 'deepseek-v4-flash' } },
@@ -268,7 +274,7 @@ async function main(): Promise<void> {
     where: { provider_model: { provider: AiProvider.GEMINI, model: 'gemini-2.5-flash-lite' } },
   });
 
-  if (deepseekModel) {
+  if (deepseekModel && hasDeepSeekKey) {
     await prisma.aiConfig.create({
       data: {
         workspaceId: wsId,
@@ -291,7 +297,31 @@ async function main(): Promise<void> {
     });
   }
 
-  if (geminiFlash) {
+  if (geminiFlash && hasGeminiKey && !hasDeepSeekKey) {
+    // Không có khoá DeepSeek → Gemini gánh luôn GENERAL và CHAT để Trợ lý AI chạy được ngay
+    await prisma.aiConfig.create({
+      data: {
+        workspaceId: wsId,
+        name: 'Cấu hình Mặc định (Gemini 2.5 Flash)',
+        purpose: AiPurpose.GENERAL,
+        catalogId: geminiFlash.id,
+        createdById: userMap.Lan,
+        advancedParams: { temperature: 0.7, maxOutputTokens: 4096 },
+      },
+    });
+    await prisma.aiConfig.create({
+      data: {
+        workspaceId: wsId,
+        name: 'Trợ lý Hội thoại (Gemini 2.5 Flash)',
+        purpose: AiPurpose.CHAT,
+        catalogId: geminiFlash.id,
+        createdById: userMap.Lan,
+        advancedParams: { temperature: 0.8, maxOutputTokens: 4096 },
+      },
+    });
+  }
+
+  if (geminiFlash && hasGeminiKey) {
     await prisma.aiConfig.create({
       data: {
         workspaceId: wsId,
@@ -304,7 +334,7 @@ async function main(): Promise<void> {
     });
   }
 
-  if (geminiLite) {
+  if (geminiLite && hasGeminiKey) {
     await prisma.aiConfig.create({
       data: {
         workspaceId: wsId,
