@@ -8,6 +8,8 @@ export interface CodeResolver {
   user(code: string | null | undefined): { id: string; name: string } | null;
   userCodeOf(userId: string): string | null;
   sprint(code: string | null | undefined): string | null;
+  /** "t4" → { key: "ST-4", title: "Bảng Kanban…" } để không hiện mã nội bộ cho người dùng */
+  task(code: string | null | undefined): { id: string; key: string; title: string } | null;
   /** "k3≥2" → "NestJS≥2" khi có danh mục; mã lạ giữ nguyên */
   skillLabel(text: string): string;
 }
@@ -17,13 +19,23 @@ export function makeResolver(
   members: ProjectMember[],
   sprints: { id: string; name: string }[],
   skills: { id: string; name: string }[] = [],
+  tasks: { id: string; number: number; title: string }[] = [],
+  projectKey = "",
 ): CodeResolver {
   const users = codeMap?.users ?? {};
   const skillName = new Map(skills.map((s) => [s.id, s.name]));
   const byId = new Map(members.map((m) => [m.id, m]));
   const reverse = new Map(Object.entries(users).map(([code, id]) => [id, code]));
   const sprintById = new Map(sprints.map((s) => [s.id, s.name]));
+  const taskById = new Map(tasks.map((t) => [t.id, t]));
   return {
+    task(code) {
+      if (!code) return null;
+      const id = codeMap?.tasks?.[code];
+      if (!id) return null;
+      const t = taskById.get(id);
+      return t ? { id, key: projectKey ? `${projectKey}-${t.number}` : `#${t.number}`, title: t.title } : null;
+    },
     user(code) {
       if (!code) return null;
       const id = users[code];

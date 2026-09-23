@@ -156,9 +156,9 @@ function summaryOf(a: StructuredAction, r: CodeResolver): string[] {
     case "DISCARD_DRAFT":
       return a.all ? ["tất cả"] : a.targetDraftKeys;
     case "ASSIGN_PROPOSAL":
-      return a.assignments.map((x) => `${x.task} → ${r.user(x.assignee)?.name ?? x.assignee}`);
+      return a.assignments.map((x) => `${r.task(x.task)?.key ?? x.task} → ${r.user(x.assignee)?.name ?? x.assignee}`);
     case "REBALANCE_PROPOSAL":
-      return a.moves.map((x) => `${x.task}: ${r.user(x.from)?.name ?? x.from} → ${r.user(x.to)?.name ?? x.to}`);
+      return a.moves.map((x) => `${r.task(x.task)?.key ?? x.task}: ${r.user(x.from)?.name ?? x.from} → ${r.user(x.to)?.name ?? x.to}`);
     default:
       return [];
   }

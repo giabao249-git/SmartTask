@@ -79,6 +79,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ActionCard, parseAction } from "./ActionCard";
 import { DraftRail } from "./DraftRail";
+import { useTasks } from "@/features/board/hooks";
 import { ACTION_LABEL, fmtDate, makeResolver } from "./codes";
 import { ThinkingDots, TypewriterText } from "./Typing";
 import {
@@ -171,6 +172,7 @@ export function AssistantView() {
   // Nhãn model hiển thị = model của lượt gần nhất (server quyết định theo cấu hình AI của workspace/.env)
   const [lastModel, setLastModel] = React.useState<string | null>(null);
   const configuredModel = useChatModelLabel(project.workspaceId);
+  const tasksQuery = useTasks(project.id, {});
   // Chỉ tin trợ lý vừa trả về mới chạy hiệu ứng gõ; mở lại phiên cũ thì hiện ngay
   const [typingMessageId, setTypingMessageId] = React.useState<string | null>(null);
   // Tin vừa gửi hiện ngay (lạc quan) trong lúc chờ AI, thay vì đợi lượt trả về mới thấy
@@ -353,7 +355,15 @@ export function AssistantView() {
 
   const activeSession = detail.data?.session ?? sessions.find((s) => s.id === activeSessionId) ?? null;
   const skills = React.useMemo(() => (skillsQuery.data ?? []).map((s) => ({ id: s.id, name: s.name })), [skillsQuery.data]);
-  const resolver = React.useMemo(() => makeResolver(proposals[proposals.length - 1]?.codeMap, project.members, sprints, skills), [proposals, project.members, sprints, skills]);
+  // Danh sách việc để đổi mã nội bộ (t4) sang "ST-4 · tiêu đề"; dùng chung cache với màn Công việc
+  const taskRefs = React.useMemo(
+    () => (tasksQuery.data ?? []).map((t) => ({ id: t.id, number: t.number, title: t.title })),
+    [tasksQuery.data],
+  );
+  const resolver = React.useMemo(
+    () => makeResolver(proposals[proposals.length - 1]?.codeMap, project.members, sprints, skills, taskRefs, project.key),
+    [proposals, project.members, sprints, skills, taskRefs, project.key],
+  );
 
   const handleStartRename = () => {
     if (activeSession) {
@@ -407,6 +417,8 @@ export function AssistantView() {
       members={project.members}
       sprints={sprints}
       skills={skills}
+      tasks={taskRefs}
+      projectKey={project.key}
       busy={busy}
       versionConflict={versionConflict}
       onReload={() => void reloadProposals()}

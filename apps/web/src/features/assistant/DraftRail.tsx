@@ -27,6 +27,9 @@ export interface DraftRailProps {
   members: ProjectMember[];
   sprints: { id: string; name: string }[];
   skills: { id: string; name: string }[];
+  /** Để đổi mã việc nội bộ (t4) sang "ST-4 · tiêu đề" cho người đọc */
+  tasks: { id: string; number: number; title: string }[];
+  projectKey: string;
   busy: boolean;
   versionConflict: boolean;
   onReload: () => void;
@@ -83,7 +86,7 @@ export function DraftRail(p: DraftRailProps) {
         ) : (
           <div className="space-y-4">
             {p.proposals.map((proposal) => {
-              const resolver = makeResolver(proposal.codeMap, p.members, p.sprints, p.skills);
+              const resolver = makeResolver(proposal.codeMap, p.members, p.sprints, p.skills, p.tasks, p.projectKey);
               const draftItems = proposal.items.filter((i) => i.status === "DRAFT");
               const appliedItems = proposal.items.filter((i) => i.status === "APPLIED");
               const otherItems = proposal.items.filter((i) => i.status !== "DRAFT" && i.status !== "APPLIED");
@@ -129,6 +132,7 @@ export function DraftRail(p: DraftRailProps) {
                         item={item}
                         projectId={p.projectId}
                         assigneeName={resolver.user(item.assignee)?.name ?? item.assignee ?? null}
+                        taskRef={resolver.task(item.task)}
                         taskKey={proposal.applied?.tasks.find((t) => t.draftKey === item.draftKey)?.key ?? null}
                         skillLabel={resolver.skillLabel}
                         members={p.members}
@@ -166,6 +170,7 @@ export function DraftRail(p: DraftRailProps) {
                               item={item}
                               projectId={p.projectId}
                               assigneeName={resolver.user(item.assignee)?.name ?? item.assignee ?? null}
+                        taskRef={resolver.task(item.task)}
                               taskKey={proposal.applied?.tasks.find((t) => t.draftKey === item.draftKey)?.key ?? null}
                               skillLabel={resolver.skillLabel}
                               members={p.members}
@@ -192,6 +197,7 @@ export function DraftRail(p: DraftRailProps) {
                         item={item}
                         projectId={p.projectId}
                         assigneeName={resolver.user(item.assignee)?.name ?? item.assignee ?? null}
+                        taskRef={resolver.task(item.task)}
                         taskKey={null}
                         skillLabel={resolver.skillLabel}
                         members={p.members}
@@ -248,11 +254,21 @@ export function DraftRail(p: DraftRailProps) {
   );
 }
 
+/** Tiêu đề do API dựng từ mã ("giao t4", "sửa t4", "chuyển t4 u1 → u2") → câu việc làm gì. */
+function actionLabelOf(rawTitle: string): string {
+  if (rawTitle.startsWith("giao ")) return "Giao lại người thực hiện";
+  if (rawTitle.startsWith("sửa ")) return "Cập nhật thông tin việc";
+  if (rawTitle.startsWith("chuyển ")) return "Chuyển việc sang người khác";
+  return rawTitle;
+}
+
 interface DraftItemCardProps {
   item: ProposalItem;
   projectId: string;
   assigneeName: string | null;
   taskKey: string | null;
+  /** Việc thật mà mục này tác động (ASSIGN/UPDATE/REBALANCE) — thay cho mã nội bộ trong tiêu đề */
+  taskRef: { id: string; key: string; title: string } | null;
   skillLabel: (t: string) => string;
   members: ProjectMember[];
   userCodeOf: (id: string) => string | null;
@@ -265,7 +281,7 @@ interface DraftItemCardProps {
   refCallback: (el: HTMLDivElement | null) => void;
 }
 
-function DraftItemCard({ item, projectId, assigneeName, taskKey, skillLabel, members, userCodeOf, selected, onToggle, onDiscard, onPatch, disabled, highlight, refCallback }: DraftItemCardProps) {
+function DraftItemCard({ item, projectId, assigneeName, taskKey, taskRef, skillLabel, members, userCodeOf, selected, onToggle, onDiscard, onPatch, disabled, highlight, refCallback }: DraftItemCardProps) {
   const [editOpen, setEditOpen] = React.useState(false);
   const isDraft = item.status === "DRAFT";
   const isApplied = item.status === "APPLIED";
@@ -310,7 +326,17 @@ function DraftItemCard({ item, projectId, assigneeName, taskKey, skillLabel, mem
                 </Badge>
               )}
             </div>
-            <p className={cn("text-xs leading-relaxed font-medium text-foreground", isDiscarded && "line-through text-muted-foreground")}>{item.title}</p>
+            {taskRef ? (
+              <div className={cn("space-y-0.5", isDiscarded && "line-through text-muted-foreground")}>
+                <p className="text-xs leading-relaxed font-medium text-foreground">
+                  <span className="font-mono text-muted-foreground mr-1">{taskRef.key}</span>
+                  {taskRef.title}
+                </p>
+                <p className="text-[10px] text-muted-foreground">{actionLabelOf(item.title)}</p>
+              </div>
+            ) : (
+              <p className={cn("text-xs leading-relaxed font-medium text-foreground", isDiscarded && "line-through text-muted-foreground")}>{item.title}</p>
+            )}
             {item.extra && <p className="text-[10px] text-muted-foreground font-mono break-all">{item.extra}</p>}
           </div>
         </div>
