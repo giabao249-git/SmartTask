@@ -18,6 +18,8 @@ export interface TaskCardProps {
   currentUserId?: string;
   isDragging?: boolean;
   isGhost?: boolean;
+  /** Thẻ đang được bàn phím trỏ tới (J/K, N/P) — viền theo token --ring của docs 10 §6. */
+  isFocused?: boolean;
   className?: string;
   today?: string;
 }
@@ -31,7 +33,7 @@ export const fmtDay = (iso: string | null | undefined): string => {
 };
 
 /** Thẻ task trên Kanban/danh sách — dữ liệu từ `TasksService.toListView` (docs 11 §3.6). */
-export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, isDragging = false, isGhost = false, className, today }: TaskCardProps) {
+export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, isDragging = false, isGhost = false, isFocused = false, className, today }: TaskCardProps) {
   const overdue = !!task.dueDate && !task.completedAt && task.dueDate.slice(0, 10) < (today ?? new Date().toISOString().slice(0, 10));
   const isMyTask = currentUserId ? task.assignees.some((a) => a.id === currentUserId) : false;
   // Thẻ tạm (chưa có id thật): không mở chi tiết, không nhận việc — mọi PATCH sẽ 404.
@@ -45,6 +47,7 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
         "p-3 cursor-pointer transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.99] border-border/80 bg-card select-none relative",
         pending && "opacity-70 pointer-events-none border-dashed",
         isMyTask && "border-l-2 border-l-primary",
+        isFocused && "ring-2 ring-ring ring-offset-1 border-primary",
         isDragging && "opacity-30 border-dashed border-primary",
         isGhost && "opacity-90 shadow-xl border-primary ring-2 ring-primary/20 rotate-1",
         className,

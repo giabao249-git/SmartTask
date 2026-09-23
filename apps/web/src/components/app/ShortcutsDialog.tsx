@@ -114,12 +114,29 @@ const buildSections = (mod: string): ShortcutSection[] => [
         badge: "Bộ lọc",
       },
       {
-        keys: ["Space", "Enter"],
-        description: "Kích hoạt chọn thẻ công việc để di chuyển bằng bàn phím",
+        keys: ["J", "K"],
+        description: "Trỏ xuống / lên thẻ kế tiếp trong cùng cột (hoặc ↓ ↑)",
       },
       {
-        keys: ["←", "→", "↑", "↓"],
-        description: "Di chuyển thẻ đã chọn giữa các cột trạng thái hoặc vị trí",
+        keys: ["N", "P"],
+        description: "Trỏ sang cột kế / cột trước, giữ nguyên hàng (hoặc → ←)",
+      },
+      {
+        keys: ["Enter", "O"],
+        description: "Mở chi tiết thẻ đang trỏ",
+      },
+      {
+        keys: ["I"],
+        description: "Giao thẻ đang trỏ cho mình",
+        badge: "Giao việc",
+      },
+      {
+        keys: ["A"],
+        description: "Mở menu thao tác của thẻ đang trỏ (giao việc, ưu tiên, hạn, nhân bản)",
+      },
+      {
+        keys: ["Esc"],
+        description: "Bỏ trỏ thẻ; trong ô tạo nhanh thì đóng ô",
       },
     ],
   },

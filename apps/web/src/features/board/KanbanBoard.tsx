@@ -63,17 +63,26 @@ function SortableTaskItem({
   onClick,
   onClaim,
   currentUserId,
+  isFocused,
 }: {
   task: TaskListItem;
   projectKey: string;
   onClick: (t: TaskListItem) => void;
   onClaim?: (t: TaskListItem) => void;
   currentUserId?: string;
+  isFocused?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, data: { type: "Task", task } });
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }} {...attributes} {...listeners}>
-      <TaskCard task={task} projectKey={projectKey} onClick={onClick} onClaim={onClaim} currentUserId={currentUserId} isDragging={isDragging} />
+    <div
+      ref={setNodeRef}
+      data-task-id={task.id}
+      data-focused={isFocused ? "true" : undefined}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      {...attributes}
+      {...listeners}
+    >
+      <TaskCard task={task} projectKey={projectKey} onClick={onClick} onClaim={onClaim} currentUserId={currentUserId} isDragging={isDragging} isFocused={isFocused} />
     </div>
   );
 }
@@ -161,6 +170,9 @@ export function KanbanBoard() {
   const [selectedColumnId, setSelectedColumnId] = React.useState<string>("");
   /** Cột nào đang mở ô tạo nhanh (mỗi lúc chỉ một). */
   const [composerColId, setComposerColId] = React.useState<string | null>(null);
+  /** Thẻ đang được bàn phím trỏ tới, và thẻ đang mở menu bằng phím A. */
+  const [focusedId, setFocusedId] = React.useState<string | null>(null);
+  const [menuTaskId, setMenuTaskId] = React.useState<string | null>(null);
   const [draftTitle, setDraftTitle] = React.useState("");
   /** Các ô chọn nâng cao trong hộp thoại tạo — Popover nên FormData không đọc được, phải giữ state. */
   const [newAssignees, setNewAssignees] = React.useState<string[]>([]);
@@ -233,23 +245,7 @@ export function KanbanBoard() {
     router.replace(`?${next.toString()}`, { scroll: false });
   }, [compose, project.canEdit, openCreateDialog, openComposer, params, router]);
 
-  // Shortcuts: Q để bật/tắt "Việc của tôi", C để mở ô tạo nhanh ở cột đầu
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      const isInput = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement | null)?.isContentEditable;
-      if (!isInput && (e.key === "q" || e.key === "Q")) {
-        e.preventDefault();
-        f.set({ quick: f.quick === "my" ? "all" : "my" });
-      }
-      if (!isInput && (e.key === "c" || e.key === "C") && project.canEdit) {
-        e.preventDefault();
-        openComposer();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openComposer, project.canEdit, f]);
+
 
   const handleClaimTask = React.useCallback(
     (task: TaskListItem) => {
@@ -328,6 +324,47 @@ export function KanbanBoard() {
       .filter((t) => f.applyQuick([t], auth.user?.id).length > 0)
       .sort((a, b) => a.position - b.position);
 
+  /** Lưới thẻ đang hiện, theo đúng thứ tự mắt thấy — dùng cho điều hướng bàn phím. */
+  const grid = React.useMemo(
+    () => columns.map((c) => ({ colId: c.id, ids: colTasks(c.id).map((t) => t.id) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [columns, local, f, auth.user?.id],
+  );
+
+  /**
+   * Di chuyển ô trỏ giữa các thẻ. `dy` đi trong cột (J/K hoặc ↑↓), `dx` sang cột khác
+   * (N/P hoặc ←→) và giữ nguyên vị trí hàng nếu cột đó đủ dài.
+   */
+  const moveFocus = React.useCallback(
+    (dx: number, dy: number) => {
+      const flat = grid.filter((g) => g.ids.length > 0);
+      if (flat.length === 0) return;
+      let ci = grid.findIndex((g) => g.ids.includes(focusedId ?? ""));
+      let ri = ci >= 0 ? grid[ci].ids.indexOf(focusedId!) : -1;
+      if (ci < 0) {
+        const first = grid.findIndex((g) => g.ids.length > 0);
+        setFocusedId(grid[first].ids[0]);
+        return;
+      }
+      if (dy !== 0) ri = Math.max(0, Math.min(grid[ci].ids.length - 1, ri + dy));
+      if (dx !== 0) {
+        for (let step = 0; step < grid.length; step += 1) {
+          ci = (ci + dx + grid.length) % grid.length;
+          if (grid[ci].ids.length > 0) break;
+        }
+        ri = Math.max(0, Math.min(grid[ci].ids.length - 1, ri));
+      }
+      setFocusedId(grid[ci].ids[ri] ?? null);
+    },
+    [grid, focusedId],
+  );
+
+  // Cuộn thẻ đang trỏ vào tầm nhìn
+  React.useEffect(() => {
+    if (!focusedId) return;
+    document.querySelector(`[data-task-id="${focusedId}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [focusedId]);
+
   /**
    * Hai trạng thái rỗng khác nhau (docs 10 §2): dự án chưa có việc nào thì mời tạo;
    * còn lọc ra 0 kết quả thì VẪN giữ bảng để tạo nhanh được, chỉ báo là bộ lọc đang ẩn hết.
@@ -336,10 +373,99 @@ export function KanbanBoard() {
   const emptyByFilter = visibleCount === 0 && f.isFiltered;
   const emptyProject = visibleCount === 0 && !f.isFiltered;
 
-  const openTask = (t: TaskListItem) => {
+  const openTask = React.useCallback((t: TaskListItem) => {
     setSelectedId(t.id);
     setSheetOpen(true);
-  };
+  }, []);
+
+  /**
+   * Phím tắt trên bảng, kiểu Jira/Linear (docs 02/05 §C1). Bỏ qua khi con trỏ đang ở ô nhập,
+   * khi có phím bổ trợ, hoặc khi đang mở Sheet/hộp thoại/menu — để không giành phím của Radix.
+   */
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Radix giữ node lại lúc chạy hiệu ứng đóng (data-state="closed"), nên phải loại trừ,
+      // không thì đóng Sheet xong là mọi phím tắt chết cho tới khi render lại.
+      if (document.querySelector('[role="dialog"]:not([data-state="closed"]),[role="alertdialog"]:not([data-state="closed"]),[role="menu"],[cmdk-root]')) return;
+
+      const focused = focusedId ? local.find((t) => t.id === focusedId) ?? null : null;
+      const take = () => e.preventDefault();
+
+      switch (e.key) {
+        case "q":
+        case "Q":
+          take();
+          f.set({ quick: f.quick === "my" ? "all" : "my" });
+          return;
+        case "c":
+        case "C":
+          if (!project.canEdit) return;
+          take();
+          openComposer();
+          return;
+        case "j":
+        case "J":
+        case "ArrowDown":
+          take();
+          moveFocus(0, 1);
+          return;
+        case "k":
+        case "K":
+        case "ArrowUp":
+          take();
+          moveFocus(0, -1);
+          return;
+        case "n":
+        case "N":
+        case "ArrowRight":
+          take();
+          moveFocus(1, 0);
+          return;
+        case "p":
+        case "P":
+        case "ArrowLeft":
+          take();
+          moveFocus(-1, 0);
+          return;
+        case "Enter":
+        case "o":
+        case "O":
+          if (!focused) return;
+          take();
+          openTask(focused);
+          return;
+        case "i":
+        case "I": {
+          const me = auth.user?.id;
+          if (!focused || !me || !project.canEdit) return;
+          take();
+          quickAssign(focused, [me], "Đã giao cho tôi");
+          return;
+        }
+        case "a":
+        case "A":
+          if (!focused || !project.canEdit) return;
+          take();
+          setMenuTaskId(focused.id);
+          return;
+        case "Escape":
+          if (!focusedId) return;
+          take();
+          setFocusedId(null);
+          return;
+        default:
+          return;
+      }
+    };
+    // Bắt ở pha capture: Radix xử lý Escape trước rồi đặt data-state="closed", nên nếu nghe ở
+    // pha bubble thì đúng phím Escape đóng Sheet sẽ lọt qua guard và xoá luôn ô trỏ thẻ.
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [focusedId, local, f, project.canEdit, openComposer, moveFocus, auth.user?.id, quickAssign, openTask]);
 
   const failMove = (e: unknown, task: TaskListItem) => {
     const { code, message } = describeError(e);
@@ -517,6 +643,9 @@ export function KanbanBoard() {
                   }
                   onAskDelete={setConfirmDelete}
                   onAddTask={openComposer}
+                  focusedId={focusedId}
+                  menuTaskId={menuTaskId}
+                  onMenuOpenChange={setMenuTaskId}
                   composerOpen={composerColId === col.id}
                   onCloseComposer={() => setComposerColId(null)}
                   onQuickCreate={(titles) => quickCreate(col.id, titles)}
@@ -926,6 +1055,9 @@ function Column({
   onDuplicate,
   onAskDelete,
   onAddTask,
+  focusedId,
+  menuTaskId,
+  onMenuOpenChange,
   composerOpen,
   onCloseComposer,
   onQuickCreate,
@@ -947,6 +1079,9 @@ function Column({
   onDuplicate: (t: TaskListItem) => void;
   onAskDelete: (t: TaskListItem) => void;
   onAddTask?: (colId: string) => void;
+  focusedId: string | null;
+  menuTaskId: string | null;
+  onMenuOpenChange: (taskId: string | null) => void;
   composerOpen: boolean;
   onCloseComposer: () => void;
   onQuickCreate: (titles: string[]) => Promise<void>;
@@ -976,10 +1111,10 @@ function Column({
         <div className="flex flex-col gap-2.5 flex-1 min-h-[100px]">
           {tasks.map((task) => (
             <div key={task.id} className="group relative">
-              <SortableTaskItem task={task} projectKey={projectKey} onClick={onOpen} onClaim={onClaim} currentUserId={currentUserId} />
+              <SortableTaskItem task={task} projectKey={projectKey} onClick={onOpen} onClaim={onClaim} currentUserId={currentUserId} isFocused={focusedId === task.id} />
               {canEdit && (
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <DropdownMenu>
+                <div className={cn("absolute top-2 right-2 transition-opacity", focusedId === task.id ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+                  <DropdownMenu open={menuTaskId === task.id ? true : undefined} onOpenChange={(o) => !o && menuTaskId === task.id && onMenuOpenChange(null)}>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-6 w-6 rounded bg-background/90 shadow-xs hover:bg-muted" onClick={(e) => e.stopPropagation()} aria-label="Tuỳ chọn thẻ">
                         <MoreHorizontal className="h-3.5 w-3.5" />
