@@ -13,7 +13,7 @@ Bản chốt ngày 15/09/2026 (Tuần 01), dùng làm phạm vi cho đề cươn
 | 3 | Danh mục kỹ năng | Nhóm kỹ năng; thêm/sửa/ẩn; alias; gộp; bộ mẫu 30 kỹ năng khi tạo workspace | 06 | «TV5» |
 | 4 | Dự án | Tạo/sửa/lưu trữ; mã dự án (ST); thành viên dự án, đúng một PM; cột Kanban tuỳ chỉnh + WIP; nhãn; dòng hoạt động | 08 | «TV2» |
 | 5 | Sprint | Tạo/sửa; một ACTIVE mỗi dự án; bắt đầu; kết thúc chuyển việc dở về backlog hoặc sprint sau | 09 | «TV2» |
-| 6 | Công việc | Task/subtask; tiêu đề, mô tả markdown, **loại (STORY/TASK/BUG — enum cố định, không cấu hình được)**, ưu tiên, độ khó 1–5, nhãn, ngày bắt đầu, hạn, ước lượng giờ, giờ còn lại, tiến độ, kỹ năng yêu cầu (mức tối thiểu), nhiều người thực hiện; mã ST-n; xoá mềm; sao chép; version | 10, 11 (subtask) | «TV2» API · «TV3» UI |
+| 6 | Công việc | Task/subtask; tiêu đề, mô tả markdown, **loại (STORY/TASK/BUG — enum cố định, không cấu hình được)**, ưu tiên (mức cao nhất hiển thị "Rất cao" — mức **quan trọng**, khác cờ `isUrgent` là **gấp về thời gian**), độ khó 1–5, nhãn, ngày bắt đầu, hạn, ước lượng giờ, giờ còn lại, tiến độ, kỹ năng yêu cầu (mức tối thiểu), nhiều người thực hiện; mã ST-n; xoá mềm; sao chép; version | 10, 11 (subtask) | «TV2» API · «TV3» UI |
 | 7 | Kanban | Cột theo trạng thái; kéo thả đổi cột/thứ tự (vị trí phân số); WIP limit + cảnh báo; tạo nhanh; lọc người/nhãn/sprint/hạn; tìm kiếm; huy hiệu quá hạn/bị chặn/người nhận quá tải | 12 | «TV3» |
 | 8 | Danh sách & việc của tôi | Bảng có sắp xếp, bộ lọc lưu trong URL, tìm toàn văn; "Việc của tôi" xuyên dự án | 15 | «TV3» |
 | 9 | Gantt chỉ đọc | Thanh theo ngày bắt đầu–hạn, nhóm theo sprint, đường hôm nay, quá hạn, thu phóng ngày/tuần/tháng; mũi tên phụ thuộc (nếu UC-11 phụ thuộc kịp) | 13 (đọc) | «TV3» |

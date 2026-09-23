@@ -417,7 +417,6 @@ export interface TaskListItem {
   priority: TaskPriority;
   isUrgent: boolean;
   difficulty: number;
-  size: "S" | "M" | "L" | "XL" | null;
   startDate: string | null;
   dueDate: string | null;
   estimateHours: number | null;

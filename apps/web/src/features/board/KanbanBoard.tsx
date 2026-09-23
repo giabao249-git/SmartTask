@@ -457,10 +457,12 @@ export function KanbanBoard() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="LOW" className="text-xs">Thấp (Low)</SelectItem>
-                      <SelectItem value="MEDIUM" className="text-xs">Trung bình (Medium)</SelectItem>
-                      <SelectItem value="HIGH" className="text-xs">Cao (High)</SelectItem>
-                      <SelectItem value="URGENT" className="text-xs">Khẩn cấp (Urgent)</SelectItem>
+                      <SelectItem value="LOW" className="text-xs">Thấp</SelectItem>
+                      <SelectItem value="MEDIUM" className="text-xs">Trung bình</SelectItem>
+                      <SelectItem value="HIGH" className="text-xs">Cao</SelectItem>
+                      <SelectItem value="URGENT" className="text-xs" title="Mức quan trọng cao nhất — gấp về thời gian thì dùng cờ Khẩn trong chi tiết công việc">
+                        Rất cao
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

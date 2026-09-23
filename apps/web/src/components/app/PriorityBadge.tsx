@@ -29,8 +29,11 @@ export function PriorityBadge({
       case "Cao":
         return "Cao";
       case "URGENT":
+      case "Rất cao":
       case "Khẩn":
-        return "Khẩn";
+        // Hiển thị "Rất cao": đây là mức QUAN TRỌNG, không phải "gấp về thời gian".
+        // Cờ gấp là trường isUrgent riêng (docs 02/05 §E3).
+        return "Rất cao";
       default:
         return p;
     }
@@ -48,6 +51,7 @@ export function PriorityBadge({
       case "Cao":
         return <ArrowUp className="h-3 w-3 text-warning-foreground" />;
       case "URGENT":
+      case "Rất cao":
       case "Khẩn":
         return <AlertCircle className="h-3 w-3 text-destructive-foreground animate-pulse" />;
       default:

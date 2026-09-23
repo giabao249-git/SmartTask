@@ -80,6 +80,7 @@ export function priorityToVariant(p: PriorityLevel | string): BadgeVariant {
     case "Cao":
       return "warning";
     case "URGENT":
+    case "Rất cao":
     case "Khẩn":
       return "destructive";
     default:

@@ -17,7 +17,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { Priority, TaskSize, TaskType } from '@prisma/client';
+import { Priority, TaskType } from '@prisma/client';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -66,10 +66,6 @@ export class CreateTaskDto {
   @Min(1)
   @Max(5)
   difficulty?: number;
-  @ApiPropertyOptional({ enum: TaskSize })
-  @IsOptional()
-  @IsEnum(TaskSize)
-  size?: TaskSize;
   @ApiPropertyOptional({ example: '2026-10-13' })
   @IsOptional()
   @IsDateString()
@@ -143,10 +139,6 @@ export class UpdateTaskDto extends VersionedDto {
   @Min(1)
   @Max(5)
   difficulty?: number;
-  @ApiPropertyOptional({ enum: TaskSize })
-  @IsOptional()
-  @IsEnum(TaskSize)
-  size?: TaskSize | null;
   @ApiPropertyOptional() @IsOptional() @IsDateString() startDate?:
     string | null;
   @ApiPropertyOptional() @IsOptional() @IsDateString() dueDate?: string | null;

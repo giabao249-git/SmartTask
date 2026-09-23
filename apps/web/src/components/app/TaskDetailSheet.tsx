@@ -289,10 +289,13 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
               }
             />
           </Field>
-          <Field label="Cờ khẩn">
-            <label className="flex items-center gap-2 h-8 text-xs">
+          <Field label="Cờ khẩn (gấp về thời gian)">
+            <label
+              className="flex items-center gap-2 h-8 text-xs"
+              title="Gấp về thời gian — xếp vào ô Làm ngay của ma trận Eisenhower. Khác với mức ưu tiên (mức quan trọng)."
+            >
               <Checkbox checked={task.isUrgent} disabled={!project.canEdit || busy} onCheckedChange={(c) => patch({ isUrgent: c === true }, "Đổi cờ khẩn")} />
-              Khẩn (Eisenhower xếp vào ô &quot;Làm ngay&quot;)
+              Gấp — xếp vào ô &quot;Làm ngay&quot;
             </label>
           </Field>
         </div>

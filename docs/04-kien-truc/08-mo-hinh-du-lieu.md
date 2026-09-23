@@ -96,7 +96,7 @@ erDiagram
           enum priority "LOW MEDIUM HIGH URGENT"
           bool is_urgent
           int difficulty "1..5"
-          enum size "S M L XL"
+          enum size "S M L XL — cột dự phòng, KHÔNG dùng trong phạm vi đồ án"
           date start_date
           date due_date
           decimal estimate_hours
