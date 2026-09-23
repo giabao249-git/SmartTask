@@ -128,11 +128,47 @@ export function TaskDetailBody({
       onRefresh();
       return;
     }
+    if (code === "DEPENDENCY_CYCLE") {
+      toast.error("Phụ thuộc tạo thành vòng — bỏ chọn task đang chờ task này", { description: "422 DEPENDENCY_CYCLE" });
+      return;
+    }
     toast.error(`${what} thất bại`, { description: `${code}: ${message}` });
   };
-  const patch = (fields: Record<string, unknown>, what = "Cập nhật") =>
-    m.update.mutate({ id: task.id, version: task.version, patch: fields }, { onSuccess: () => toast.success(`${what} xong`), onError: (e) => fail(e, what) });
-  const busy = m.update.isPending || m.assignees.isPending || m.move.isPending || m.progress.isPending || m.labels.isPending || m.skills.isPending || m.dependencies.isPending;
+  /**
+   * Chỉ khoá ĐÚNG trường đang ghi, không khoá cả màn (docs 02/05 §C4).
+   *
+   * Nhưng mỗi PATCH tăng `version`, nên nếu cho hai lời gọi chạy song song với cùng version thì
+   * lời thứ hai chắc chắn 409. Cách làm: giao diện vẫn bấm được ngay, còn các lời gọi được nối
+   * vào MỘT hàng đợi tuần tự phía client, mỗi lời lấy version mới nhất từ phản hồi trước.
+   */
+  const versionRef = React.useRef(task.version);
+  React.useEffect(() => {
+    versionRef.current = task.version;
+  }, [task.version]);
+  const queueRef = React.useRef<Promise<unknown>>(Promise.resolve());
+  const [pendingFields, setPendingFields] = React.useState<string[]>([]);
+  const isSaving = (field: string) => pendingFields.includes(field);
+
+  const enqueue = (field: string, what: string, run: (version: number) => Promise<TaskDetail>) => {
+    setPendingFields((p) => [...p, field]);
+    queueRef.current = queueRef.current
+      .catch(() => undefined)
+      .then(() => run(versionRef.current))
+      .then((updated) => {
+        versionRef.current = updated.version;
+        toast.success(`${what} xong`);
+      })
+      .catch((e) => fail(e, what))
+      .finally(() =>
+        setPendingFields((p) => {
+          const i = p.indexOf(field);
+          return i < 0 ? p : [...p.slice(0, i), ...p.slice(i + 1)];
+        }),
+      );
+  };
+
+  const patch = (fields: Record<string, unknown>, what = "Cập nhật", field = Object.keys(fields)[0]) =>
+    enqueue(field, what, (version) => m.update.mutateAsync({ id: task.id, version, patch: fields }));
   const doneColumn = project.columns.find((c) => c.isDone);
 
   return (
@@ -176,7 +212,7 @@ export function TaskDetailBody({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => title.trim() && title.trim() !== task.title && patch({ title: title.trim() }, "Đổi tiêu đề")}
-            disabled={!project.canEdit || busy}
+            disabled={!project.canEdit || isSaving("title")}
             className="text-base font-semibold h-9 border-transparent hover:border-border focus-visible:border-border px-2"
           />
         </TitleWrap>
@@ -188,12 +224,12 @@ export function TaskDetailBody({
       <div className="flex-1 overflow-y-auto p-4 text-xs flex flex-col lg:flex-row gap-4 items-start">
         {/* Cột trái: nội dung — mô tả, việc con, bình luận, đính kèm, hoạt động */}
         <div className="flex-1 min-w-0 space-y-4">
-        <Field label="Mô tả">
+        <Field label="Mô tả" saving={isSaving("description")}>
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             onBlur={() => description !== (task.description ?? "") && patch({ description: description || null }, "Sửa mô tả")}
-            disabled={!project.canEdit || busy}
+            disabled={!project.canEdit || isSaving("description")}
             className="text-xs min-h-[90px]"
             placeholder="Mô tả (markdown nhẹ)…"
           />
@@ -270,19 +306,19 @@ export function TaskDetailBody({
         {/* Cột phải: thuộc tính, gom 3 nhóm; nhóm ít đụng tới nhất thu gọn sẵn (docs 02/05 §D1) */}
         <aside className="w-full lg:w-72 shrink-0 space-y-4 lg:border-l lg:border-border/60 lg:pl-4">
           <PropGroup title="Phân công">
-            <Field label="Người thực hiện">
+            <Field label="Người thực hiện" saving={isSaving("assignees")}>
               <AssigneePicker
                 value={task.assignees.map((a) => a.id)}
                 members={project.members}
-                disabled={!project.canEdit || busy}
-                onChange={(userIds) => m.assignees.mutate({ id: task.id, version: task.version, userIds }, { onSuccess: () => toast.success("Đã đổi người thực hiện"), onError: (e) => fail(e, "Giao việc") })}
+                disabled={!project.canEdit || isSaving("assignees")}
+                onChange={(userIds) => enqueue("assignees", "Đổi người thực hiện", (version) => m.assignees.mutateAsync({ id: task.id, version, userIds }))}
               />
             </Field>
-            <Field label="Trạng thái (cột)">
+            <Field label="Trạng thái (cột)" saving={isSaving("column")}>
               <Select
                 value={task.columnId}
-                disabled={!project.canEdit || busy}
-                onValueChange={(columnId) => m.move.mutate({ id: task.id, version: task.version, columnId }, { onSuccess: () => toast.success("Đã chuyển cột"), onError: (e) => fail(e, "Chuyển cột") })}
+                disabled={!project.canEdit || isSaving("column")}
+                onValueChange={(columnId) => enqueue("column", "Chuyển cột", (version) => m.move.mutateAsync({ id: task.id, version, columnId }))}
               >
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
@@ -297,10 +333,10 @@ export function TaskDetailBody({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Sprint">
+            <Field label="Sprint" saving={isSaving("sprintId")}>
               <Select
                 value={task.sprintId ?? "__backlog"}
-                disabled={!project.canEdit || busy}
+                disabled={!project.canEdit || isSaving("sprintId")}
                 onValueChange={(v) => patch({ sprintId: v === "__backlog" ? null : v }, "Đổi sprint")}
               >
                 <SelectTrigger className="h-8 text-xs">
@@ -323,8 +359,8 @@ export function TaskDetailBody({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Ưu tiên">
-              <Select value={task.priority} disabled={!project.canEdit || busy} onValueChange={(priority) => patch({ priority: priority as TaskPriority }, "Đổi ưu tiên")}>
+            <Field label="Ưu tiên" saving={isSaving("priority")}>
+              <Select value={task.priority} disabled={!project.canEdit || isSaving("priority")} onValueChange={(priority) => patch({ priority: priority as TaskPriority }, "Đổi ưu tiên")}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
@@ -337,42 +373,42 @@ export function TaskDetailBody({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Cờ khẩn (gấp về thời gian)">
+            <Field label="Cờ khẩn (gấp về thời gian)" saving={isSaving("isUrgent")}>
               <label
                 className="flex items-center gap-2 h-8 text-xs"
                 title="Gấp về thời gian — xếp vào ô Làm ngay của ma trận Eisenhower. Khác với mức ưu tiên (mức quan trọng)."
               >
-                <Checkbox checked={task.isUrgent} disabled={!project.canEdit || busy} onCheckedChange={(c) => patch({ isUrgent: c === true }, "Đổi cờ khẩn")} />
+                <Checkbox checked={task.isUrgent} disabled={!project.canEdit || isSaving("isUrgent")} onCheckedChange={(c) => patch({ isUrgent: c === true }, "Đổi cờ khẩn")} />
                 Gấp — xếp vào ô &quot;Làm ngay&quot;
               </label>
             </Field>
           </PropGroup>
 
           <PropGroup title="Thời gian & công sức">
-            <NumberField label="Ước lượng (giờ)" value={task.estimateHours} disabled={!project.canEdit || busy} onCommit={(v) => patch({ estimateHours: v }, "Đổi ước lượng")} />
+            <NumberField label="Ước lượng (giờ)" value={task.estimateHours} disabled={!project.canEdit || isSaving("estimateHours")} onCommit={(v) => patch({ estimateHours: v }, "Đổi ước lượng")} />
             <NumberField
               label="Giờ còn lại"
               value={task.remainingHours}
-              disabled={!project.canEdit || busy}
-              onCommit={(v) => m.progress.mutate({ id: task.id, version: task.version, remainingHours: v ?? undefined }, { onSuccess: () => toast.success("Đã cập nhật giờ còn lại"), onError: (e) => fail(e, "Cập nhật") })}
+              disabled={!project.canEdit || isSaving("remaining")}
+              onCommit={(v) => enqueue("remaining", "Cập nhật giờ còn lại", (version) => m.progress.mutateAsync({ id: task.id, version, remainingHours: v ?? undefined }))}
             />
-            <Field label={`Tiến độ ${task.progress}%`}>
+            <Field label={`Tiến độ ${task.progress}%`} saving={isSaving("progress")}>
               <Input
                 type="range"
                 min={0}
                 max={100}
                 step={5}
                 defaultValue={task.progress}
-                disabled={!project.canEdit || busy}
+                disabled={!project.canEdit || isSaving("progress")}
                 onMouseUp={(e) => {
                   const v = Number((e.target as HTMLInputElement).value);
-                  if (v !== task.progress) m.progress.mutate({ id: task.id, version: task.version, progress: v }, { onError: (err) => fail(err, "Cập nhật tiến độ") });
+                  if (v !== task.progress) enqueue("progress", "Cập nhật tiến độ", (version) => m.progress.mutateAsync({ id: task.id, version, progress: v }));
                 }}
                 className="h-8 px-0 border-0 shadow-none"
               />
             </Field>
-            <DateField label="Bắt đầu" value={task.startDate} disabled={!project.canEdit || busy} onCommit={(v) => patch({ startDate: v }, "Đổi ngày bắt đầu")} />
-            <DateField label="Hạn" value={task.dueDate} disabled={!project.canEdit || busy} onCommit={(v) => patch({ dueDate: v }, "Đổi hạn")} />
+            <DateField label="Bắt đầu" value={task.startDate} disabled={!project.canEdit || isSaving("startDate")} onCommit={(v) => patch({ startDate: v }, "Đổi ngày bắt đầu")} />
+            <DateField label="Hạn" value={task.dueDate} disabled={!project.canEdit || isSaving("dueDate")} onCommit={(v) => patch({ dueDate: v }, "Đổi hạn")} />
           </PropGroup>
 
           <PropGroup
@@ -380,10 +416,10 @@ export function TaskDetailBody({
             collapsible
             count={[task.labels.length, task.requiredSkills.length, task.dependsOnIds.length].filter(Boolean).length}
           >
-            <Field label="Loại công việc">
+            <Field label="Loại công việc" saving={isSaving("type")}>
               <Select
                 value={task.type}
-                disabled={!project.canEdit || busy}
+                disabled={!project.canEdit || isSaving("type")}
                 onValueChange={(v) => patch({ type: v as TaskType }, "Đổi loại")}
               >
                 <SelectTrigger className="h-8 text-xs">
@@ -398,24 +434,24 @@ export function TaskDetailBody({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Nhãn">
+            <Field label="Nhãn" saving={isSaving("labels")}>
               <LabelPicker
                 value={task.labels.map((l) => l.id)}
                 labels={project.labels}
-                disabled={!project.canEdit || busy}
-                onChange={(labelIds) => m.labels.mutate({ id: task.id, version: task.version, labelIds }, { onSuccess: () => toast.success("Đã đổi nhãn"), onError: (e) => fail(e, "Đổi nhãn") })}
+                disabled={!project.canEdit || isSaving("labels")}
+                onChange={(labelIds) => enqueue("labels", "Đổi nhãn", (version) => m.labels.mutateAsync({ id: task.id, version, labelIds }))}
               />
             </Field>
-            <Field label="Kỹ năng yêu cầu">
+            <Field label="Kỹ năng yêu cầu" saving={isSaving("skills")}>
               <SkillPicker
                 value={task.requiredSkills.map((s) => ({ skillId: s.id, minLevel: s.minLevel }))}
                 workspaceId={project.workspaceId}
-                disabled={!project.canEdit || busy}
-                onChange={(skills) => m.skills.mutate({ id: task.id, version: task.version, skills }, { onSuccess: () => toast.success("Đã đổi kỹ năng"), onError: (e) => fail(e, "Đổi kỹ năng") })}
+                disabled={!project.canEdit || isSaving("skills")}
+                onChange={(skills) => enqueue("skills", "Đổi kỹ năng", (version) => m.skills.mutateAsync({ id: task.id, version, skills }))}
               />
             </Field>
-            <Field label="Độ khó (1–5)">
-              <Select value={String(task.difficulty)} disabled={!project.canEdit || busy} onValueChange={(v) => patch({ difficulty: Number(v) }, "Đổi độ khó")}>
+            <Field label="Độ khó (1–5)" saving={isSaving("difficulty")}>
+              <Select value={String(task.difficulty)} disabled={!project.canEdit || isSaving("difficulty")} onValueChange={(v) => patch({ difficulty: Number(v) }, "Đổi độ khó")}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
@@ -428,17 +464,16 @@ export function TaskDetailBody({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Phụ thuộc (xong trước)">
+            <Field label="Phụ thuộc (xong trước)" saving={isSaving("dependencies")}>
               <DependencyPicker
                 taskId={task.id}
                 value={task.dependsOnIds}
                 projectId={project.id}
                 projectKey={project.key}
-                disabled={!project.canEdit || busy}
+                disabled={!project.canEdit || isSaving("dependencies")}
                 onChange={(dependsOnIds) =>
-                  m.dependencies.mutate(
-                    { id: task.id, version: task.version, dependsOnIds },
-                    { onSuccess: () => toast.success("Đã đổi phụ thuộc"), onError: (e) => (describeError(e).code === "DEPENDENCY_CYCLE" ? toast.error("Phụ thuộc tạo thành vòng — bỏ chọn task đang chờ task này", { description: "422 DEPENDENCY_CYCLE" }) : fail(e, "Đổi phụ thuộc")) },
+                  enqueue("dependencies", "Đổi phụ thuộc", (version) =>
+                    m.dependencies.mutateAsync({ id: task.id, version, dependsOnIds }),
                   )
                 }
               />
@@ -503,10 +538,13 @@ function PropGroup({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, saving }: { label: string; children: React.ReactNode; saving?: boolean }) {
   return (
     <div className="space-y-1">
-      <label className="text-[11px] font-medium text-muted-foreground">{label}</label>
+      <label className="text-[11px] font-medium text-muted-foreground inline-flex items-center gap-1">
+        {label}
+        {saving && <Loader2 className="h-3 w-3 animate-spin" />}
+      </label>
       {children}
     </div>
   );
