@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AtSign, Download, FileText, History, Loader2, MessageSquare, Paperclip, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { AtSign, ChevronDown, Download, FileText, History, Loader2, MessageSquare, Paperclip, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { ActivityList } from "@/features/activity/ActivityList";
 import { useTasks } from "@/features/board/hooks";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ErrorState } from "@/components/app/ErrorState";
@@ -50,7 +51,7 @@ export function TaskDetailSheet({ taskId, project, open, onOpenChange }: TaskDet
   const q = useTask(open ? taskId : null);
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-xl p-0 flex flex-col overflow-hidden">
+      <SheetContent className="w-full sm:max-w-3xl p-0 flex flex-col overflow-hidden">
         {q.isPending || !taskId ? (
           <div className="p-6 space-y-4">
             <Skeleton className="h-6 w-40" />
@@ -129,177 +130,9 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
         </SheetDescription>
       </SheetHeader>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-        {/* Thuộc tính */}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Trạng thái (cột)">
-            <Select
-              value={task.columnId}
-              disabled={!project.canEdit || busy}
-              onValueChange={(columnId) => m.move.mutate({ id: task.id, version: task.version, columnId }, { onSuccess: () => toast.success("Đã chuyển cột"), onError: (e) => fail(e, "Chuyển cột") })}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {project.columns.map((c) => (
-                  <SelectItem key={c.id} value={c.id} className="text-xs">
-                    {c.name}
-                    {c.wipLimit ? ` (WIP ${c.wipLimit})` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Loại công việc">
-            <Select
-              value={task.type}
-              disabled={!project.canEdit || busy}
-              onValueChange={(v) => patch({ type: v as TaskType }, "Đổi loại")}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TASK_TYPES.map((t) => (
-                  <SelectItem key={t} value={t} className="text-xs" title={typeToHint(t)}>
-                    {typeToLabel(t)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Ưu tiên">
-            <Select value={task.priority} disabled={!project.canEdit || busy} onValueChange={(priority) => patch({ priority: priority as TaskPriority }, "Đổi ưu tiên")}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(["LOW", "MEDIUM", "HIGH", "URGENT"] as const).map((p) => (
-                  <SelectItem key={p} value={p} className="text-xs">
-                    <PriorityBadge priority={p} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Người thực hiện">
-            <AssigneePicker
-              value={task.assignees.map((a) => a.id)}
-              members={project.members}
-              disabled={!project.canEdit || busy}
-              onChange={(userIds) => m.assignees.mutate({ id: task.id, version: task.version, userIds }, { onSuccess: () => toast.success("Đã đổi người thực hiện"), onError: (e) => fail(e, "Giao việc") })}
-            />
-          </Field>
-          <Field label="Sprint">
-            <Select
-              value={task.sprintId ?? "__backlog"}
-              disabled={!project.canEdit || busy}
-              onValueChange={(v) => patch({ sprintId: v === "__backlog" ? null : v }, "Đổi sprint")}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__backlog" className="text-xs">
-                  Backlog
-                </SelectItem>
-                {project.activeSprint && (
-                  <SelectItem value={project.activeSprint.id} className="text-xs">
-                    {project.activeSprint.name} (đang chạy)
-                  </SelectItem>
-                )}
-                {task.sprint && task.sprint.id !== project.activeSprint?.id && (
-                  <SelectItem value={task.sprint.id} className="text-xs">
-                    {task.sprint.name}
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </Field>
-          <NumberField label="Ước lượng (giờ)" value={task.estimateHours} disabled={!project.canEdit || busy} onCommit={(v) => patch({ estimateHours: v }, "Đổi ước lượng")} />
-          <NumberField
-            label="Giờ còn lại"
-            value={task.remainingHours}
-            disabled={!project.canEdit || busy}
-            onCommit={(v) => m.progress.mutate({ id: task.id, version: task.version, remainingHours: v ?? undefined }, { onSuccess: () => toast.success("Đã cập nhật giờ còn lại"), onError: (e) => fail(e, "Cập nhật") })}
-          />
-          <DateField label="Bắt đầu" value={task.startDate} disabled={!project.canEdit || busy} onCommit={(v) => patch({ startDate: v }, "Đổi ngày bắt đầu")} />
-          <DateField label="Hạn" value={task.dueDate} disabled={!project.canEdit || busy} onCommit={(v) => patch({ dueDate: v }, "Đổi hạn")} />
-          <Field label="Độ khó (1–5)">
-            <Select value={String(task.difficulty)} disabled={!project.canEdit || busy} onValueChange={(v) => patch({ difficulty: Number(v) }, "Đổi độ khó")}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[1, 2, 3, 4, 5].map((d) => (
-                  <SelectItem key={d} value={String(d)} className="text-xs">
-                    {d}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label={`Tiến độ ${task.progress}%`}>
-            <Input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              defaultValue={task.progress}
-              disabled={!project.canEdit || busy}
-              onMouseUp={(e) => {
-                const v = Number((e.target as HTMLInputElement).value);
-                if (v !== task.progress) m.progress.mutate({ id: task.id, version: task.version, progress: v }, { onError: (err) => fail(err, "Cập nhật tiến độ") });
-              }}
-              className="h-8 px-0 border-0 shadow-none"
-            />
-          </Field>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Nhãn">
-            <LabelPicker
-              value={task.labels.map((l) => l.id)}
-              labels={project.labels}
-              disabled={!project.canEdit || busy}
-              onChange={(labelIds) => m.labels.mutate({ id: task.id, version: task.version, labelIds }, { onSuccess: () => toast.success("Đã đổi nhãn"), onError: (e) => fail(e, "Đổi nhãn") })}
-            />
-          </Field>
-          <Field label="Kỹ năng yêu cầu">
-            <SkillPicker
-              value={task.requiredSkills.map((s) => ({ skillId: s.id, minLevel: s.minLevel }))}
-              workspaceId={project.workspaceId}
-              disabled={!project.canEdit || busy}
-              onChange={(skills) => m.skills.mutate({ id: task.id, version: task.version, skills }, { onSuccess: () => toast.success("Đã đổi kỹ năng"), onError: (e) => fail(e, "Đổi kỹ năng") })}
-            />
-          </Field>
-          <Field label="Phụ thuộc (xong trước)">
-            <DependencyPicker
-              taskId={task.id}
-              value={task.dependsOnIds}
-              projectId={project.id}
-              projectKey={project.key}
-              disabled={!project.canEdit || busy}
-              onChange={(dependsOnIds) =>
-                m.dependencies.mutate(
-                  { id: task.id, version: task.version, dependsOnIds },
-                  { onSuccess: () => toast.success("Đã đổi phụ thuộc"), onError: (e) => (describeError(e).code === "DEPENDENCY_CYCLE" ? toast.error("Phụ thuộc tạo thành vòng — bỏ chọn task đang chờ task này", { description: "422 DEPENDENCY_CYCLE" }) : fail(e, "Đổi phụ thuộc")) },
-                )
-              }
-            />
-          </Field>
-          <Field label="Cờ khẩn (gấp về thời gian)">
-            <label
-              className="flex items-center gap-2 h-8 text-xs"
-              title="Gấp về thời gian — xếp vào ô Làm ngay của ma trận Eisenhower. Khác với mức ưu tiên (mức quan trọng)."
-            >
-              <Checkbox checked={task.isUrgent} disabled={!project.canEdit || busy} onCheckedChange={(c) => patch({ isUrgent: c === true }, "Đổi cờ khẩn")} />
-              Gấp — xếp vào ô &quot;Làm ngay&quot;
-            </label>
-          </Field>
-        </div>
-
+      <div className="flex-1 overflow-y-auto p-4 text-xs flex flex-col lg:flex-row gap-4 items-start">
+        {/* Cột trái: nội dung — mô tả, việc con, bình luận, đính kèm, hoạt động */}
+        <div className="flex-1 min-w-0 space-y-4">
         <Field label="Mô tả">
           <Textarea
             value={description}
@@ -377,6 +210,187 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
             <ActivityList projectId={project.id} taskId={task.id} compact />
           </TabsContent>
         </Tabs>
+        </div>
+
+        {/* Cột phải: thuộc tính, gom 3 nhóm; nhóm ít đụng tới nhất thu gọn sẵn (docs 02/05 §D1) */}
+        <aside className="w-full lg:w-72 shrink-0 space-y-4 lg:border-l lg:border-border/60 lg:pl-4">
+          <PropGroup title="Phân công">
+            <Field label="Người thực hiện">
+              <AssigneePicker
+                value={task.assignees.map((a) => a.id)}
+                members={project.members}
+                disabled={!project.canEdit || busy}
+                onChange={(userIds) => m.assignees.mutate({ id: task.id, version: task.version, userIds }, { onSuccess: () => toast.success("Đã đổi người thực hiện"), onError: (e) => fail(e, "Giao việc") })}
+              />
+            </Field>
+            <Field label="Trạng thái (cột)">
+              <Select
+                value={task.columnId}
+                disabled={!project.canEdit || busy}
+                onValueChange={(columnId) => m.move.mutate({ id: task.id, version: task.version, columnId }, { onSuccess: () => toast.success("Đã chuyển cột"), onError: (e) => fail(e, "Chuyển cột") })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {project.columns.map((c) => (
+                    <SelectItem key={c.id} value={c.id} className="text-xs">
+                      {c.name}
+                      {c.wipLimit ? ` (WIP ${c.wipLimit})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Sprint">
+              <Select
+                value={task.sprintId ?? "__backlog"}
+                disabled={!project.canEdit || busy}
+                onValueChange={(v) => patch({ sprintId: v === "__backlog" ? null : v }, "Đổi sprint")}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__backlog" className="text-xs">
+                    Backlog
+                  </SelectItem>
+                  {project.activeSprint && (
+                    <SelectItem value={project.activeSprint.id} className="text-xs">
+                      {project.activeSprint.name} (đang chạy)
+                    </SelectItem>
+                  )}
+                  {task.sprint && task.sprint.id !== project.activeSprint?.id && (
+                    <SelectItem value={task.sprint.id} className="text-xs">
+                      {task.sprint.name}
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Ưu tiên">
+              <Select value={task.priority} disabled={!project.canEdit || busy} onValueChange={(priority) => patch({ priority: priority as TaskPriority }, "Đổi ưu tiên")}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(["LOW", "MEDIUM", "HIGH", "URGENT"] as const).map((p) => (
+                    <SelectItem key={p} value={p} className="text-xs">
+                      <PriorityBadge priority={p} />
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Cờ khẩn (gấp về thời gian)">
+              <label
+                className="flex items-center gap-2 h-8 text-xs"
+                title="Gấp về thời gian — xếp vào ô Làm ngay của ma trận Eisenhower. Khác với mức ưu tiên (mức quan trọng)."
+              >
+                <Checkbox checked={task.isUrgent} disabled={!project.canEdit || busy} onCheckedChange={(c) => patch({ isUrgent: c === true }, "Đổi cờ khẩn")} />
+                Gấp — xếp vào ô &quot;Làm ngay&quot;
+              </label>
+            </Field>
+          </PropGroup>
+
+          <PropGroup title="Thời gian & công sức">
+            <NumberField label="Ước lượng (giờ)" value={task.estimateHours} disabled={!project.canEdit || busy} onCommit={(v) => patch({ estimateHours: v }, "Đổi ước lượng")} />
+            <NumberField
+              label="Giờ còn lại"
+              value={task.remainingHours}
+              disabled={!project.canEdit || busy}
+              onCommit={(v) => m.progress.mutate({ id: task.id, version: task.version, remainingHours: v ?? undefined }, { onSuccess: () => toast.success("Đã cập nhật giờ còn lại"), onError: (e) => fail(e, "Cập nhật") })}
+            />
+            <Field label={`Tiến độ ${task.progress}%`}>
+              <Input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                defaultValue={task.progress}
+                disabled={!project.canEdit || busy}
+                onMouseUp={(e) => {
+                  const v = Number((e.target as HTMLInputElement).value);
+                  if (v !== task.progress) m.progress.mutate({ id: task.id, version: task.version, progress: v }, { onError: (err) => fail(err, "Cập nhật tiến độ") });
+                }}
+                className="h-8 px-0 border-0 shadow-none"
+              />
+            </Field>
+            <DateField label="Bắt đầu" value={task.startDate} disabled={!project.canEdit || busy} onCommit={(v) => patch({ startDate: v }, "Đổi ngày bắt đầu")} />
+            <DateField label="Hạn" value={task.dueDate} disabled={!project.canEdit || busy} onCommit={(v) => patch({ dueDate: v }, "Đổi hạn")} />
+          </PropGroup>
+
+          <PropGroup
+            title="Phân loại & liên kết"
+            collapsible
+            count={[task.labels.length, task.requiredSkills.length, task.dependsOnIds.length].filter(Boolean).length}
+          >
+            <Field label="Loại công việc">
+              <Select
+                value={task.type}
+                disabled={!project.canEdit || busy}
+                onValueChange={(v) => patch({ type: v as TaskType }, "Đổi loại")}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TASK_TYPES.map((t) => (
+                    <SelectItem key={t} value={t} className="text-xs" title={typeToHint(t)}>
+                      {typeToLabel(t)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Nhãn">
+              <LabelPicker
+                value={task.labels.map((l) => l.id)}
+                labels={project.labels}
+                disabled={!project.canEdit || busy}
+                onChange={(labelIds) => m.labels.mutate({ id: task.id, version: task.version, labelIds }, { onSuccess: () => toast.success("Đã đổi nhãn"), onError: (e) => fail(e, "Đổi nhãn") })}
+              />
+            </Field>
+            <Field label="Kỹ năng yêu cầu">
+              <SkillPicker
+                value={task.requiredSkills.map((s) => ({ skillId: s.id, minLevel: s.minLevel }))}
+                workspaceId={project.workspaceId}
+                disabled={!project.canEdit || busy}
+                onChange={(skills) => m.skills.mutate({ id: task.id, version: task.version, skills }, { onSuccess: () => toast.success("Đã đổi kỹ năng"), onError: (e) => fail(e, "Đổi kỹ năng") })}
+              />
+            </Field>
+            <Field label="Độ khó (1–5)">
+              <Select value={String(task.difficulty)} disabled={!project.canEdit || busy} onValueChange={(v) => patch({ difficulty: Number(v) }, "Đổi độ khó")}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 4, 5].map((d) => (
+                    <SelectItem key={d} value={String(d)} className="text-xs">
+                      {d}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Phụ thuộc (xong trước)">
+              <DependencyPicker
+                taskId={task.id}
+                value={task.dependsOnIds}
+                projectId={project.id}
+                projectKey={project.key}
+                disabled={!project.canEdit || busy}
+                onChange={(dependsOnIds) =>
+                  m.dependencies.mutate(
+                    { id: task.id, version: task.version, dependsOnIds },
+                    { onSuccess: () => toast.success("Đã đổi phụ thuộc"), onError: (e) => (describeError(e).code === "DEPENDENCY_CYCLE" ? toast.error("Phụ thuộc tạo thành vòng — bỏ chọn task đang chờ task này", { description: "422 DEPENDENCY_CYCLE" }) : fail(e, "Đổi phụ thuộc")) },
+                  )
+                }
+              />
+            </Field>
+          </PropGroup>
+        </aside>
+
       </div>
 
       {project.canManage && (
@@ -396,10 +410,48 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
   );
 }
 
+/** Nhóm thuộc tính ở cột phải; `collapsible` cho nhóm ít đụng tới nhất, có đếm số đã đặt. */
+function PropGroup({
+  title,
+  children,
+  collapsible = false,
+  count = 0,
+}: {
+  title: string;
+  children: React.ReactNode;
+  collapsible?: boolean;
+  count?: number;
+}) {
+  const [open, setOpen] = React.useState(!collapsible);
+  return (
+    <div className="space-y-2">
+      {collapsible ? (
+        <Collapsible open={open} onOpenChange={setOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-6 w-full justify-between px-0 text-[11px] font-semibold text-muted-foreground hover:bg-transparent">
+              <span>
+                {title}
+                {count > 0 && <span className="ml-1 font-normal">· {count}</span>}
+              </span>
+              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-3 pt-2">{children}</CollapsibleContent>
+        </Collapsible>
+      ) : (
+        <>
+          <div className="text-[11px] font-semibold text-muted-foreground">{title}</div>
+          <div className="space-y-3">{children}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
+      <label className="text-[11px] font-medium text-muted-foreground">{label}</label>
       {children}
     </div>
   );
