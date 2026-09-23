@@ -3,10 +3,11 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useProject } from "@/lib/hooks/queries";
-import { ProjectProvider } from "@/lib/hooks/use-project";
+import { clearLastProject, ProjectProvider } from "@/lib/hooks/use-project";
 import { describeError } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/app/ErrorState";
+import { Button } from "@/components/ui/button";
 
 /** Nạp dự án thật theo :projectId (UUID) một lần cho mọi màn con; key hiển thị lấy từ project.key. */
 export default function ProjectLayout({ children }: { children: React.ReactNode }) {
@@ -28,12 +29,31 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
     );
   if (q.isError) {
     const { code, message } = describeError(q.error);
+    const gone = code === "NOT_FOUND";
     return (
-      <ErrorState
-        code={code}
-        message={code === "NOT_FOUND" ? "Dự án không tồn tại hoặc bạn không phải thành viên." : message}
-        onRetry={() => (code === "NOT_FOUND" ? router.push("/workspaces") : q.refetch())}
-      />
+      <div className="space-y-3">
+        <ErrorState
+          code={code}
+          message={
+            gone
+              ? "Dự án không tồn tại hoặc bạn không còn là thành viên. Nếu vừa nạp lại dữ liệu mẫu thì mã dự án trong đường dẫn đã cũ."
+              : message
+          }
+          onRetry={gone ? undefined : () => q.refetch()}
+        />
+        {gone && (
+          <Button
+            size="sm"
+            className="text-xs"
+            onClick={() => {
+              clearLastProject();
+              router.replace("/workspaces");
+            }}
+          >
+            Về danh sách dự án
+          </Button>
+        )}
+      </div>
     );
   }
   return <ProjectProvider project={q.data}>{children}</ProjectProvider>;

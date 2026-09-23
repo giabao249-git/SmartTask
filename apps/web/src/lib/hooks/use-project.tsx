@@ -29,6 +29,15 @@ export function useCurrentProject(): ProjectDetail {
   return p;
 }
 
+/** Quên dự án mở gần nhất (dùng khi id không còn tồn tại, ví dụ sau khi seed lại CSDL). */
+export function clearLastProject(): void {
+  try {
+    localStorage.removeItem(LAST_PROJECT_KEY);
+  } catch {
+    // bỏ qua
+  }
+}
+
 /** Dự án mở gần nhất (để sidebar còn link khi đang ở /workspaces hay /settings). */
 export function readLastProject(): { id: string; key: string; name: string } | null {
   try {

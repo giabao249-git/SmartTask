@@ -30,6 +30,13 @@ Sidebar dự án từ 8 mục còn 4. Hai nhóm được gộp vì **cùng một
 - Màn hẹp (< 640px) đổi tab bằng `Select` thay cho `TabsList`.
 - Giữ riêng: Dashboard (điểm vào), Trợ lý AI (layout 3 cột), Cấu hình dự án (đã là tabs).
 
+## 1c. Điều hướng vào dự án (23/09/2026)
+
+- Đăng nhập xong và mở `/` đều đi thẳng tới **dự án mở gần nhất**; nếu chỉ có đúng một workspace và một dự án ACTIVE thì vào thẳng dự án đó (`src/lib/landing.ts`). Trước đây luôn dừng ở `/workspaces` dù thanh trên đã hiện workspace, khiến người dùng phải bấm "Mở dự án" thêm một lần.
+- `?next=` khi bị middleware chặn vẫn được ưu tiên, nên link chia sẻ mở đúng màn.
+- Dự án trong đường dẫn không còn (ví dụ vừa seed lại CSDL): hiện lỗi `NOT_FOUND` kèm nút **"Về danh sách dự án"**, đồng thời xoá `localStorage st.lastProject` để lần sau không quay lại id chết.
+- Seed dùng **id cố định** cho 6 tài khoản, workspace và dự án ST (`apps/api/prisma/seed.ts`), nên chạy `prisma db seed` lại không làm chết đường dẫn `/projects/<id>/…` đang mở.
+
 ## 2. Bảng màn ↔ endpoint ↔ trạng thái
 
 Ký hiệu: ✅ nối API thật · 🟡 tính trên web từ dữ liệu API (không có endpoint riêng) · ⏳ chờ backend.

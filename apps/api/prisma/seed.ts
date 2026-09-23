@@ -119,6 +119,25 @@ async function seedAiCatalog(): Promise<void> {
   console.log(`   ✅ Đã nạp ${AI_CATALOG_SEED.length} models vào AiModelCatalog!`);
 }
 
+/**
+ * Id cố định cho dữ liệu demo: seed chạy lại vẫn giữ nguyên đường dẫn
+ * (/projects/<id>/…, link trong thông báo, tab đang mở) thay vì sinh UUID mới mỗi lần.
+ */
+const ID = {
+  users: {
+    Long: '11111111-1111-4111-8111-000000000001',
+    Lan: '11111111-1111-4111-8111-000000000002',
+    Quang: '11111111-1111-4111-8111-000000000003',
+    Minh: '11111111-1111-4111-8111-000000000004',
+    Huy: '11111111-1111-4111-8111-000000000005',
+    Mai: '11111111-1111-4111-8111-000000000006',
+  } as Record<string, string>,
+  workspace: '22222222-2222-4222-8222-000000000001',
+  project: '33333333-3333-4333-8333-000000000001',
+  sprint1: '44444444-4444-4444-8444-000000000001',
+  sprint2: '44444444-4444-4444-8444-000000000002',
+};
+
 async function main(): Promise<void> {
   console.log('🚀 Bắt đầu quy trình Seed dữ liệu mẫu cho SmartTask...');
   
@@ -183,6 +202,7 @@ async function main(): Promise<void> {
   for (const acc of testAccounts) {
     const user = await prisma.user.create({
       data: {
+        id: ID.users[acc.key],
         email: acc.email,
         fullName: acc.fullName,
         shortName: acc.shortName,
@@ -199,6 +219,7 @@ async function main(): Promise<void> {
   console.log('🏢 [4/6] Đang tạo Workspace "SmartTask Demo" và phân quyền thành viên...');
   const ws = await prisma.workspace.create({
     data: {
+      id: ID.workspace,
       name: 'SmartTask Demo',
       slug: 'smarttask-demo',
       ownerId: userMap.Lan,
@@ -404,6 +425,7 @@ async function main(): Promise<void> {
   console.log('📌 [6/6] Đang tạo Dự án ST "SmartTask v1", Sprints và 10 Task mẫu...');
   const project = await prisma.project.create({
     data: {
+      id: ID.project,
       workspaceId: wsId,
       key: 'ST',
       name: 'SmartTask v1',
@@ -441,6 +463,7 @@ async function main(): Promise<void> {
 
   const sprint1 = await prisma.sprint.create({
     data: {
+      id: ID.sprint1,
       projectId: project.id,
       name: 'Sprint 1',
       goal: 'Kiến trúc RBAC, Cổng Admin & Tích hợp DeepSeek V4 Flash',
@@ -454,6 +477,7 @@ async function main(): Promise<void> {
 
   const sprint2 = await prisma.sprint.create({
     data: {
+      id: ID.sprint2,
       projectId: project.id,
       name: 'Sprint 2',
       goal: 'Cân bằng tải Workload & Trợ lý AI phân rã WBS',

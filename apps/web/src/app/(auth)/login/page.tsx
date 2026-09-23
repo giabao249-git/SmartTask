@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth";
 import { describeError } from "@/lib/api";
+import { resolveLandingPath } from "@/lib/landing";
 import { toast } from "sonner";
 
 function LoginForm() {
@@ -25,10 +26,15 @@ function LoginForm() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<{ code: string; message: string } | null>(null);
 
-  // Đã có phiên (F5 hoặc quay lại /login) → vào thẳng
+  // Đã có phiên (F5 hoặc quay lại /login) → vào thẳng nơi đang làm dở
   React.useEffect(() => {
-    if (auth.status === "authenticated") router.replace(next && next.startsWith("/") ? next : "/workspaces");
-  }, [auth.status, next, router]);
+    if (auth.status !== "authenticated") return;
+    if (next && next.startsWith("/")) {
+      router.replace(next);
+      return;
+    }
+    void resolveLandingPath(auth.workspaces).then((path) => router.replace(path));
+  }, [auth.status, auth.workspaces, next, router]);
 
   const submit = async (mode: "login" | "register") => {
     setBusy(true);
@@ -37,7 +43,8 @@ function LoginForm() {
       const user =
         mode === "login" ? await auth.login(email.trim().toLowerCase(), password) : await auth.register(email.trim().toLowerCase(), password, fullName.trim());
       toast.success(`Xin chào ${user.shortName ?? user.fullName}`);
-      router.replace(next && next.startsWith("/") ? next : "/workspaces");
+      // Không bắt người dùng bấm thêm một lần ở màn danh sách nếu họ chỉ có một dự án
+      router.replace(next && next.startsWith("/") ? next : await resolveLandingPath(auth.workspaces));
     } catch (e) {
       setError(describeError(e));
     } finally {
