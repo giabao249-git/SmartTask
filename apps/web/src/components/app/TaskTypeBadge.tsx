@@ -30,7 +30,7 @@ export function TaskTypeBadge({ type, size = "full", className }: TaskTypeBadgeP
   const badge = (
     <Badge
       variant={typeToVariant(type)}
-      className={cn("gap-1 text-[10px] px-1.5 py-0 h-4 font-medium", className)}
+      className={cn("gap-1 text-[10px] px-1.5 py-0 h-4 font-medium whitespace-nowrap", className)}
       aria-label={`Loại: ${label}`}
     >
       <Icon className="h-2.5 w-2.5" />

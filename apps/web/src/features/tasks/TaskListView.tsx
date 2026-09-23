@@ -21,6 +21,8 @@ import { describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useAuth } from "@/lib/auth";
 import { useWorkFilters } from "@/features/work/filters";
+import { useWorkSelection } from "@/features/work/selection";
+import { Checkbox } from "@/components/ui/checkbox";
 import { statusToVariant } from "@/lib/status";
 import type { TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -51,6 +53,7 @@ export function TaskListView() {
   // Cùng khoá truy vấn với Kanban/Timeline/Eisenhower → đổi cách nhìn không gọi lại API.
   const tasksQuery = useTasks(project.id, f.query);
   const mut = useTaskMutations(project.id);
+  const sel = useWorkSelection();
   useBoardRealtime(project.id);
 
   /**
@@ -179,6 +182,15 @@ export function TaskListView() {
           <Table>
             <TableHeader>
               <TableRow>
+                {editable && (
+                  <TableHead className="w-8">
+                    <Checkbox
+                      aria-label="Chọn tất cả công việc đang hiện"
+                      checked={rows.length > 0 && rows.every((r) => sel.isSelected(r.id))}
+                      onCheckedChange={(c) => (c ? sel.selectAll(rows.map((r) => r.id)) : sel.clear())}
+                    />
+                  </TableHead>
+                )}
                 <Head k="number" className="w-24">
                   Mã
                 </Head>
@@ -203,12 +215,23 @@ export function TaskListView() {
                 return (
                   <TableRow
                     key={t.id}
+                    data-state={sel.isSelected(t.id) ? "selected" : undefined}
                     className="cursor-pointer text-xs"
                     onClick={() => {
                       setSelectedId(t.id);
                       setSheetOpen(true);
                     }}
                   >
+                    {editable && (
+                      <TableCell onClick={stop} className="w-8">
+                        <Checkbox
+                          aria-label={`Chọn ${taskKeyOf(project.key, t)}`}
+                          checked={sel.isSelected(t.id)}
+                          // Shift-click chọn cả dải kể từ dòng bấm gần nhất (theo Jira)
+                          onClick={(e) => sel.toggle(t.id, rows.map((r) => r.id), (e as React.MouseEvent).shiftKey)}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="font-mono">
                       <span className="inline-flex items-center gap-1">
                         {taskKeyOf(project.key, t)}

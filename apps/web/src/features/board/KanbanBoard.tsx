@@ -50,6 +50,8 @@ import { describeError, isApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useWorkFilters } from "@/features/work/filters";
+import { useWorkSelection } from "@/features/work/selection";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { BoardColumn, ProjectDetail, TaskListItem } from "@/lib/types";
 import { TASK_TYPES, typeToHint, typeToLabel } from "@/lib/status";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
@@ -64,6 +66,7 @@ function SortableTaskItem({
   onClaim,
   currentUserId,
   isFocused,
+  isSelected,
 }: {
   task: TaskListItem;
   projectKey: string;
@@ -71,6 +74,7 @@ function SortableTaskItem({
   onClaim?: (t: TaskListItem) => void;
   currentUserId?: string;
   isFocused?: boolean;
+  isSelected?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, data: { type: "Task", task } });
   return (
@@ -82,7 +86,7 @@ function SortableTaskItem({
       {...attributes}
       {...listeners}
     >
-      <TaskCard task={task} projectKey={projectKey} onClick={onClick} onClaim={onClaim} currentUserId={currentUserId} isDragging={isDragging} isFocused={isFocused} />
+      <TaskCard task={task} projectKey={projectKey} onClick={onClick} onClaim={onClaim} currentUserId={currentUserId} isDragging={isDragging} isFocused={isFocused} isSelected={isSelected} />
     </div>
   );
 }
@@ -125,6 +129,7 @@ export function KanbanBoard() {
   const router = useRouter();
   const params = useSearchParams();
   const f = useWorkFilters();
+  const sel = useWorkSelection();
   const sprintFilter = f.sprint;
   /**
    * Sprint của công việc sắp tạo — phải đọc đúng bộ lọc đang đứng.
@@ -483,10 +488,16 @@ export function KanbanBoard() {
           take();
           setMenuTaskId(focused.id);
           return;
-        case "Escape":
-          if (!focusedId) return;
+        case "x":
+        case "X":
+          if (!focused || !project.canEdit) return;
           take();
-          setFocusedId(null);
+          sel.toggle(focused.id, grid.flatMap((g) => g.ids));
+          return;
+        case "Escape":
+          take();
+          if (sel.active) sel.clear();
+          else setFocusedId(null);
           return;
         default:
           return;
@@ -496,7 +507,7 @@ export function KanbanBoard() {
     // pha bubble thì đúng phím Escape đóng Sheet sẽ lọt qua guard và xoá luôn ô trỏ thẻ.
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [focusedId, local, f, project.canEdit, openComposer, moveFocus, auth.user?.id, quickAssign, openTask]);
+  }, [focusedId, local, f, project.canEdit, openComposer, moveFocus, auth.user?.id, quickAssign, openTask, sel, grid]);
 
   const failMove = (e: unknown, task: TaskListItem) => {
     const { code, message } = describeError(e);
@@ -697,6 +708,7 @@ export function KanbanBoard() {
                   onAskDelete={setConfirmDelete}
                   onAddTask={openComposer}
                   focusedId={focusedId}
+                  orderedIds={grid.flatMap((g) => g.ids)}
                   menuTaskId={menuTaskId}
                   onMenuOpenChange={setMenuTaskId}
                   composerOpen={composerColId === col.id}
@@ -1109,6 +1121,7 @@ function Column({
   onAskDelete,
   onAddTask,
   focusedId,
+  orderedIds,
   menuTaskId,
   onMenuOpenChange,
   composerOpen,
@@ -1133,6 +1146,7 @@ function Column({
   onAskDelete: (t: TaskListItem) => void;
   onAddTask?: (colId: string) => void;
   focusedId: string | null;
+  orderedIds: string[];
   menuTaskId: string | null;
   onMenuOpenChange: (taskId: string | null) => void;
   composerOpen: boolean;
@@ -1142,6 +1156,7 @@ function Column({
   currentUserId?: string;
   canEdit: boolean;
 }) {
+  const sel = useWorkSelection();
   const isOverWip = col.wipLimit != null && tasks.length > col.wipLimit;
   return (
     <div className={cn("flex flex-col rounded-xl border bg-muted/25 transition-all p-3 min-h-[520px]", isOverWip ? "border-warning ring-1 ring-warning/40 bg-warning/5" : "border-border/70")}>
@@ -1164,7 +1179,32 @@ function Column({
         <div className="flex flex-col gap-2.5 flex-1 min-h-[100px]">
           {tasks.map((task) => (
             <div key={task.id} className="group relative">
-              <SortableTaskItem task={task} projectKey={projectKey} onClick={onOpen} onClaim={onClaim} currentUserId={currentUserId} isFocused={focusedId === task.id} />
+              <SortableTaskItem
+                task={task}
+                projectKey={projectKey}
+                onClick={onOpen}
+                onClaim={onClaim}
+                currentUserId={currentUserId}
+                isFocused={focusedId === task.id}
+                isSelected={sel.isSelected(task.id)}
+              />
+              {canEdit && (
+                <div
+                  className={cn(
+                    "absolute top-2 left-2 z-10 transition-opacity",
+                    sel.active || focusedId === task.id ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                  )}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <Checkbox
+                    aria-label={`Chọn ${taskKeyOf(projectKey, task)}`}
+                    className="bg-background"
+                    checked={sel.isSelected(task.id)}
+                    onClick={(e) => sel.toggle(task.id, orderedIds, (e as React.MouseEvent).shiftKey)}
+                  />
+                </div>
+              )}
               {canEdit && (
                 <div className={cn("absolute top-2 right-2 transition-opacity", focusedId === task.id ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
                   <DropdownMenu open={menuTaskId === task.id ? true : undefined} onOpenChange={(o) => !o && menuTaskId === task.id && onMenuOpenChange(null)}>

@@ -20,6 +20,8 @@ export interface TaskCardProps {
   isGhost?: boolean;
   /** Thẻ đang được bàn phím trỏ tới (J/K, N/P) — viền theo token --ring của docs 10 §6. */
   isFocused?: boolean;
+  /** Thẻ đang được tick để làm hàng loạt. */
+  isSelected?: boolean;
   className?: string;
   today?: string;
 }
@@ -33,7 +35,7 @@ export const fmtDay = (iso: string | null | undefined): string => {
 };
 
 /** Thẻ task trên Kanban/danh sách — dữ liệu từ `TasksService.toListView` (docs 11 §3.6). */
-export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, isDragging = false, isGhost = false, isFocused = false, className, today }: TaskCardProps) {
+export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, isDragging = false, isGhost = false, isFocused = false, isSelected = false, className, today }: TaskCardProps) {
   const overdue = !!task.dueDate && !task.completedAt && task.dueDate.slice(0, 10) < (today ?? new Date().toISOString().slice(0, 10));
   const isMyTask = currentUserId ? task.assignees.some((a) => a.id === currentUserId) : false;
   // Thẻ tạm (chưa có id thật): không mở chi tiết, không nhận việc — mọi PATCH sẽ 404.
@@ -48,6 +50,7 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
         pending && "opacity-70 pointer-events-none border-dashed",
         isMyTask && "border-l-2 border-l-primary",
         isFocused && "ring-2 ring-ring ring-offset-1 border-primary",
+        isSelected && "border-primary bg-primary/5",
         isDragging && "opacity-30 border-dashed border-primary",
         isGhost && "opacity-90 shadow-xl border-primary ring-2 ring-primary/20 rotate-1",
         className,
@@ -55,7 +58,7 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
     >
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className={cn("flex items-center gap-1.5 flex-wrap", isSelected && "pl-6")}>
             <Badge variant="outline" className="font-mono text-xs font-semibold px-1.5 py-0">
               {pending ? "…" : taskKeyOf(projectKey, task)}
             </Badge>

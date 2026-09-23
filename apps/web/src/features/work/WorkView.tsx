@@ -14,6 +14,8 @@ import { TimelineGanttView } from "@/features/timeline/TimelineGanttView";
 import { EisenhowerMatrixView } from "@/features/eisenhower/EisenhowerMatrixView";
 import { WorkFilterBar } from "./WorkFilterBar";
 import { useWorkFilters, WORK_VIEWS, WorkFiltersProvider, type WorkView as ViewKey } from "./filters";
+import { WorkSelectionProvider } from "./selection";
+import { BulkActionBar } from "./BulkActionBar";
 
 const ICON: Record<ViewKey, typeof Kanban> = {
   board: Kanban,
@@ -27,7 +29,9 @@ export function WorkView() {
   const project = useCurrentProject();
   return (
     <WorkFiltersProvider defaultSprintId={project.activeSprint?.id}>
-      <WorkBody />
+      <WorkSelectionProvider>
+        <WorkBody />
+      </WorkSelectionProvider>
     </WorkFiltersProvider>
   );
 }
@@ -96,6 +100,9 @@ function WorkBody() {
       {f.view === "list" && <TaskListView />}
       {f.view === "timeline" && <TimelineGanttView />}
       {f.view === "eisenhower" && <EisenhowerMatrixView />}
+
+      {/* Chọn nhiều dùng chung cho Bảng và Danh sách nên thanh hành động đặt ở đây */}
+      {(f.view === "board" || f.view === "list") && <BulkActionBar project={project} tasks={tasks.data ?? []} />}
     </div>
   );
 }
