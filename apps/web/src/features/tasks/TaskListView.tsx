@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpDown, Sparkles, ListTodo } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { AssigneePicker } from "@/components/app/TaskFieldPickers";
+import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
@@ -21,7 +24,7 @@ import { useWorkFilters } from "@/features/work/filters";
 import { statusToVariant } from "@/lib/status";
 import type { TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useBoardRealtime, useTasks } from "@/features/board/hooks";
+import { useBoardRealtime, useTaskMutations, useTasks } from "@/features/board/hooks";
 
 type SortKey = "number" | "title" | "priority" | "dueDate" | "estimateHours" | "progress" | "updatedAt";
 const PRIORITY_RANK: Record<string, number> = { URGENT: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
@@ -47,7 +50,22 @@ export function TaskListView() {
 
   // Cùng khoá truy vấn với Kanban/Timeline/Eisenhower → đổi cách nhìn không gọi lại API.
   const tasksQuery = useTasks(project.id, f.query);
+  const mut = useTaskMutations(project.id);
   useBoardRealtime(project.id);
+
+  /**
+   * Sửa tại chỗ trong bảng (docs 02/05 §B2) — dùng lại đúng mutation của Kanban nên vẫn mang
+   * `version`, vẫn cập nhật lạc quan, vẫn phát task:*. 409 thì báo rồi tải lại, không ghi đè.
+   */
+  const fail = (e: unknown, what: string, key: string) => {
+    const { code, message } = describeError(e);
+    if (code === "TASK_VERSION_CONFLICT") toast.error(`${key} vừa được người khác sửa — đã tải lại`, { description: code });
+    else toast.error(`${what} thất bại`, { description: `${code}: ${message}` });
+    void tasksQuery.refetch();
+  };
+  const editable = project.canEdit;
+  const patchRow = (t: TaskListItem, patch: Record<string, unknown>, what: string) =>
+    mut.update.mutate({ id: t.id, version: t.version, patch }, { onError: (e) => fail(e, what, taskKeyOf(project.key, t)) });
   const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
   const [sheetOpen, setSheetOpen] = React.useState(!!params.get("task"));
   /**
@@ -105,6 +123,8 @@ export function TaskListView() {
     </TableHead>
   );
   const today = new Date().toISOString().slice(0, 10);
+  /** Ô sửa tại chỗ không được để click lan ra làm mở Sheet. */
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
     <div className="space-y-6">
@@ -199,25 +219,82 @@ export function TaskListView() {
                     <TableCell>
                       <TaskTypeBadge type={t.type} />
                     </TableCell>
-                    <TableCell>
-                      <Badge variant={statusToVariant(col?.statusKey ?? "")} className="text-[10px]">
-                        {col?.name ?? "—"}
-                      </Badge>
+                    <TableCell onClick={stop}>
+                      {editable ? (
+                        <Select
+                          value={t.columnId}
+                          onValueChange={(columnId) =>
+                            mut.move.mutate({ id: t.id, version: t.version, columnId }, { onError: (e) => fail(e, "Chuyển cột", taskKeyOf(project.key, t)) })
+                          }
+                        >
+                          <SelectTrigger className="h-7 w-32 text-[11px] border-transparent hover:border-border px-2">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {project.columns.map((c) => (
+                              <SelectItem key={c.id} value={c.id} className="text-xs">
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant={statusToVariant(col?.statusKey ?? "")} className="text-[10px]">
+                          {col?.name ?? "—"}
+                        </Badge>
+                      )}
                     </TableCell>
-                    <TableCell>
-                      <PriorityBadge priority={t.priority} showIcon={false} />
+                    <TableCell onClick={stop}>
+                      {editable ? (
+                        <Select value={t.priority} onValueChange={(v) => patchRow(t, { priority: v }, "Đổi ưu tiên")}>
+                          <SelectTrigger className="h-7 w-28 text-[11px] border-transparent hover:border-border px-2">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(["LOW", "MEDIUM", "HIGH", "URGENT"] as const).map((pr) => (
+                              <SelectItem key={pr} value={pr} className="text-xs">
+                                <PriorityBadge priority={pr} showIcon={false} />
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <PriorityBadge priority={t.priority} showIcon={false} />
+                      )}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        {t.assignees.slice(0, 2).map((a) => (
-                          <UserAvatar key={a.id} name={a.shortName ?? a.fullName} avatar={a.avatarUrl ?? undefined} size="sm" />
-                        ))}
-                        {t.assignees.length === 0 && <span className="text-muted-foreground italic">chưa giao</span>}
-                      </div>
+                    <TableCell onClick={stop} className="w-44">
+                      {editable ? (
+                        <AssigneePicker
+                          value={t.assignees.map((a) => a.id)}
+                          members={project.members}
+                          disabled={false}
+                          onChange={(userIds) =>
+                            mut.assignees.mutate({ id: t.id, version: t.version, userIds }, { onError: (e) => fail(e, "Giao việc", taskKeyOf(project.key, t)) })
+                          }
+                        />
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          {t.assignees.slice(0, 2).map((a) => (
+                            <UserAvatar key={a.id} name={a.shortName ?? a.fullName} avatar={a.avatarUrl ?? undefined} size="sm" />
+                          ))}
+                          {t.assignees.length === 0 && <span className="text-muted-foreground italic">chưa giao</span>}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-mono">{t.estimateHours ?? "—"}</TableCell>
                     <TableCell className="text-right font-mono">{t.progress}</TableCell>
-                    <TableCell className={cn("font-mono", overdue && "text-destructive font-medium")}>{fmtDay(t.dueDate)}</TableCell>
+                    <TableCell onClick={stop} className={cn("font-mono", overdue && "text-destructive font-medium")}>
+                      {editable ? (
+                        <Input
+                          type="date"
+                          value={t.dueDate ? t.dueDate.slice(0, 10) : ""}
+                          onChange={(e) => patchRow(t, { dueDate: e.target.value || null }, "Đổi hạn")}
+                          className="h-7 w-32 text-[11px] border-transparent hover:border-border px-2"
+                        />
+                      ) : (
+                        fmtDay(t.dueDate)
+                      )}
+                    </TableCell>
                   </TableRow>
                 );
               })}
