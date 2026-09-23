@@ -31,6 +31,10 @@ interface WorkFiltersCtx extends WorkFilters {
   applyQuick: (tasks: TaskListItem[], selfId?: string) => TaskListItem[];
   /** Tham số gửi lên GET /projects/:id/tasks — dùng chung nên đổi view không gọi lại API. */
   query: { sprintId?: string; backlog?: true; assigneeId?: string; q?: string };
+  /** Có bộ lọc nào khác mặc định không — sprint đang chạy là mặc định nên không tính là "đang lọc". */
+  isFiltered: boolean;
+  /** Đưa mọi bộ lọc về mặc định. */
+  clear: () => void;
   taskId: string | null;
   setTaskId: (id: string | null) => void;
 }
@@ -67,6 +71,8 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
     [params, router],
   );
 
+  const explicitSprint = params.get("sprint");
+
   const value = React.useMemo<WorkFiltersCtx>(() => {
     const query = {
       sprintId: sprint !== "__all" && sprint !== "__backlog" ? sprint : undefined,
@@ -82,6 +88,12 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
       quick,
       taskId,
       query,
+      isFiltered:
+        (explicitSprint !== null && explicitSprint !== (defaultSprintId ?? "__all")) ||
+        assignee !== "__all" ||
+        q.trim() !== "" ||
+        quick !== "all",
+      clear: () => write({ sprint: null, assignee: null, q: null, quick: null }),
       setView: (v) => write({ view: v === "board" ? null : v }),
       set: (patch) =>
         write(
@@ -97,7 +109,7 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
             ? tasks.filter((t) => t.assignees.length === 0)
             : tasks,
     };
-  }, [view, sprint, assignee, q, quick, taskId, write]);
+  }, [view, sprint, assignee, q, quick, taskId, write, explicitSprint, defaultSprintId]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

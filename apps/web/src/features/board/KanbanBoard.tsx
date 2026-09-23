@@ -16,9 +16,10 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot } from "lucide-react";
+import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -71,6 +72,18 @@ export function KanbanBoard() {
   const params = useSearchParams();
   const f = useWorkFilters();
   const sprintFilter = f.sprint;
+  /**
+   * Sprint của công việc sắp tạo — phải đọc đúng bộ lọc đang đứng.
+   * Trước đây lọc "Backlog" vẫn rơi vào sprint đang chạy: thẻ hiện nhờ cache rồi F5 là mất.
+   */
+  const createSprintId =
+    sprintFilter === "__backlog" ? undefined : sprintFilter !== "__all" ? sprintFilter : project.activeSprint?.id;
+  const createSprintLabel =
+    createSprintId === undefined
+      ? "backlog"
+      : createSprintId === project.activeSprint?.id
+        ? `sprint đang chạy (${project.activeSprint.name})`
+        : "sprint đang lọc";
   const tasksQuery = useTasks(project.id, f.query);
   const move = useMoveTask(project.id);
   const mut = useTaskMutations(project.id);
@@ -159,6 +172,14 @@ export function KanbanBoard() {
       .filter((t) => t.columnId === colId)
       .filter((t) => f.applyQuick([t], auth.user?.id).length > 0)
       .sort((a, b) => a.position - b.position);
+
+  /**
+   * Hai trạng thái rỗng khác nhau (docs 10 §2): dự án chưa có việc nào thì mời tạo;
+   * còn lọc ra 0 kết quả thì VẪN giữ bảng để tạo nhanh được, chỉ báo là bộ lọc đang ẩn hết.
+   */
+  const visibleCount = f.applyQuick(local, auth.user?.id).length;
+  const emptyByFilter = visibleCount === 0 && f.isFiltered;
+  const emptyProject = visibleCount === 0 && !f.isFiltered;
 
   const openTask = (t: TaskListItem) => {
     setSelectedId(t.id);
@@ -290,15 +311,27 @@ export function KanbanBoard() {
         </div>
       ) : tasksQuery.isError ? (
         <ErrorState code={describeError(tasksQuery.error).code} message={describeError(tasksQuery.error).message} onRetry={() => tasksQuery.refetch()} />
-      ) : local.length === 0 ? (
+      ) : emptyProject ? (
         <EmptyState
           title="Chưa có công việc nào"
-          description="Bộ lọc hiện tại không có thẻ. Tạo công việc thủ công hoặc để Trợ lý AI phân rã yêu cầu."
+          description="Dự án chưa có công việc. Tạo thủ công hoặc để Trợ lý AI phân rã yêu cầu thành WBS."
           actionLabel="Phân rã bằng Trợ lý AI"
           onAction={() => router.push(`/projects/${project.id}/assistant`)}
         />
       ) : (
         <DndContext id="kanban-board" sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
+          {emptyByFilter && (
+            <Alert className="mb-4">
+              <Filter className="h-4 w-4" />
+              <AlertTitle className="text-sm">Bộ lọc đang ẩn hết công việc</AlertTitle>
+              <AlertDescription className="text-xs flex items-center justify-between gap-3 flex-wrap">
+                <span>Không có công việc nào khớp bộ lọc hiện tại. Các cột vẫn mở để bạn tạo việc mới.</span>
+                <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={() => f.clear()}>
+                  Xoá bộ lọc
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           <ScrollArea className="w-full pb-4">
             <div className="grid gap-4 items-start" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(260px, 1fr))`, minWidth: columns.length * 270 }}>
               {columns.map((col) => (
@@ -342,7 +375,7 @@ export function KanbanBoard() {
                   estimateHours: Number(f.get("estimateHours")) || undefined,
                   dueDate: String(f.get("dueDate") ?? "") || undefined,
                   columnId: col && col !== "__first" ? col : undefined,
-                  sprintId: sprintFilter !== "__all" && sprintFilter !== "__backlog" ? sprintFilter : project.activeSprint?.id,
+                  sprintId: createSprintId,
                   assigneeIds: assignee && assignee !== "__none" ? [assignee] : [],
                 },
                 {
@@ -364,7 +397,7 @@ export function KanbanBoard() {
                 </kbd>
               </DialogTitle>
               <DialogDescription className="text-xs">
-                Tạo công việc mới vào {sprintFilter !== "__all" && sprintFilter !== "__backlog" ? "sprint đang lọc" : project.activeSprint ? "sprint đang chạy" : "backlog"}.
+                Tạo công việc mới vào {createSprintLabel}.
               </DialogDescription>
             </DialogHeader>
 
