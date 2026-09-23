@@ -135,8 +135,17 @@ const buildSections = (mod: string): ShortcutSection[] => [
         description: "Mở menu thao tác của thẻ đang trỏ (giao việc, ưu tiên, hạn, nhân bản)",
       },
       {
+        keys: ["X"],
+        description: "Chọn / bỏ chọn thẻ đang trỏ để làm hàng loạt",
+        badge: "Hàng loạt",
+      },
+      {
+        keys: ["F"],
+        description: "Chế độ tập trung — giấu tiêu đề trang và thanh vai trò, chỉ còn bộ lọc và bảng",
+      },
+      {
         keys: ["Esc"],
-        description: "Bỏ trỏ thẻ; trong ô tạo nhanh thì đóng ô",
+        description: "Bỏ chọn; nếu không chọn gì thì bỏ trỏ thẻ; trong ô tạo nhanh thì đóng ô",
       },
     ],
   },

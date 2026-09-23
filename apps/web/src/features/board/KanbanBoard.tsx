@@ -52,6 +52,7 @@ import { useAuth } from "@/lib/auth";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useWorkFilters } from "@/features/work/filters";
 import { useWorkSelection } from "@/features/work/selection";
+import { useWorkFocus } from "@/features/work/focus";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { BoardColumn, ProjectDetail, TaskListItem } from "@/lib/types";
 import { TASK_TYPES, typeToHint, typeToLabel } from "@/lib/status";
@@ -133,6 +134,7 @@ export function KanbanBoard() {
   const params = useSearchParams();
   const f = useWorkFilters();
   const sel = useWorkSelection();
+  const { focus } = useWorkFocus();
   const sprintFilter = f.sprint;
   /**
    * Sprint của công việc sắp tạo — phải đọc đúng bộ lọc đang đứng.
@@ -621,8 +623,8 @@ export function KanbanBoard() {
         </div>
       </div>
 
-      {/* Thanh phân vai PM/Leader vs Thành viên thường */}
-      {isLeader ? (
+      {/* Thanh phân vai PM/Leader vs Thành viên thường — giấu ở chế độ tập trung (docs 02/05 §C5) */}
+      {focus ? null : isLeader ? (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl border border-primary/20 bg-primary/5 text-xs">
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-semibold text-xs gap-1 py-0.5">

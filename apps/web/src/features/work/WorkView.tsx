@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { CalendarRange, Grid2X2, Kanban, ListTodo } from "lucide-react";
+import { CalendarRange, Grid2X2, Kanban, ListTodo, Minimize2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -15,6 +16,7 @@ import { EisenhowerMatrixView } from "@/features/eisenhower/EisenhowerMatrixView
 import { WorkFilterBar } from "./WorkFilterBar";
 import { useWorkFilters, WORK_VIEWS, WorkFiltersProvider, type WorkView as ViewKey } from "./filters";
 import { WorkSelectionProvider } from "./selection";
+import { WorkFocusProvider, useWorkFocus } from "./focus";
 import { BulkActionBar } from "./BulkActionBar";
 
 const ICON: Record<ViewKey, typeof Kanban> = {
@@ -30,7 +32,9 @@ export function WorkView() {
   return (
     <WorkFiltersProvider defaultSprintId={project.activeSprint?.id}>
       <WorkSelectionProvider>
-        <WorkBody />
+        <WorkFocusProvider>
+          <WorkBody />
+        </WorkFocusProvider>
       </WorkSelectionProvider>
     </WorkFiltersProvider>
   );
@@ -52,9 +56,35 @@ function WorkBody() {
   }, [tasks.data, auth.user?.id]);
 
   const current = WORK_VIEWS.find((v) => v.key === f.view) ?? WORK_VIEWS[0];
+  const { focus, toggle, off } = useWorkFocus();
+
+  /** Phím F bật/tắt chế độ tập trung — bỏ qua khi đang gõ hoặc đang mở modal/menu. */
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "f" && e.key !== "F") return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (document.querySelector('[role="dialog"]:not([data-state="closed"]),[role="alertdialog"]:not([data-state="closed"]),[role="menu"],[cmdk-root]')) return;
+      e.preventDefault();
+      toggle();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [toggle]);
 
   return (
     <div className="space-y-4">
+      {focus ? (
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Công việc · {project.key}</span>
+          <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={off}>
+            <Minimize2 className="h-3.5 w-3.5" /> Thoát tập trung
+            <kbd className="ml-1 rounded border bg-background px-1 font-mono text-[10px]">F</kbd>
+          </Button>
+        </div>
+      ) : (
       <PageHeader
         title={`Công việc · ${project.key}`}
         description="Bốn cách nhìn cùng một danh sách công việc — đổi cách nhìn vẫn giữ nguyên bộ lọc."
@@ -64,6 +94,7 @@ function WorkBody() {
           { label: current.label },
         ]}
       />
+      )}
 
       {/* Chọn cách nhìn: tab trên màn rộng, select trên điện thoại */}
       <div className="flex items-center gap-3 flex-wrap">
