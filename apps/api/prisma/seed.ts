@@ -16,6 +16,7 @@ import {
   ProjectRole,
   SprintStatus,
   Priority,
+  TaskType,
   PlatformRole,
   AiPurpose,
   AiProvider,
@@ -490,6 +491,7 @@ async function main(): Promise<void> {
   const sampleTasks = [
     {
       title: 'Thiết kế schema đa người dùng & phân quyền RBAC 3 cấp',
+      type: TaskType.TASK,
       col: 'DONE',
       sprint: sprint1.id,
       hours: 8,
@@ -504,6 +506,7 @@ async function main(): Promise<void> {
     },
     {
       title: 'API xác thực JWT & bảo vệ cổng quản trị /admin',
+      type: TaskType.STORY,
       col: 'DONE',
       sprint: sprint1.id,
       hours: 12,
@@ -518,6 +521,7 @@ async function main(): Promise<void> {
     },
     {
       title: 'Cấu hình AI Catalog & tích hợp DeepSeek V4 Flash',
+      type: TaskType.TASK,
       col: 'REVIEW',
       sprint: sprint1.id,
       hours: 10,
@@ -531,6 +535,7 @@ async function main(): Promise<void> {
     },
     {
       title: 'Top Navbar Fixed & Workspace Switcher công thái học',
+      type: TaskType.STORY,
       col: 'IN_PROGRESS',
       sprint: sprint1.id,
       hours: 8,
@@ -544,6 +549,7 @@ async function main(): Promise<void> {
     },
     {
       title: 'Bảng Kanban kéo thả với WIP limits & bộ lọc Việc của tôi',
+      type: TaskType.STORY,
       col: 'IN_PROGRESS',
       sprint: sprint1.id,
       hours: 14,
@@ -558,6 +564,7 @@ async function main(): Promise<void> {
     // Các task chưa phân công (Unassigned) -> Dùng để test chức năng "+ Nhận task"
     {
       title: 'Nút nhận việc nhanh (+ Nhận task) cho các task chưa phân công',
+      type: TaskType.STORY,
       col: 'TODO',
       sprint: sprint1.id,
       hours: 6,
@@ -569,6 +576,7 @@ async function main(): Promise<void> {
     },
     {
       title: 'Kiểm thử tự động E2E phân quyền các role với Puppeteer',
+      type: TaskType.TASK,
       col: 'TODO',
       sprint: sprint1.id,
       hours: 8,
@@ -580,6 +588,7 @@ async function main(): Promise<void> {
     },
     {
       title: 'Cân bằng tải nhân sự theo ma trận kỹ năng phòng ban',
+      type: TaskType.STORY,
       col: 'TODO',
       sprint: sprint2.id,
       hours: 16,
@@ -591,6 +600,7 @@ async function main(): Promise<void> {
     },
     {
       title: 'Trợ lý AI phân rã WBS tự động bằng DeepSeek V4 Flash',
+      type: TaskType.STORY,
       col: 'TODO',
       sprint: sprint2.id,
       hours: 12,
@@ -602,6 +612,7 @@ async function main(): Promise<void> {
     },
     {
       title: 'Xuất báo cáo tiến độ Sprint & kiểm toán mật mã HMAC',
+      type: TaskType.TASK,
       col: 'TODO',
       sprint: null,
       hours: 6,
@@ -611,6 +622,32 @@ async function main(): Promise<void> {
       skill: 'Docker',
       start: 0,
       due: 20,
+    },
+    {
+      title: 'Lỗi: kéo thẻ sang cột vượt WIP vẫn hiện toast thành công rồi mới hoàn tác',
+      type: TaskType.BUG,
+      col: 'DOING',
+      sprint: sprint1.id,
+      hours: 3,
+      difficulty: 2,
+      priority: Priority.HIGH,
+      assignee: 'Huy',
+      skill: 'React',
+      start: -1,
+      due: 3,
+      progress: 40,
+    },
+    {
+      title: 'Lỗi: làm mới trang ở màn Tải nhân sự mất bộ lọc tuần đang chọn',
+      type: TaskType.BUG,
+      col: 'TODO',
+      sprint: sprint1.id,
+      hours: 2,
+      difficulty: 2,
+      priority: Priority.MEDIUM,
+      skill: 'React',
+      start: 1,
+      due: 5,
     },
   ];
 
@@ -624,6 +661,7 @@ async function main(): Promise<void> {
         columnId: colMap(t.col),
         number: taskNumber++,
         title: t.title,
+        type: t.type,
         priority: t.priority,
         difficulty: t.difficulty,
         estimateHours: t.hours,

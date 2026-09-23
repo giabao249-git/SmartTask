@@ -4,6 +4,7 @@ import * as React from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PriorityBadge } from "./PriorityBadge";
+import { TaskTypeBadge } from "./TaskTypeBadge";
 import { UserAvatar } from "./UserAvatar";
 import { Calendar, CheckSquare, Sparkles, Clock, Link2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,7 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
             <Badge variant="outline" className="font-mono text-xs font-semibold px-1.5 py-0">
               {taskKeyOf(projectKey, task)}
             </Badge>
+            <TaskTypeBadge type={task.type} size="icon" />
             {isMyTask && (
               <Badge variant="default" className="text-[9px] px-1 py-0 h-4 bg-primary/20 text-primary border-primary/30 hover:bg-primary/30 font-medium">
                 Của tôi

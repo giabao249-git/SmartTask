@@ -26,6 +26,7 @@ export function applyEdits(
         title: e.title ?? t.title,
         description: e.description ?? t.description,
         estimateHours: e.estimateHours ?? t.estimateHours,
+        taskType: e.taskType ?? t.taskType,
         priority: e.priority ?? t.priority,
         difficulty: e.difficulty ?? t.difficulty,
         suggestedAssignee:

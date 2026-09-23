@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
+import { TaskTypeBadge } from "@/components/app/TaskTypeBadge";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
@@ -152,6 +153,7 @@ export function TaskListView() {
                   Mã
                 </Head>
                 <Head k="title">Tiêu đề</Head>
+                <TableHead className="text-xs">Loại</TableHead>
                 <TableHead className="text-xs">Cột</TableHead>
                 <Head k="priority">Ưu tiên</Head>
                 <TableHead className="text-xs">Người</TableHead>
@@ -184,6 +186,9 @@ export function TaskListView() {
                       </span>
                     </TableCell>
                     <TableCell className="font-medium max-w-md truncate">{t.title}</TableCell>
+                    <TableCell>
+                      <TaskTypeBadge type={t.type} />
+                    </TableCell>
                     <TableCell>
                       <Badge variant={statusToVariant(col?.statusKey ?? "")} className="text-[10px]">
                         {col?.name ?? "—"}

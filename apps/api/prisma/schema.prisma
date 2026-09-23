@@ -51,6 +51,15 @@ enum TaskSize {
   XL
 }
 
+/// Loại công việc — cố định 3 giá trị, KHÔNG cho workspace tự thêm loại.
+/// Cố ý cắt phần đắt của Jira (30 loại cấu hình được, workflow riêng mỗi loại):
+/// ở đây loại chỉ là nhãn phân loại có icon, mọi loại dùng chung một luồng cột.
+enum TaskType {
+  STORY
+  TASK
+  BUG
+}
+
 enum TaskSource {
   MANUAL
   AI
@@ -438,6 +447,7 @@ model Task {
   number         Int
   title          String
   description    String?
+  type           TaskType   @default(TASK)
   priority       Priority   @default(MEDIUM)
   isUrgent       Boolean    @default(false) @map("is_urgent")
   difficulty     Int        @default(3) // 1..5

@@ -395,6 +395,7 @@ export interface SkillView {
 
 // ── Task (TasksService.toListView / toDetailView) ────────────
 export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type TaskType = "STORY" | "TASK" | "BUG";
 
 export interface TaskUserRef {
   id: string;
@@ -412,6 +413,7 @@ export interface TaskListItem {
   number: number;
   key?: string;
   title: string;
+  type: TaskType;
   priority: TaskPriority;
   isUrgent: boolean;
   difficulty: number;

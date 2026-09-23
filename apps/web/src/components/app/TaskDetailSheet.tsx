@@ -19,8 +19,10 @@ import { ErrorState } from "@/components/app/ErrorState";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
 import { describeError } from "@/lib/api";
-import type { ProjectDetail, SkillView, TaskDetail, TaskListItem, TaskPriority } from "@/lib/types";
+import type { ProjectDetail, SkillView, TaskDetail, TaskListItem, TaskPriority, TaskType } from "@/lib/types";
 import { useSkills } from "@/lib/hooks/queries";
+import { TASK_TYPES, typeToHint, typeToLabel } from "@/lib/status";
+import { TaskTypeBadge } from "./TaskTypeBadge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -97,6 +99,7 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
           <Badge variant="outline" className="font-mono text-xs">
             {taskKeyOf(project.key, task)}
           </Badge>
+          <TaskTypeBadge type={task.type} />
           {task.source === "AI" && (
             <Badge variant="info" className="gap-1 text-[10px]">
               <Sparkles className="h-2.5 w-2.5" /> AI
@@ -143,6 +146,24 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
                   <SelectItem key={c.id} value={c.id} className="text-xs">
                     {c.name}
                     {c.wipLimit ? ` (WIP ${c.wipLimit})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Loại công việc">
+            <Select
+              value={task.type}
+              disabled={!project.canEdit || busy}
+              onValueChange={(v) => patch({ type: v as TaskType }, "Đổi loại")}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TASK_TYPES.map((t) => (
+                  <SelectItem key={t} value={t} className="text-xs" title={typeToHint(t)}>
+                    {typeToLabel(t)}
                   </SelectItem>
                 ))}
               </SelectContent>

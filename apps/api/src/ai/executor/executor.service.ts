@@ -148,6 +148,7 @@ export class ExecutorService {
           {
             title: t.title,
             description: describe(t, r.droppedSkills),
+            type: t.taskType,
             priority: t.priority,
             difficulty: t.difficulty,
             estimateHours: t.estimateHours,

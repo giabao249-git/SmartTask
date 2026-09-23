@@ -39,6 +39,10 @@ const draftTask = obj(
     title: str(),
     description: str(),
     estimateHours: num('0.5–40'),
+    taskType: {
+      type: 'string',
+      enum: ['STORY', 'TASK', 'BUG'],
+    },
     priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] },
     difficulty: int('1–5'),
     requiredSkills: arr(

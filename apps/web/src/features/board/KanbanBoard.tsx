@@ -37,6 +37,7 @@ import { useAuth } from "@/lib/auth";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useWorkFilters } from "@/features/work/filters";
 import type { BoardColumn, TaskListItem } from "@/lib/types";
+import { TASK_TYPES, typeToHint, typeToLabel } from "@/lib/status";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useBoardRealtime, useMoveTask, useTaskMutations, useTasks } from "./hooks";
@@ -371,6 +372,7 @@ export function KanbanBoard() {
                 {
                   title: String(f.get("title") ?? "").trim(),
                   description: desc || undefined,
+                  type: String(f.get("type") ?? "TASK"),
                   priority: String(f.get("priority") ?? "MEDIUM"),
                   estimateHours: Number(f.get("estimateHours")) || undefined,
                   dueDate: String(f.get("dueDate") ?? "") || undefined,
@@ -416,7 +418,22 @@ export function KanbanBoard() {
                 <Textarea name="description" placeholder="Ghi chú thêm yêu cầu, checklist hoặc tiêu chí nghiệm thu..." className="text-xs min-h-[65px] resize-none" maxLength={2000} />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-foreground mb-1 block">Loại công việc</label>
+                  <Select name="type" defaultValue="TASK">
+                    <SelectTrigger className="text-xs h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TASK_TYPES.map((t) => (
+                        <SelectItem key={t} value={t} className="text-xs" title={typeToHint(t)}>
+                          {typeToLabel(t)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div>
                   <label className="text-xs font-medium text-foreground mb-1 block">Cột trạng thái</label>
                   <Select name="columnId" value={selectedColumnId} onValueChange={setSelectedColumnId}>

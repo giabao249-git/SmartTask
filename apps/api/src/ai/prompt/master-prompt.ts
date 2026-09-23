@@ -32,11 +32,13 @@ QUY TẮC TUYỆT ĐỐI:
 export const PURPOSE_INSTRUCTIONS: Record<AiPurpose, string> = {
   DECOMPOSE: `NHIỆM VỤ: phân rã YÊU CẦU HIỆN TẠI thành danh sách công việc cho sprint đã chọn.
 Trả JSON: { "type": "DECOMPOSE_PROPOSAL", "reply": "<tóm tắt ≤ 600 ký tự>", "sprint": "<mã s>",
-  "tasks": [ { "draftKey": "d1", "title": "...", "description": "...", "estimateHours": 8, "priority": "MEDIUM",
+  "tasks": [ { "draftKey": "d1", "title": "...", "description": "...", "estimateHours": 8, "taskType": "STORY", "priority": "MEDIUM",
     "difficulty": 3, "requiredSkills": [ { "skill": "k3", "minLevel": 3 } ], "subtasks": [ { "title": "...", "estimateHours": 2 } ],
     "dependsOn": ["d2"], "suggestedAssignee": "u2", "reason": "vì sao giao/ước lượng vậy" } ],
   "assumptions": ["điều bạn đã giả định khi yêu cầu không nói rõ"] }
-Ràng buộc: 1–25 task, draftKey d1..dN duy nhất; estimateHours 0,5–40 (task lớn hơn → tách); requiredSkills chỉ mã k
+Ràng buộc: 1–25 task, draftKey d1..dN duy nhất; taskType chỉ nhận STORY (tính năng người dùng thấy được) | TASK
+(việc kỹ thuật, nghiên cứu, cấu hình) | BUG (sửa lỗi có sẵn) — không chắc thì để TASK; estimateHours 0,5–40 (task lớn
+hơn → tách); requiredSkills chỉ mã k
 trong DANH MỤC KỸ NĂNG (không có kỹ năng phù hợp → bỏ trống và ghi vào assumptions); dependsOn chỉ trỏ tới draftKey
 khác và không tạo vòng; suggestedAssignee chỉ khi người đó có kỹ năng và còn giờ trống trong BẢNG NĂNG LỰC — không
 chắc thì để trống; tổng giờ nên ≤ năng lực còn lại của sprint (nếu vượt, nói rõ trong reply).
@@ -51,7 +53,7 @@ riskLevel PHẢI trùng "Mức rủi ro (backend)" trong ngữ cảnh; không th
   CHAT: `NHIỆM VỤ: trò chuyện theo phiên để tạo/sửa việc. Đọc BẢN NHÁP ĐANG MỞ TRONG PHIÊN và LỊCH SỬ PHIÊN để hiểu
 "cái thứ hai", "d3", "bỏ cái cuối". Chọn ĐÚNG MỘT type theo ý người dùng:
 - Phân rã yêu cầu lớn → DECOMPOSE_PROPOSAL { "tasks": [ { "draftKey": "d1", "title", "description", "estimateHours",
-  "priority", "difficulty", "requiredSkills": [ { "skill": "k3", "minLevel": 3 } ], "subtasks": [], "dependsOn": ["d2"],
+  "taskType", "priority", "difficulty", "requiredSkills": [ { "skill": "k3", "minLevel": 3 } ], "subtasks": [], "dependsOn": ["d2"],
   "suggestedAssignee": "u2", "reason" } ], "assumptions": [], "sprint": "s2" } (key d1.. tạm — hệ thống cấp lại).
 - Tạo vài task cụ thể ("tạo 3 task cho màn đăng nhập, giao Huy, hạn thứ Sáu") → CREATE_TASK_DRAFT { "drafts": [ { như trên
   + "assignee": "u4", "start": "YYYY-MM-DD", "due": "YYYY-MM-DD" } ], "sprint": "s2" }.

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useSprints } from "@/lib/hooks/queries";
 import { cn } from "@/lib/utils";
+import { TASK_TYPES, typeToLabel } from "@/lib/status";
 import { useWorkFilters, type QuickFilter } from "./filters";
 
 /** Thanh lọc dùng chung cho cả 4 cách nhìn công việc; mọi thay đổi ghi vào URL. */
@@ -88,6 +89,21 @@ export function WorkFilterBar({ counts, syncing }: { counts: { my: number; unass
           {project.members.map((m) => (
             <SelectItem key={m.id} value={m.id} className="text-xs">
               {m.fullName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={f.type} onValueChange={(v) => f.set({ type: v })}>
+        <SelectTrigger className="h-8 text-xs w-36">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__all" className="text-xs">
+            Mọi loại
+          </SelectItem>
+          {TASK_TYPES.map((t) => (
+            <SelectItem key={t} value={t} className="text-xs">
+              {typeToLabel(t)}
             </SelectItem>
           ))}
         </SelectContent>

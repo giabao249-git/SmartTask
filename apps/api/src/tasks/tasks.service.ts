@@ -41,6 +41,7 @@ const TASK_LIST_SELECT = {
   columnId: true,
   number: true,
   title: true,
+  type: true,
   priority: true,
   isUrgent: true,
   difficulty: true,
@@ -128,6 +129,7 @@ export class TasksService {
       ...(q.backlog === 'true' ? { sprintId: null } : {}),
       ...(q.columnId ? { columnId: q.columnId } : {}),
       ...(q.priority ? { priority: q.priority } : {}),
+      ...(q.type ? { type: q.type } : {}),
       ...(q.assigneeId
         ? { assignees: { some: { userId: q.assigneeId } } }
         : {}),
@@ -297,6 +299,7 @@ export class TasksService {
           number,
           title: dto.title,
           description: dto.description,
+          type: dto.type,
           priority: dto.priority,
           isUrgent: dto.isUrgent ?? false,
           difficulty: dto.difficulty ?? 3,
@@ -430,6 +433,7 @@ export class TasksService {
     const data: Prisma.TaskUpdateInput = {
       title: patch.title,
       description: patch.description,
+      type: patch.type,
       priority: patch.priority,
       isUrgent: patch.isUrgent,
       difficulty: patch.difficulty,
@@ -457,6 +461,7 @@ export class TasksService {
     const diff = this.diffOf(current, {
       title: patch.title,
       description: patch.description,
+      type: patch.type,
       priority: patch.priority,
       isUrgent: patch.isUrgent,
       difficulty: patch.difficulty,
@@ -838,6 +843,7 @@ export class TasksService {
           number,
           title: `${src.title} (bản sao)`,
           description: src.description,
+          type: src.type,
           priority: src.priority,
           isUrgent: src.isUrgent,
           difficulty: src.difficulty,
@@ -1169,6 +1175,7 @@ export class TasksService {
       columnId: r.columnId,
       number: r.number,
       title: r.title,
+      type: r.type,
       priority: r.priority,
       isUrgent: r.isUrgent,
       difficulty: r.difficulty,

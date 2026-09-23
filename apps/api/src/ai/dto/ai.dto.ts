@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Priority } from '@prisma/client';
+import { Priority, TaskType } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -81,6 +81,10 @@ export class EditTaskDto {
   @Min(0)
   @Max(400)
   estimateHours?: number;
+  @ApiPropertyOptional({ enum: TaskType })
+  @IsOptional()
+  @IsEnum(TaskType)
+  taskType?: TaskType;
   @ApiPropertyOptional({ enum: Priority })
   @IsOptional()
   @IsEnum(Priority)

@@ -17,6 +17,8 @@ export const draftKeySchema = z
   .regex(/^d\d{1,3}$/, 'draftKey dạng d1, d2…');
 
 export const prioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
+/** Loại công việc — cố định, trùng enum TaskType của Prisma. Đặt tên `taskType` để không lẫn với `type` của action. */
+export const taskTypeSchema = z.enum(['STORY', 'TASK', 'BUG']);
 export const riskLevelSchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'UNKNOWN']);
 
 const base = {
@@ -38,6 +40,7 @@ export const draftTaskSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(4000).optional(),
   estimateHours: z.number().min(0).max(400).optional(),
+  taskType: taskTypeSchema.optional(),
   priority: prioritySchema.optional(),
   difficulty: z.number().int().min(1).max(5).optional(),
   requiredSkills: z.array(requiredSkillRefSchema).max(10).default([]),
@@ -93,6 +96,7 @@ export const draftPatchSchema = z
     title: z.string().min(1).max(200),
     description: z.string().max(4000).nullable(),
     estimateHours: z.number().min(0).max(400).nullable(),
+    taskType: taskTypeSchema,
     priority: prioritySchema,
     difficulty: z.number().int().min(1).max(5),
     requiredSkills: z.array(requiredSkillRefSchema).max(10),

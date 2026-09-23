@@ -92,6 +92,7 @@ erDiagram
           int number
           string title
           text description
+          enum type "STORY TASK BUG"
           enum priority "LOW MEDIUM HIGH URGENT"
           bool is_urgent
           int difficulty "1..5"

@@ -17,7 +17,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { Priority, TaskSize } from '@prisma/client';
+import { Priority, TaskSize, TaskType } from '@prisma/client';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -44,6 +44,14 @@ export class CreateTaskDto {
   @IsString()
   @MaxLength(20000)
   description?: string;
+  @ApiPropertyOptional({
+    enum: TaskType,
+    default: 'TASK',
+    description: 'Loại công việc: STORY (tính năng) | TASK (việc chung) | BUG (lỗi)',
+  })
+  @IsOptional()
+  @IsEnum(TaskType)
+  type?: TaskType;
   @ApiPropertyOptional({ enum: Priority, default: 'MEDIUM' })
   @IsOptional()
   @IsEnum(Priority)
@@ -120,6 +128,10 @@ export class UpdateTaskDto extends VersionedDto {
   @IsString()
   @MaxLength(20000)
   description?: string | null;
+  @ApiPropertyOptional({ enum: TaskType })
+  @IsOptional()
+  @IsEnum(TaskType)
+  type?: TaskType;
   @ApiPropertyOptional({ enum: Priority })
   @IsOptional()
   @IsEnum(Priority)
@@ -274,6 +286,10 @@ export class ListTasksQueryDto {
   @IsOptional()
   @IsEnum(Priority)
   priority?: Priority;
+  @ApiPropertyOptional({ enum: TaskType })
+  @IsOptional()
+  @IsEnum(TaskType)
+  type?: TaskType;
   @ApiPropertyOptional() @IsOptional() @IsDateString() dueFrom?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() dueTo?: string;
   @ApiPropertyOptional({ description: 'Tìm trong tiêu đề' })

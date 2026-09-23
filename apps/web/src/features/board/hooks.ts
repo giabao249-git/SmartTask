@@ -16,6 +16,8 @@ export const taskKeys = {
 export interface TaskFilters {
   sprintId?: string;
   assigneeId?: string;
+  /** STORY | TASK | BUG — bỏ trống = mọi loại */
+  type?: string;
   q?: string;
   priority?: string;
   backlog?: boolean;

@@ -205,6 +205,7 @@ export function patchItem(
       const t = a.tasks[i];
       const p = pick(t, [
         'title',
+        'taskType',
         'priority',
         'difficulty',
         'requiredSkills',
@@ -238,6 +239,7 @@ export function patchItem(
       const t = a.drafts[i];
       const p = pick(t, [
         'title',
+        'taskType',
         'priority',
         'difficulty',
         'requiredSkills',

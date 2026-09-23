@@ -13,7 +13,7 @@ Bản chốt ngày 15/09/2026 (Tuần 01), dùng làm phạm vi cho đề cươn
 | 3 | Danh mục kỹ năng | Nhóm kỹ năng; thêm/sửa/ẩn; alias; gộp; bộ mẫu 30 kỹ năng khi tạo workspace | 06 | «TV5» |
 | 4 | Dự án | Tạo/sửa/lưu trữ; mã dự án (ST); thành viên dự án, đúng một PM; cột Kanban tuỳ chỉnh + WIP; nhãn; dòng hoạt động | 08 | «TV2» |
 | 5 | Sprint | Tạo/sửa; một ACTIVE mỗi dự án; bắt đầu; kết thúc chuyển việc dở về backlog hoặc sprint sau | 09 | «TV2» |
-| 6 | Công việc | Task/subtask; tiêu đề, mô tả markdown, ưu tiên, độ khó 1–5, nhãn, ngày bắt đầu, hạn, ước lượng giờ, giờ còn lại, tiến độ, kỹ năng yêu cầu (mức tối thiểu), nhiều người thực hiện; mã ST-n; xoá mềm; sao chép; version | 10, 11 (subtask) | «TV2» API · «TV3» UI |
+| 6 | Công việc | Task/subtask; tiêu đề, mô tả markdown, **loại (STORY/TASK/BUG — enum cố định, không cấu hình được)**, ưu tiên, độ khó 1–5, nhãn, ngày bắt đầu, hạn, ước lượng giờ, giờ còn lại, tiến độ, kỹ năng yêu cầu (mức tối thiểu), nhiều người thực hiện; mã ST-n; xoá mềm; sao chép; version | 10, 11 (subtask) | «TV2» API · «TV3» UI |
 | 7 | Kanban | Cột theo trạng thái; kéo thả đổi cột/thứ tự (vị trí phân số); WIP limit + cảnh báo; tạo nhanh; lọc người/nhãn/sprint/hạn; tìm kiếm; huy hiệu quá hạn/bị chặn/người nhận quá tải | 12 | «TV3» |
 | 8 | Danh sách & việc của tôi | Bảng có sắp xếp, bộ lọc lưu trong URL, tìm toàn văn; "Việc của tôi" xuyên dự án | 15 | «TV3» |
 | 9 | Gantt chỉ đọc | Thanh theo ngày bắt đầu–hạn, nhóm theo sprint, đường hôm nay, quá hạn, thu phóng ngày/tuần/tháng; mũi tên phụ thuộc (nếu UC-11 phụ thuộc kịp) | 13 (đọc) | «TV3» |
@@ -59,7 +59,7 @@ Cân bằng lại tải bằng kéo thả trên biểu đồ (27); AI ước lư
 | Định danh | UUID trong API; web dùng `wsSlug`, `projectKey`, `taskKey` (ST-12) cho URL và gọi `GET /tasks/by-key/:projectKey/:number` khi cần |
 | Quyền | Guard theo dữ liệu: WORKSPACE(role) → PROJECT(PM/MEMBER); VIEWER chỉ GET; không tin `workspaceId`/`projectId` trong body |
 | Phân trang | `?page=1&limit=50` (tối đa 200) → `{ items, total, page, limit }`; danh sách task theo dự án không phân trang (≤ 1.000, lọc server) |
-| Lọc & sắp xếp | `?sprintId=&assigneeId=&labelId=&status=&priority=&dueFrom=&dueTo=&q=&sort=dueDate:asc` |
+| Lọc & sắp xếp | `?sprintId=&assigneeId=&labelId=&status=&priority=&type=&dueFrom=&dueTo=&q=&sort=dueDate:asc` |
 | Đồng thời | Mọi `PATCH` trên task mang `version`; lệch → `409 TASK_VERSION_CONFLICT { current }` |
 | Lỗi | `{ code, message, details? }`; `code` liệt kê ở `packages/shared/errors.ts`; 400 validation (`details.fields`), 401, 403, 404, 409, 422 nghiệp vụ, 429 hạn mức, 503 AI/không sẵn sàng |
 | Idempotency | `POST /ai/proposals/:id/apply`, `POST /sprints/:id/close` nhận `Idempotency-Key` (tuỳ chọn) — lặp trả kết quả cũ |
@@ -128,7 +128,7 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 | `DELETE /projects/:id/members/:userId` | pj:PM | — | `204` (task của người đó → chưa giao) | M | 08 |
 | `GET · PUT /projects/:id/columns` | pj:MEMBER · pj:PM | `[{ id?, name, statusKey, position, wipLimit? }]` | `column[]` | M | 12 |
 | `GET · POST /projects/:id/labels` · `PATCH · DELETE /labels/:id` | pj:MEMBER · pj:PM | `{ name, color }` | `label[]` | M | 10 |
-| `GET /projects/:id/dashboard` | pj:MEMBER | — | `{ counts, byStatus[], byAssignee[], workloadWeek[], openAlerts[], burndownMini }` | M | 33 |
+| `GET /projects/:id/dashboard` | pj:MEMBER | — | `{ counts, byStatus[], byType[], byAssignee[], workloadWeek[], openAlerts[], burndownMini }` | M | 33 |
 | `GET /projects/:id/activity?page=&taskId=` | pj:MEMBER | — | `activity[]` | S3 | 16 |
 
 ### 3.5 Sprint, burn-down, dự báo
@@ -149,11 +149,11 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 
 | Phương thức · đường dẫn | Quyền | Body / query | Trả về | Mức | UC |
 |---|---|---|---|---|---|
-| `GET /projects/:id/tasks?sprintId=&assigneeId=&labelId=&status=&priority=&dueFrom=&dueTo=&q=&parentId=&since=` | pj:MEMBER | — | `task[]` (rút gọn; `since` trả phần chênh + `deletedIds[]`) | M | 10, 12, 13, 15, 17 |
-| `POST /projects/:id/tasks` | pj:MEMBER | `{ title, description?, priority?, difficulty?, labelIds[], startDate?, dueDate?, estimateHours?, sprintId?, columnId?, parentId?, assigneeIds[], requiredSkills[{ skillId, minLevel }] }` | `201 task` (số ST-n) | M | 10 |
+| `GET /projects/:id/tasks?sprintId=&assigneeId=&labelId=&status=&priority=&type=&dueFrom=&dueTo=&q=&parentId=&since=` | pj:MEMBER | — | `task[]` (rút gọn; `since` trả phần chênh + `deletedIds[]`) | M | 10, 12, 13, 15, 17 |
+| `POST /projects/:id/tasks` | pj:MEMBER | `{ title, description?, type?, priority?, difficulty?, labelIds[], startDate?, dueDate?, estimateHours?, sprintId?, columnId?, parentId?, assigneeIds[], requiredSkills[{ skillId, minLevel }] }` | `201 task` (số ST-n) | M | 10 |
 | `GET /tasks/:id` | pj:MEMBER | — | `task` đầy đủ (subtasks, assignees, skills, deps, labels, counts) | M | 10 |
 | `GET /tasks/by-key/:projectKey/:number` | pj:MEMBER | — | `task` | M | 10 |
-| `PATCH /tasks/:id` | pj:MEMBER | `{ version, ...trường sửa }` | `task` (409 khi lệch) | M | 10 |
+| `PATCH /tasks/:id` | pj:MEMBER | `{ version, ...trường sửa }` — gồm `type` (STORY/TASK/BUG) | `task` (409 khi lệch) | M | 10 |
 | `DELETE /tasks/:id` | pj:MEMBER (tạo) · pj:PM | — | `204` (xoá mềm) | M | 10 |
 | `PATCH /tasks/:id/move` | pj:MEMBER | `{ version, columnId, position, sprintId? }` | `task` (422 `WIP_LIMIT_EXCEEDED`) | M | 12 |
 | `PATCH /tasks/:id/progress` | assignee · pj:PM | `{ version, progress? , remainingHours? }` | `task` | M | 10 |

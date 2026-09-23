@@ -451,10 +451,15 @@ export class ProjectsService {
   async dashboard(userId: string, projectId: string) {
     await this.access.assertRead(userId, projectId);
     const today = toDate(new Date());
-    const [byColumn, total, overdue, unassigned, byAssignee] =
+    const [byColumn, byType, total, overdue, unassigned, byAssignee] =
       await Promise.all([
         this.prisma.task.groupBy({
           by: ['columnId'],
+          where: { projectId, deletedAt: null, parentId: null },
+          _count: { _all: true },
+        }),
+        this.prisma.task.groupBy({
+          by: ['type'],
           where: { projectId, deletedAt: null, parentId: null },
           _count: { _all: true },
         }),
@@ -559,6 +564,10 @@ export class ProjectsService {
         name: c.name,
         statusKey: c.statusKey,
         count: byColumn.find((b) => b.columnId === c.id)?._count._all ?? 0,
+      })),
+      byType: (['STORY', 'TASK', 'BUG'] as const).map((t) => ({
+        type: t,
+        count: byType.find((b) => b.type === t)?._count._all ?? 0,
       })),
       byAssignee: byAssignee.map((b) => ({
         userId: b.userId,

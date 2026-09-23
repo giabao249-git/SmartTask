@@ -6,6 +6,7 @@
 export type WorkloadLevel = "NORMAL" | "HIGH" | "FULL" | "OVERLOAD";
 export type PriorityLevel = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 export type TaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE";
+export type TaskType = "STORY" | "TASK" | "BUG";
 export type BurnoutLevel = "NORMAL" | "MONITOR" | "WARNING";
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 
@@ -185,3 +186,43 @@ export function proposalToVariant(s: ProposalStatus | string): BadgeVariant {
       return "secondary";
   }
 }
+
+/**
+ * Loại công việc (docs 02/05 §E1) — enum cố định 3 giá trị, mọi loại dùng chung một luồng cột.
+ * Màu và nhãn chỉ lấy từ đây, component không tự quyết.
+ */
+export function typeToVariant(t: TaskType | string): BadgeVariant {
+  switch (t) {
+    case "BUG":
+      return "destructive";
+    case "STORY":
+      return "info";
+    default:
+      return "secondary";
+  }
+}
+
+export function typeToLabel(t: TaskType | string): string {
+  switch (t) {
+    case "STORY":
+      return "Tính năng";
+    case "BUG":
+      return "Lỗi";
+    default:
+      return "Việc chung";
+  }
+}
+
+/** Mô tả để đặt vào title/Tooltip — giúp người mới biết chọn loại nào. */
+export function typeToHint(t: TaskType | string): string {
+  switch (t) {
+    case "STORY":
+      return "Tính năng người dùng nhìn thấy được";
+    case "BUG":
+      return "Sửa lỗi đã có trong sản phẩm";
+    default:
+      return "Việc kỹ thuật, nghiên cứu, cấu hình";
+  }
+}
+
+export const TASK_TYPES: TaskType[] = ["STORY", "TASK", "BUG"];

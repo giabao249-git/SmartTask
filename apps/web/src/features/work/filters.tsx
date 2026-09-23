@@ -19,6 +19,8 @@ export interface WorkFilters {
   sprint: string;
   /** "__all" | id người */
   assignee: string;
+  /** "__all" | STORY | TASK | BUG */
+  type: string;
   q: string;
   quick: QuickFilter;
 }
@@ -30,7 +32,7 @@ interface WorkFiltersCtx extends WorkFilters {
   /** Lọc phía client cho "Việc của tôi" / "Chưa giao" (server không có tham số này). */
   applyQuick: (tasks: TaskListItem[], selfId?: string) => TaskListItem[];
   /** Tham số gửi lên GET /projects/:id/tasks — dùng chung nên đổi view không gọi lại API. */
-  query: { sprintId?: string; backlog?: true; assigneeId?: string; q?: string };
+  query: { sprintId?: string; backlog?: true; assigneeId?: string; type?: string; q?: string };
   /** Có bộ lọc nào khác mặc định không — sprint đang chạy là mặc định nên không tính là "đang lọc". */
   isFiltered: boolean;
   /** Đưa mọi bộ lọc về mặc định. */
@@ -55,6 +57,7 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
   const view: WorkView = isView(params.get("view")) ? (params.get("view") as WorkView) : "board";
   const sprint = get("sprint") || defaultSprintId || "__all";
   const assignee = get("assignee", "__all");
+  const type = get("type", "__all");
   const q = get("q");
   const quick = (["all", "my", "unassigned"] as const).find((x) => x === get("quick")) ?? "all";
   const taskId = params.get("task");
@@ -78,12 +81,14 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
       sprintId: sprint !== "__all" && sprint !== "__backlog" ? sprint : undefined,
       backlog: sprint === "__backlog" ? (true as const) : undefined,
       assigneeId: assignee !== "__all" ? assignee : undefined,
+      type: type !== "__all" ? type : undefined,
       q: q.trim() || undefined,
     };
     return {
       view,
       sprint,
       assignee,
+      type,
       q,
       quick,
       taskId,
@@ -91,9 +96,10 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
       isFiltered:
         (explicitSprint !== null && explicitSprint !== (defaultSprintId ?? "__all")) ||
         assignee !== "__all" ||
+        type !== "__all" ||
         q.trim() !== "" ||
         quick !== "all",
-      clear: () => write({ sprint: null, assignee: null, q: null, quick: null }),
+      clear: () => write({ sprint: null, assignee: null, type: null, q: null, quick: null }),
       setView: (v) => write({ view: v === "board" ? null : v }),
       set: (patch) =>
         write(
@@ -109,7 +115,7 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
             ? tasks.filter((t) => t.assignees.length === 0)
             : tasks,
     };
-  }, [view, sprint, assignee, q, quick, taskId, write, explicitSprint, defaultSprintId]);
+  }, [view, sprint, assignee, type, q, quick, taskId, write, explicitSprint, defaultSprintId]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
