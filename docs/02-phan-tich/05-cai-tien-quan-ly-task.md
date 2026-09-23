@@ -1,6 +1,6 @@
 # 05 · Nghiên cứu và đề xuất cải tiến Tạo task & Quản lý task
 
-**Phiên bản:** 1.1 — **Ngày:** 23/09/2026 (Tuần 03) — **Trạng thái:** đã duyệt; Phase 9 hiện thực xong phần lớn
+**Phiên bản:** 1.2 — **Ngày:** 23/09/2026 (Tuần 03) — **Trạng thái:** đã duyệt; Phase 9 và Phase 10 hiện thực xong
 
 > **Cập nhật 23/09/2026:** 15 mục đã làm và commit (xem cột "Chốt làm gì" ở §12): A1, A2, A3, A5, A6,
 > A7, B3, B8, C3, D1, D2, D3, E1, E2, E3 — cộng việc bỏ ký hiệu phím Mac, hiện Ctrl theo hệ điều hành.
@@ -593,16 +593,16 @@ Kết luận: nới rộng và **tái cấu trúc bố cục** giải quyết đ
 | ✅ | A5 | Nhân bản task / mẫu task | S |  **đã làm 23/09** |
 | ✅ | A6 | Cập nhật lạc quan khi tạo & sửa | S |  **đã làm 23/09** |
 | ✅ | A7 | Sửa lỗi tạo khi lọc Backlog rơi vào sprint | S |  **đã làm 23/09** |
-| ☐ | B1 | Chọn nhiều + thao tác hàng loạt (≤ 50) | L | |
-| ☐ | B2 | Sửa tại chỗ trên Danh sách | M | |
+| ✅ | B1 | Chọn nhiều + thao tác hàng loạt (≤ 50) | L | **đã làm 23/09** |
+| ✅ | B2 | Sửa tại chỗ trên Danh sách | M | **đã làm 23/09** |
 | ✅ | B3 | Sửa nhanh trên thẻ Kanban (giao/ưu tiên/hạn/nhân bản) | S |  **đã làm 23/09** |
-| ☐ | B4 | Hoàn tác + xác nhận trước khi ghi hàng loạt | S | |
+| ✅ | B4 | Hoàn tác + xác nhận trước khi ghi hàng loạt | S | **đã làm 23/09** |
 | ☐ | B5 | Bộ lọc lưu được (localStorage) | S | |
 | ☐ | B6 | Swimlane theo người / ưu tiên | M | |
 | ☐ | B7 | Backlog tách khỏi sprint | M | |
 | ✅ | B8 | Lọc rỗng vẫn giữ bảng + nút “Xoá bộ lọc” | S |  **đã làm 23/09** |
-| ☐ | C1 | Bộ phím tắt toàn cục kiểu Jira/Linear | M | |
-| ☐ | C2 | Bảng lệnh (Ctrl/Super + K) tìm & tạo công việc | S | |
+| ✅ | C1 | Bộ phím tắt toàn cục kiểu Jira/Linear | M | **đã làm 23/09** |
+| ✅ | C2 | Bảng lệnh (Ctrl/Super + K) tìm & tạo công việc | S | **đã làm 23/09** |
 | ✅ | C3 | Bớt request thừa khi mở Sheet | S |  **đã làm 23/09** |
 | ☐ | C4 | Không khoá cả Sheet khi lưu một trường | M | |
 | ☐ | C5 | Chế độ tập trung (phím `F`) | S | |
@@ -613,7 +613,7 @@ Kết luận: nới rộng và **tái cấu trúc bố cục** giải quyết đ
 | ✅ | E2 | Dọn `TaskSize` khỏi DTO (giữ cột CSDL) | S |  **đã làm 23/09** |
 | ✅ | E3 | Đổi nhãn ưu tiên `URGENT` → “Rất cao”, làm rõ cờ Khẩn | S |  **đã làm 23/09** |
 | ☐ | E4 | Kết quả xử lý (huỷ / không làm) | M | |
-| ✅ | — | Sửa `ShortcutsDialog` chỉ liệt kê phím có thật | S | **đã làm một phần 23/09** — mục phím C đã đúng; còn Space/Enter và mũi tên |
+| ✅ | — | Sửa `ShortcutsDialog` chỉ liệt kê phím có thật | S | **đã làm xong 23/09** cùng C1 |
 | ☐ | — | `POST /projects/:id/tasks/bulk` | S | |
 | ☐ | — | `PATCH /tasks/bulk` | S | |
 | ☐ | — | `POST /tasks/:id/restore` | S | |
@@ -624,10 +624,10 @@ Kết luận: nới rộng và **tái cấu trúc bố cục** giải quyết đ
 
 | Phase | Tên | Nội dung | Ước lượng | Mốc |
 |---|---|---|---|---|
-| **Phase 9** | Tạo task nhanh & màn chi tiết | A7 → B8 → A6 → A1 → A2 → A3 → B3 → **D1** → **D3**; đồng thời C2 (mục 1–2), C3, E2, E3. Chỉ sửa `apps/web`, backend **không đổi**. | 5–6 ngày | xong trước 15/10 |
-| **Phase 9b** *(chỉ nếu chốt E1)* | Loại công việc | **E1** — migration `TaskType` + DTO + 6 chỗ web + schema AI + seed. **Phải nằm đầu Phase 9, không được đẩy sang tháng 11.** | 1,5–2 ngày | xong trước 20/10 |
-| **Phase 10** | Hàng loạt & bàn phím | B1 → B4 → B2 → **D2** → C1 → sửa `ShortcutsDialog` → C2 (mục 3). Cân nhắc `PATCH /tasks/bulk` nếu đo thấy chậm. | 6–7 ngày | xong trước **05/11** (freeze) |
-| **Phase 11** *(chỉ nếu Phase 10 xong sớm)* | Tăng tốc | A4 (parser + test) → A5 → B5 → C4 → C5 | 3–4 ngày | trước 05/11 |
+| **Phase 9** ✅ | Tạo task nhanh & màn chi tiết | A7 → B8 → A6 → A1 → A2 → A3 → B3 → **D1** → **D3**; đồng thời C2 (mục 1–2), C3, E2, E3. Chỉ sửa `apps/web`, backend **không đổi**. | 5–6 ngày | xong trước 15/10 |
+| **Phase 9b** ✅ | Loại công việc | **E1** — migration `TaskType` + DTO + 6 chỗ web + schema AI + seed. **Phải nằm đầu Phase 9, không được đẩy sang tháng 11.** | 1,5–2 ngày | xong trước 20/10 |
+| **Phase 10** ✅ | Hàng loạt & bàn phím | B1 → B4 → B2 → **D2** → C1 → sửa `ShortcutsDialog` → C2 (mục 3). Cân nhắc `PATCH /tasks/bulk` nếu đo thấy chậm. | 6–7 ngày | xong trước **05/11** (freeze) |
+| **Phase 11** *(còn lại)* | Tăng tốc | A4 (parser + test) → A5 → B5 → C4 → C5 | 3–4 ngày | trước 05/11 |
 | **Hướng phát triển** *(ghi vào báo cáo, không code)* | — | B6 swimlane, B7 backlog riêng, E4 kết quả xử lý, E5 Epic, khôi phục task đã xoá, trường tuỳ biến, JQL, workflow engine | — | — |
 
 **Thứ tự trong Phase 9 là bắt buộc:** A7 và B8 là sửa lỗi (rẻ, phải làm trước); A6 (cập nhật lạc quan) là nền cho A1 và B2 — làm sau sẽ phải sửa lại; **D1 phải trước D2**, vì D2 chỉ rẻ khi `TaskBody` đã tách khung chứa; **E1 phải trước A3 và D1**, vì cả hai đều phải thêm ô chọn loại — làm ngược là sửa form hai lần.
