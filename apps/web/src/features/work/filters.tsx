@@ -6,6 +6,8 @@ import type { TaskListItem } from "@/lib/types";
 
 export type WorkView = "board" | "list" | "timeline" | "eisenhower";
 export type QuickFilter = "all" | "my" | "unassigned";
+/** Nhóm thẻ trên bảng Kanban thành các hàng (swimlane). */
+export type GroupBy = "none" | "assignee" | "priority";
 
 export const WORK_VIEWS: { key: WorkView; label: string; short: string }[] = [
   { key: "board", label: "Bảng Kanban", short: "Bảng" },
@@ -21,6 +23,8 @@ export interface WorkFilters {
   assignee: string;
   /** "__all" | STORY | TASK | BUG */
   type: string;
+  /** Nhóm bảng Kanban theo người thực hiện hoặc ưu tiên; "none" = không nhóm */
+  group: GroupBy;
   q: string;
   quick: QuickFilter;
 }
@@ -58,6 +62,7 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
   const sprint = get("sprint") || defaultSprintId || "__all";
   const assignee = get("assignee", "__all");
   const type = get("type", "__all");
+  const group = (["none", "assignee", "priority"] as const).find((x) => x === get("group")) ?? "none";
   const q = get("q");
   const quick = (["all", "my", "unassigned"] as const).find((x) => x === get("quick")) ?? "all";
   const taskId = params.get("task");
@@ -89,6 +94,7 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
       sprint,
       assignee,
       type,
+      group,
       q,
       quick,
       taskId,
@@ -115,7 +121,7 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
             ? tasks.filter((t) => t.assignees.length === 0)
             : tasks,
     };
-  }, [view, sprint, assignee, type, q, quick, taskId, write, explicitSprint, defaultSprintId]);
+  }, [view, sprint, assignee, type, group, q, quick, taskId, write, explicitSprint, defaultSprintId]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

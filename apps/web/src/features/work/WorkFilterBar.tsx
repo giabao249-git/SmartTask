@@ -10,7 +10,7 @@ import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useSprints } from "@/lib/hooks/queries";
 import { cn } from "@/lib/utils";
 import { TASK_TYPES, typeToLabel } from "@/lib/status";
-import { useWorkFilters, type QuickFilter } from "./filters";
+import { useWorkFilters, type GroupBy, type QuickFilter } from "./filters";
 import { SavedFilters } from "./SavedFilters";
 
 /** Thanh lọc dùng chung cho cả 4 cách nhìn công việc; mọi thay đổi ghi vào URL. */
@@ -110,6 +110,25 @@ export function WorkFilterBar({ counts, syncing }: { counts: { my: number; unass
         </SelectContent>
       </Select>
       <Input value={draftQ} onChange={(e) => setDraftQ(e.target.value)} placeholder="Tìm tiêu đề…" className="h-8 text-xs w-56" />
+      {/* Nhóm chỉ có nghĩa trên bảng Kanban — ba view còn lại không có cột để xếp hàng */}
+      {f.view === "board" && (
+        <Select value={f.group} onValueChange={(v) => f.set({ group: v as GroupBy })}>
+          <SelectTrigger className="h-8 text-xs w-40" title="Nhóm thẻ thành hàng trên bảng">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none" className="text-xs">
+              Không nhóm
+            </SelectItem>
+            <SelectItem value="assignee" className="text-xs">
+              Nhóm theo người
+            </SelectItem>
+            <SelectItem value="priority" className="text-xs">
+              Nhóm theo ưu tiên
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      )}
       <SavedFilters projectId={project.id} />
       {f.isFiltered && (
         <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={() => f.clear()}>

@@ -383,11 +383,43 @@ export function KanbanBoard() {
       .filter((t) => f.applyQuick([t], auth.user?.id).length > 0)
       .sort((a, b) => a.position - b.position);
 
+  /**
+   * Nhóm thẻ thành hàng (swimlane) theo người thực hiện hoặc ưu tiên (docs 02/05 §B6).
+   * Tính hoàn toàn trên client từ danh sách đã tải — không thêm request nào.
+   */
+  const laneOf = React.useCallback(
+    (t: TaskListItem): string => {
+      if (f.group === "assignee") return t.assignees[0]?.id ?? "__none";
+      if (f.group === "priority") return t.priority;
+      return "__all";
+    },
+    [f.group],
+  );
+
+  const lanes = React.useMemo(() => {
+    const visible = f.applyQuick(local, auth.user?.id);
+    if (f.group === "none") return [{ key: "__all", title: "", tasks: visible }];
+    if (f.group === "priority") {
+      const order = ["URGENT", "HIGH", "MEDIUM", "LOW"] as const;
+      return order
+        .map((p) => ({ key: p as string, title: "", tasks: visible.filter((t) => t.priority === p) }))
+        .filter((l) => l.tasks.length > 0);
+    }
+    const byUser = project.members
+      .map((m) => ({ key: m.id, title: m.shortName ?? m.fullName, tasks: visible.filter((t) => t.assignees[0]?.id === m.id) }))
+      .filter((l) => l.tasks.length > 0);
+    const none = visible.filter((t) => t.assignees.length === 0);
+    return none.length ? [...byUser, { key: "__none", title: "Chưa giao", tasks: none }] : byUser;
+  }, [local, f, auth.user?.id, project.members]);
+
   /** Lưới thẻ đang hiện, theo đúng thứ tự mắt thấy — dùng cho điều hướng bàn phím. */
   const grid = React.useMemo(
-    () => columns.map((c) => ({ colId: c.id, ids: colTasks(c.id).map((t) => t.id) })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [columns, local, f, auth.user?.id],
+    () =>
+      columns.map((c) => ({
+        colId: c.id,
+        ids: lanes.flatMap((ln) => ln.tasks.filter((t) => t.columnId === c.id).sort((a, b) => a.position - b.position).map((t) => t.id)),
+      })),
+    [columns, lanes],
   );
 
   /**
@@ -574,7 +606,11 @@ export function KanbanBoard() {
   const handleDragOver = (e: DragOverEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const targetCol = columns.find((c) => c.id === over.id)?.id ?? local.find((t) => t.id === over.id)?.columnId;
+    const overTask = local.find((t) => t.id === over.id);
+    const dragged = local.find((t) => t.id === active.id);
+    // Kéo sang hàng khác KHÔNG tự đổi người/ưu tiên — không ghi ngầm (docs 02/05 §B6)
+    if (f.group !== "none" && dragged && overTask && laneOf(dragged) !== laneOf(overTask)) return;
+    const targetCol = columns.find((c) => c.id === over.id)?.id ?? overTask?.columnId;
     if (!targetCol) return;
     setLocal((prev) => prev.map((t) => (t.id === active.id && t.columnId !== targetCol ? { ...t, columnId: targetCol } : t)));
   };
@@ -585,6 +621,16 @@ export function KanbanBoard() {
     const original = tasksQuery.data?.find((t) => t.id === active.id);
     const moved = local.find((t) => t.id === active.id);
     if (!original || !moved) return;
+    const overTask = local.find((t) => t.id === over.id);
+    if (f.group !== "none" && overTask && laneOf(original) !== laneOf(overTask)) {
+      setLocal(tasksQuery.data ?? []);
+      toast.info(
+        f.group === "assignee"
+          ? "Kéo sang hàng khác không tự đổi người thực hiện — dùng menu “Giao cho” trên thẻ"
+          : "Kéo sang hàng khác không tự đổi ưu tiên — dùng menu “Đặt ưu tiên” trên thẻ",
+      );
+      return;
+    }
     const others = colTasks(moved.columnId).filter((t) => t.id !== moved.id);
     const overIdx = others.findIndex((t) => t.id === over.id);
     let position: number;
@@ -704,49 +750,89 @@ export function KanbanBoard() {
             </Alert>
           )}
           <ScrollArea className="w-full pb-4">
-            <div className="grid gap-4 items-start" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(260px, 1fr))`, minWidth: columns.length * 270 }}>
-              {columns.map((col) => (
-                <Column
-                  key={col.id}
-                  col={col}
-                  tasks={colTasks(col.id)}
-                  projectId={project.id}
-                  projectKey={project.key}
-                  columns={columns}
-                  onOpen={openTask}
-                  onMove={(t, colId) => doMove(t, colId)}
-                  onClaim={handleClaimTask}
-                  members={project.members}
-                  selfId={auth.user?.id}
-                  onPatch={quickPatch}
-                  onAssign={quickAssign}
-                  onDuplicate={(t) =>
-                    mut.duplicate.mutate(
-                      { id: t.id },
-                      {
-                        onSuccess: (copy) => toast.success(`Đã nhân bản thành ${taskKeyOf(project.key, copy)} (ở cột đầu)`),
-                        onError: (e) => toast.error("Nhân bản thất bại", { description: describeError(e).code }),
-                      },
-                    )
-                  }
-                  onAskDelete={setConfirmDelete}
-                  onAddTask={openComposer}
-                  focusedId={focusedId}
-                  orderedIds={grid.flatMap((g) => g.ids)}
-                  menuTaskId={menuTaskId}
-                  onMenuOpenChange={setMenuTaskId}
-                  composerOpen={composerColId === col.id}
-                  onCloseComposer={() => setComposerColId(null)}
-                  onQuickCreate={(items) => quickCreate(col.id, items)}
-                  dicts={dicts}
-                  onOpenFull={(title) => {
-                    setComposerColId(null);
-                    setDraftTitle(title);
-                    openCreateDialog(col.id);
-                  }}
-                  currentUserId={auth.user?.id}
-                  canEdit={project.canEdit}
+            <div className="space-y-3" style={{ minWidth: columns.length * 270 }}>
+              {lanes.map((lane) => (
+                <div key={lane.key} className="space-y-2">
+                  {f.group !== "none" && (
+                    <div className="flex items-center gap-2 text-xs">
+                      {f.group === "assignee" ? (
+                        lane.key === "__none" ? (
+                          <span className="font-medium text-muted-foreground">Chưa giao</span>
+                        ) : (
+                          <>
+                            <UserAvatar
+                              name={lane.title}
+                              avatar={project.members.find((m) => m.id === lane.key)?.avatarUrl ?? undefined}
+                              size="sm"
+                            />
+                            <span className="font-medium text-foreground">{lane.title}</span>
+                          </>
+                        )
+                      ) : (
+                        <PriorityBadge priority={lane.key} />
+                      )}
+                      <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0">
+                        {lane.tasks.length} việc
+                      </Badge>
+                      {/* Giờ còn lại của hàng — tính trên client, đủ để thấy ai đang ôm nhiều */}
+                      <span className="text-[11px] text-muted-foreground tabular-nums">
+                        {lane.tasks.reduce((sum, t) => sum + (t.remainingHours ?? t.estimateHours ?? 0), 0)}h còn lại
+                      </span>
+                    </div>
+                  )}
+                  <div
+                    className="grid gap-4 items-start"
+                    style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(260px, 1fr))` }}
+                  >
+                    {columns.map((col) => (
+                      <Column
+                        key={`${lane.key}:${col.id}`}
+                        sortableId={`${lane.key}:${col.id}`}
+                        dense={f.group !== "none"}
+                        showWip={f.group === "none"}
+                        canAdd={f.group === "none"}
+                        col={col}
+                        tasks={lane.tasks.filter((t) => t.columnId === col.id).sort((a, b) => a.position - b.position)}
+                        projectId={project.id}
+                        projectKey={project.key}
+                        columns={columns}
+                        onOpen={openTask}
+                        onMove={(t, colId) => doMove(t, colId)}
+                        onClaim={handleClaimTask}
+                        members={project.members}
+                        selfId={auth.user?.id}
+                        onPatch={quickPatch}
+                        onAssign={quickAssign}
+                        onDuplicate={(t) =>
+                          mut.duplicate.mutate(
+                            { id: t.id },
+                            {
+                              onSuccess: (copy) => toast.success(`Đã nhân bản thành ${taskKeyOf(project.key, copy)} (ở cột đầu)`),
+                              onError: (e) => toast.error("Nhân bản thất bại", { description: describeError(e).code }),
+                            },
+                          )
+                        }
+                        onAskDelete={setConfirmDelete}
+                        onAddTask={openComposer}
+                        focusedId={focusedId}
+                        orderedIds={grid.flatMap((g) => g.ids)}
+                        menuTaskId={menuTaskId}
+                        onMenuOpenChange={setMenuTaskId}
+                        composerOpen={composerColId === col.id && lane.key === lanes[0].key}
+                        onCloseComposer={() => setComposerColId(null)}
+                        onQuickCreate={(items) => quickCreate(col.id, items)}
+                        dicts={dicts}
+                        onOpenFull={(title) => {
+                          setComposerColId(null);
+                          setDraftTitle(title);
+                          openCreateDialog(col.id);
+                        }}
+                        currentUserId={auth.user?.id}
+                        canEdit={project.canEdit}
                 />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
             <ScrollBar orientation="horizontal" />
@@ -1199,6 +1285,10 @@ function ColumnComposer({
 function Column({
   col,
   tasks,
+  sortableId,
+  dense,
+  showWip,
+  canAdd,
   projectId,
   projectKey,
   columns,
@@ -1226,6 +1316,13 @@ function Column({
 }: {
   col: BoardColumn;
   tasks: TaskListItem[];
+  /** Duy nhất theo hàng + cột — mỗi swimlane là một vùng sắp xếp riêng. */
+  sortableId: string;
+  /** Khi nhóm thành nhiều hàng, cột thấp lại cho trang khỏi dài lê thê. */
+  dense: boolean;
+  /** Khi đang nhóm, WIP là của CẢ cột chứ không của từng hàng → chỉ hiện ở chế độ không nhóm. */
+  showWip: boolean;
+  canAdd: boolean;
   projectId: string;
   projectKey: string;
   columns: BoardColumn[];
@@ -1252,15 +1349,15 @@ function Column({
   canEdit: boolean;
 }) {
   const sel = useWorkSelection();
-  const isOverWip = col.wipLimit != null && tasks.length > col.wipLimit;
+  const isOverWip = showWip && col.wipLimit != null && tasks.length > col.wipLimit;
   return (
-    <div className={cn("flex flex-col rounded-xl border bg-muted/25 transition-all p-3 min-h-[520px]", isOverWip ? "border-warning ring-1 ring-warning/40 bg-warning/5" : "border-border/70")}>
+    <div className={cn("flex flex-col rounded-xl border bg-muted/25 transition-all p-3", dense ? "min-h-[120px]" : "min-h-[520px]", isOverWip ? "border-warning ring-1 ring-warning/40 bg-warning/5" : "border-border/70")}>
       <div className="flex items-center justify-between pb-3 mb-3 border-b border-border/50">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-foreground">{col.name}</h3>
           <Badge variant={isOverWip ? "warning" : "secondary"} className="font-mono text-xs tabular-nums px-1.5 py-0" title={col.wipLimit ? "Giới hạn WIP" : undefined}>
             {tasks.length}
-            {col.wipLimit ? `/${col.wipLimit}` : ""}
+            {showWip && col.wipLimit ? `/${col.wipLimit}` : ""}
           </Badge>
         </div>
         {isOverWip && (
@@ -1270,8 +1367,8 @@ function Column({
           </div>
         )}
       </div>
-      <SortableContext id={col.id} items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-col gap-2.5 flex-1 min-h-[100px]">
+      <SortableContext id={sortableId} items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+        <div className={cn("flex flex-col gap-2.5 flex-1", dense ? "min-h-[60px]" : "min-h-[100px]")}>
           {tasks.map((task) => (
             <div key={task.id} className="group relative">
               <SortableTaskItem
@@ -1406,8 +1503,12 @@ function Column({
               )}
             </div>
           ))}
-          {tasks.length === 0 && <div className="flex flex-1 items-center justify-center p-6 border border-dashed border-border/60 rounded-lg text-xs text-muted-foreground">Kéo thẻ vào đây</div>}
-          {canEdit &&
+          {tasks.length === 0 && (
+            <div className={cn("flex flex-1 items-center justify-center border border-dashed border-border/60 rounded-lg text-xs text-muted-foreground", dense ? "p-2 text-[11px]" : "p-6")}>
+              Kéo thẻ vào đây
+            </div>
+          )}
+          {canEdit && canAdd &&
             (composerOpen ? (
               <ColumnComposer
                 columnName={col.name}
