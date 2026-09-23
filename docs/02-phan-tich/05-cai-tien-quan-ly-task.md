@@ -172,7 +172,7 @@ Cột **SmartTask**: ✅ đã có · ⚠️ có một phần · ❌ thiếu · �
   | `t6` `25/10` `hôm nay` `mai` | hạn | bảng ánh xạ cố định, tính theo múi giờ người dùng |
   | `~k:React>=3` | kỹ năng yêu cầu | `GET /workspaces/:id/skills` |
 
-  - Gõ `@` hoặc `#` mở `Command` (Combobox mẫu shadcn) gợi ý — giống hệt cơ chế `@mention` đã có trong bình luận, dùng lại `useSuggestMembers`.
+  - Gõ dở `@` hoặc `#` thì hiện hàng gợi ý bấm được ngay dưới ô nhập (đơn giản hơn `Command` để không giành focus của ô đang gõ).
   - Phần đã nhận diện hiện thành các `Badge` ngay dưới ô (“Huy → người thực hiện”, “Cao → ưu tiên”), bấm `×` để bỏ. **Người dùng luôn thấy hệ thống hiểu gì trước khi Enter** — đây là điều kiện để không vi phạm nguyên tắc “không đoán thay người dùng”.
   - Không khớp được thì **giữ nguyên trong tiêu đề**, không tự bịa.
 - **Ranh giới AI:** đây là parse chuỗi tất định, chạy client, cùng một đầu vào luôn cho cùng một kết quả. Câu tự do kiểu “chia nhỏ màn đăng nhập ra thành các việc con” vẫn phải vào **Trợ lý AI** → bản nháp → người duyệt (docs 12).
@@ -593,7 +593,7 @@ Kết luận: nới rộng và **tái cấu trúc bố cục** giải quyết đ
 | ✅ | A1 | Tạo nhanh trong cột, Enter tạo liên tiếp | S |  **đã làm 23/09** |
 | ✅ | A2 | Dán nhiều dòng → nhiều task | S |  **đã làm 23/09** |
 | ✅ | A3 | Hộp thoại tạo đủ trường (nhãn, kỹ năng, độ khó, ngày bắt đầu, nhiều người) | M |  **đã làm 23/09** |
-| ☐ | A4 | Cú pháp `@người #nhãn !ưu-tiên 4h t6` | M | |
+| ✅ | A4 | Cú pháp `@người #nhãn !ưu-tiên 4h t6` | M | **đã làm 23/09** — parser ở `packages/shared`, 15 unit test |
 | ✅ | A5 | Nhân bản task / mẫu task | S |  **đã làm 23/09** |
 | ✅ | A6 | Cập nhật lạc quan khi tạo & sửa | S |  **đã làm 23/09** |
 | ✅ | A7 | Sửa lỗi tạo khi lọc Backlog rơi vào sprint | S |  **đã làm 23/09** |
@@ -608,7 +608,7 @@ Kết luận: nới rộng và **tái cấu trúc bố cục** giải quyết đ
 | ✅ | C1 | Bộ phím tắt toàn cục kiểu Jira/Linear | M | **đã làm 23/09** |
 | ✅ | C2 | Bảng lệnh (Ctrl/Super + K) tìm & tạo công việc | S | **đã làm 23/09** |
 | ✅ | C3 | Bớt request thừa khi mở Sheet | S |  **đã làm 23/09** |
-| ☐ | C4 | Không khoá cả Sheet khi lưu một trường | M | |
+| ✅ | C4 | Không khoá cả màn chi tiết khi lưu một trường | M | **đã làm 23/09** |
 | ☐ | C5 | Chế độ tập trung (phím `F`) | S | |
 | ✅ | D1 | Tái cấu trúc Sheet chi tiết (2 cột, gom nhóm, `sm:max-w-3xl`) | M |  **đã làm 23/09** |
 | ✅ | D2 | Trang toàn màn hình `/projects/:id/tasks/ST-n` | M |  **đã làm 23/09** |

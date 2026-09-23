@@ -55,6 +55,8 @@ import { useWorkSelection } from "@/features/work/selection";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { BoardColumn, ProjectDetail, TaskListItem } from "@/lib/types";
 import { TASK_TYPES, typeToHint, typeToLabel } from "@/lib/status";
+import { parseQuickTask, type QuickParseDicts, type QuickParseResult } from "@smarttask/shared";
+import { useSkills } from "@/lib/hooks/queries";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -198,6 +200,17 @@ export function KanbanBoard() {
     [project.columns],
   );
 
+  /** Danh mục để cú pháp nhanh so khớp @người #nhãn ~kỹ-năng — chỉ khớp thứ có thật, không bịa. */
+  const skills = useSkills(project.workspaceId);
+  const dicts = React.useMemo<QuickParseDicts>(
+    () => ({
+      members: project.members.map((m) => ({ id: m.id, fullName: m.fullName, shortName: m.shortName })),
+      labels: project.labels.map((l) => ({ id: l.id, name: l.name })),
+      skills: (skills.data ?? []).map((s) => ({ id: s.id, name: s.name })),
+    }),
+    [project.members, project.labels, skills.data],
+  );
+
   const openCreateDialog = React.useCallback(
     (colId?: string) => {
       setSelectedColumnId(colId || columns[0]?.id || "");
@@ -211,21 +224,28 @@ export function KanbanBoard() {
    * và không đụng giới hạn 100 req/phút. Lỗi thì dừng, giữ nguyên phần chưa tạo cho người dùng.
    */
   const quickCreate = React.useCallback(
-    async (columnId: string, titles: string[]) => {
-      for (const title of titles) {
+    async (columnId: string, items: QuickParseResult[]) => {
+      for (const it of items) {
         try {
           await mut.create.mutateAsync({
-            title,
+            title: it.title,
             columnId,
             sprintId: createSprintId,
+            // Trường nào cú pháp nhanh nhận ra thì gửi luôn trong POST, khỏi phải sửa thêm
+            ...(it.priority ? { priority: it.priority } : {}),
+            ...(it.estimateHours ? { estimateHours: it.estimateHours } : {}),
+            ...(it.dueDate ? { dueDate: it.dueDate } : {}),
+            ...(it.assigneeIds.length ? { assigneeIds: it.assigneeIds } : {}),
+            ...(it.labelIds.length ? { labelIds: it.labelIds } : {}),
+            ...(it.requiredSkills.length ? { requiredSkills: it.requiredSkills } : {}),
           });
         } catch (err) {
           const { code, message } = describeError(err);
-          toast.error(`Không tạo được "${title.slice(0, 40)}"`, { description: `${code}: ${message}` });
+          toast.error(`Không tạo được "${it.title.slice(0, 40)}"`, { description: `${code}: ${message}` });
           throw err;
         }
       }
-      if (titles.length > 1) toast.success(`Đã tạo ${titles.length} công việc`);
+      if (items.length > 1) toast.success(`Đã tạo ${items.length} công việc`);
     },
     [mut.create, createSprintId],
   );
@@ -715,7 +735,8 @@ export function KanbanBoard() {
                   onMenuOpenChange={setMenuTaskId}
                   composerOpen={composerColId === col.id}
                   onCloseComposer={() => setComposerColId(null)}
-                  onQuickCreate={(titles) => quickCreate(col.id, titles)}
+                  onQuickCreate={(items) => quickCreate(col.id, items)}
+                  dicts={dicts}
                   onOpenFull={(title) => {
                     setComposerColId(null);
                     setDraftTitle(title);
@@ -983,12 +1004,14 @@ export function KanbanBoard() {
  */
 function ColumnComposer({
   columnName,
+  dicts,
   onCreate,
   onOpenFull,
   onClose,
 }: {
   columnName: string;
-  onCreate: (titles: string[]) => Promise<void>;
+  dicts: QuickParseDicts;
+  onCreate: (items: QuickParseResult[]) => Promise<void>;
   onOpenFull: (title: string) => void;
   onClose: () => void;
 }) {
@@ -1011,14 +1034,51 @@ function ColumnComposer({
 
   const lines = React.useMemo(() => splitTitles(value), [value]);
   const many = lines.length > 1;
+  /** Mỗi dòng parse riêng — dán nhiều dòng thì từng dòng vẫn có @người #nhãn của nó. */
+  const parsed = React.useMemo(() => lines.map((l) => parseQuickTask(l, dicts)), [lines, dicts]);
+  const one = parsed[0];
 
-  const submit = async (titles: string[]) => {
-    if (!titles.length || busy) return;
+  /** Gợi ý khi đang gõ dở `@…` hoặc `#…` ở cuối câu. */
+  const suggest = React.useMemo(() => {
+    const last = value.split(/\s+/).pop() ?? "";
+    if (!/^[@#].*/.test(last) || many) return null;
+    const needle = last.slice(1).toLowerCase();
+    if (last.startsWith("@"))
+      return {
+        prefix: "@",
+        items: dicts.members
+          .filter((m) => !needle || `${m.fullName} ${m.shortName ?? ""}`.toLowerCase().includes(needle))
+          .slice(0, 5)
+          .map((m) => ({ key: m.id, label: m.shortName ?? m.fullName, insert: (m.shortName ?? m.fullName).replace(/\s+/g, "") })),
+      };
+    return {
+      prefix: "#",
+      items: dicts.labels
+        .filter((l) => !needle || l.name.toLowerCase().includes(needle))
+        .slice(0, 5)
+        .map((l) => ({ key: l.id, label: `#${l.name}`, insert: l.name.replace(/\s+/g, "") })),
+    };
+  }, [value, many, dicts]);
+
+  const applySuggest = (insert: string) => {
+    const parts = value.split(/(\s+)/);
+    for (let i = parts.length - 1; i >= 0; i -= 1) {
+      if (parts[i].trim()) {
+        parts[i] = `${parts[i][0]}${insert} `;
+        break;
+      }
+    }
+    setValue(parts.join(""));
+    ref.current?.focus();
+  };
+
+  const submit = async (items: QuickParseResult[]) => {
+    if (!items.length || busy || items.some((i) => !i.title)) return;
     setBusy(true);
-    setProgress(titles.length > 1 ? { done: 0, total: titles.length } : null);
+    setProgress(items.length > 1 ? { done: 0, total: items.length } : null);
     try {
-      for (let i = 0; i < titles.length; i += 1) {
-        await onCreate([titles[i]]);
+      for (let i = 0; i < items.length; i += 1) {
+        await onCreate([items[i]]);
         setProgress((p) => (p ? { ...p, done: i + 1 } : null));
       }
       setValue("");
@@ -1041,7 +1101,7 @@ function ColumnComposer({
           }
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            if (!many) void submit(lines);
+            if (!many) void submit(parsed);
           }
         }}
         placeholder={`Tiêu đề công việc trong "${columnName}"…`}
@@ -1059,7 +1119,7 @@ function ColumnComposer({
               {splitTitles(value, true).length > MAX_PASTE_LINES && ` (đã cắt còn ${MAX_PASTE_LINES})`}
             </span>
             <span className="flex items-center gap-1.5 shrink-0">
-              <Button size="sm" className="h-6 text-[11px]" disabled={busy} onClick={() => void submit(lines)}>
+              <Button size="sm" className="h-6 text-[11px]" disabled={busy} onClick={() => void submit(parsed)}>
                 Tạo {lines.length} công việc
               </Button>
               <Button
@@ -1067,13 +1127,40 @@ function ColumnComposer({
                 variant="outline"
                 className="h-6 text-[11px]"
                 disabled={busy}
-                onClick={() => void submit([lines.join(" ").slice(0, 200)])}
+                onClick={() => void submit([parseQuickTask(lines.join(" ").slice(0, 200), dicts)])}
               >
                 Giữ một công việc
               </Button>
             </span>
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* Cho người dùng THẤY hệ thống hiểu gì trước khi Enter — không bao giờ ghi ngầm */}
+      {!many && one && (one.chips.length > 0 || one.unknown.length > 0) && (
+        <div className="flex flex-wrap items-center gap-1">
+          {one.chips.map((c) => (
+            <Badge key={c.token + c.kind} variant={c.kind === "priority" ? "warning" : c.kind === "due" ? "outline" : "secondary"} className="text-[10px] px-1.5 py-0 h-4 font-normal">
+              {c.text}
+            </Badge>
+          ))}
+          {one.unknown.map((u) => (
+            <Badge key={u.token} variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal text-muted-foreground" title={`${u.token}: ${u.reason} — giữ nguyên trong tiêu đề`}>
+              {u.token} · {u.reason}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {suggest && suggest.items.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-[10px] text-muted-foreground">Gợi ý:</span>
+          {suggest.items.map((it) => (
+            <Button key={it.key} type="button" variant="outline" size="sm" className="h-5 px-1.5 text-[10px]" onClick={() => applySuggest(it.insert)}>
+              {it.label}
+            </Button>
+          ))}
+        </div>
       )}
 
       {progress && <Progress value={(progress.done / progress.total) * 100} className="h-1" />}
@@ -1088,8 +1175,8 @@ function ColumnComposer({
           ) : (
             <>
               <kbd className="px-1 rounded border bg-background font-mono">Enter</kbd> tạo ·{" "}
-              <kbd className="px-1 rounded border bg-background font-mono">Shift+Enter</kbd> xuống dòng ·{" "}
-              <kbd className="px-1 rounded border bg-background font-mono">Esc</kbd> đóng
+              <kbd className="px-1 rounded border bg-background font-mono">Esc</kbd> đóng · gõ{" "}
+              <span className="font-mono text-foreground">@người #nhãn !cao 4h t6 ~react&gt;=3</span>
             </>
           )}
         </span>
@@ -1098,7 +1185,7 @@ function ColumnComposer({
           size="sm"
           className="h-5 px-0 text-[10px]"
           disabled={busy}
-          onClick={() => onOpenFull(lines[0] ?? "")}
+          onClick={() => onOpenFull(one?.title || lines[0] || "")}
         >
           Mở đầy đủ…
         </Button>
@@ -1131,6 +1218,7 @@ function Column({
   onCloseComposer,
   onQuickCreate,
   onOpenFull,
+  dicts,
   currentUserId,
   canEdit,
 }: {
@@ -1155,8 +1243,9 @@ function Column({
   onMenuOpenChange: (taskId: string | null) => void;
   composerOpen: boolean;
   onCloseComposer: () => void;
-  onQuickCreate: (titles: string[]) => Promise<void>;
+  onQuickCreate: (items: QuickParseResult[]) => Promise<void>;
   onOpenFull: (title: string) => void;
+  dicts: QuickParseDicts;
   currentUserId?: string;
   canEdit: boolean;
 }) {
@@ -1320,6 +1409,7 @@ function Column({
             (composerOpen ? (
               <ColumnComposer
                 columnName={col.name}
+                dicts={dicts}
                 onCreate={onQuickCreate}
                 onOpenFull={onOpenFull}
                 onClose={onCloseComposer}

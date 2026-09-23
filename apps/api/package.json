@@ -103,7 +103,11 @@
     "testEnvironment": "node",
     "moduleNameMapper": {
       "^src/(.*)$": "<rootDir>/$1"
-    }
+    },
+    "roots": [
+      "<rootDir>",
+      "<rootDir>/../../../packages/shared/src"
+    ]
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"
