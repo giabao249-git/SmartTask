@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { useModKey } from "@/lib/hooks/use-mod-key";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Bot,
@@ -34,13 +35,13 @@ interface ShortcutSection {
   items: ShortcutItem[];
 }
 
-const SHORTCUT_SECTIONS: ShortcutSection[] = [
+const buildSections = (mod: string): ShortcutSection[] => [
   {
     title: "Trợ lý AI & Hộp hội thoại",
     icon: Bot,
     items: [
       {
-        keys: ["Enter", "⌘ Enter"],
+        keys: ["Enter", `${mod} Enter`],
         description: "Gửi yêu cầu hoặc câu hỏi cho AI",
       },
       {
@@ -65,7 +66,7 @@ const SHORTCUT_SECTIONS: ShortcutSection[] = [
         description: "Đóng danh sách gợi ý lệnh AI",
       },
       {
-        keys: ["⌘", "H"],
+        keys: [mod, "H"],
         description: "Mở hoặc đóng ngăn kéo Lịch sử các phiên chat",
         badge: "Phiên chat",
       },
@@ -76,16 +77,16 @@ const SHORTCUT_SECTIONS: ShortcutSection[] = [
     icon: Navigation,
     items: [
       {
-        keys: ["⌘", "K"],
+        keys: [mod, "K"],
         description: "Mở thanh tìm kiếm nhanh & danh mục lệnh (Command Palette)",
         badge: "Phổ biến",
       },
       {
-        keys: ["⌘", "J"],
+        keys: [mod, "J"],
         description: "Truy cập nhanh vào Trợ lý AI từ bất kỳ màn hình nào",
       },
       {
-        keys: ["⌘", "B"],
+        keys: [mod, "B"],
         description: "Ghim / Bỏ ghim thanh bên Zen Sidebar cố định hoặc thu gọn",
       },
       {
@@ -125,6 +126,8 @@ const SHORTCUT_SECTIONS: ShortcutSection[] = [
 ];
 
 export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
+  const mod = useModKey();
+  const sections = React.useMemo(() => buildSections(mod), [mod]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl max-h-[85vh] p-0 flex flex-col overflow-hidden">
@@ -149,7 +152,7 @@ export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
 
         <ScrollArea className="flex-1 p-4 max-h-[60vh]">
           <div className="space-y-6">
-            {SHORTCUT_SECTIONS.map((sec) => (
+            {sections.map((sec) => (
               <div key={sec.title} className="space-y-2.5">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
                   <sec.icon className="h-3.5 w-3.5 text-primary" />
@@ -195,7 +198,10 @@ export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
         </ScrollArea>
 
         <div className="p-3 border-t border-border/60 bg-muted/10 text-center text-[11px] text-muted-foreground flex items-center justify-between px-4">
-          <span>Bấm phím <kbd className="font-mono bg-background border px-1 rounded text-[10px]">?</kbd> ở bất kỳ đâu để xem lại bảng này</span>
+          <span>
+            Bấm <kbd className="font-mono bg-background border px-1 rounded text-[10px]">?</kbd> ở bất kỳ đâu để xem lại bảng này
+            {mod === "Ctrl" && <> · phím <kbd className="font-mono bg-background border px-1 rounded text-[10px]">Super</kbd> cũng dùng được thay cho Ctrl</>}
+          </span>
           <kbd className="font-mono bg-background border px-1.5 py-0.5 rounded text-[10px]">Esc đóng</kbd>
         </div>
       </DialogContent>

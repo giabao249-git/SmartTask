@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** Đường cũ (thông báo, ⌘K, link đã chia sẻ) → màn Công việc, giữ nguyên ?task= và các tham số lọc. */
+/** Đường cũ (thông báo, bảng lệnh, link đã chia sẻ) → màn Công việc, giữ nguyên ?task= và các tham số lọc. */
 export default async function LegacyPage({
   params,
   searchParams,

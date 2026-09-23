@@ -74,6 +74,7 @@ import { describeError, isApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useSkills, useSprints } from "@/lib/hooks/queries";
 import { useCurrentProject } from "@/lib/hooks/use-project";
+import { useModKey } from "@/lib/hooks/use-mod-key";
 import type { ChatMessageView, ChatSessionView, ProposalView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -133,6 +134,7 @@ const SLASH_COMMANDS = [
 /** Trang Trợ lý AI (docs 12 §6): bảng lịch sử panel trượt · giữa chat chiếm trọn · phải rail bản nháp */
 export function AssistantView() {
   const project = useCurrentProject();
+  const mod = useModKey();
   const auth = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -203,7 +205,7 @@ export function AssistantView() {
   }, [messages]);
   const openDrafts = proposals.reduce((n, p) => n + p.items.filter((i) => i.status === "DRAFT").length, 0);
 
-  // Keyboard shortcut ⌘H to toggle History panel, and ? to toggle Shortcuts modal
+  // Ctrl/Super + H mở ngăn Lịch sử, ? mở bảng phím tắt (metaKey trên Linux/Windows là phím Super).
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === "h" || e.key === "H")) {
@@ -501,11 +503,11 @@ export function AssistantView() {
                 size="sm"
                 onClick={() => setHistorySheet(true)}
                 className="h-7 px-2.5 text-xs gap-1.5 text-muted-foreground hover:text-foreground shrink-0 border-border/80"
-                title="Lịch sử phiên chat (⌘H)"
+                title={`Lịch sử phiên chat (${mod}+H)`}
               >
                 <History className="h-3.5 w-3.5 text-info" />
                 <span>Lịch sử ({sessions.length})</span>
-                <kbd className="hidden sm:inline text-[9px] bg-background border px-1 rounded font-mono">⌘H</kbd>
+                <kbd className="hidden sm:inline text-[9px] bg-background border px-1 rounded font-mono">{mod}+H</kbd>
               </Button>
 
               {/* Tiêu đề phiên có thể đổi tên inline */}
@@ -801,7 +803,7 @@ export function AssistantView() {
                 onClick={() => send(input)}
                 disabled={busy || !input.trim()}
                 className="absolute right-2 bottom-2 h-7 w-7 rounded-lg shrink-0"
-                title="Gửi (Enter hoặc ⌘Enter)"
+                title={`Gửi (Enter hoặc ${mod}+Enter)`}
               >
                 <Send className="h-3.5 w-3.5" />
               </Button>
@@ -825,7 +827,7 @@ export function AssistantView() {
                 </span>
                 <span className="opacity-30">·</span>
                 <span className="flex items-center gap-1">
-                  <kbd className="px-1.5 py-0.5 text-[9px] font-mono bg-muted/80 rounded border border-border/80 text-foreground font-semibold">⌘H</kbd>
+                  <kbd className="px-1.5 py-0.5 text-[9px] font-mono bg-muted/80 rounded border border-border/80 text-foreground font-semibold">{mod}+H</kbd>
                   <span>lịch sử</span>
                 </span>
               </div>

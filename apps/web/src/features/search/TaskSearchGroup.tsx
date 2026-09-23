@@ -11,7 +11,7 @@ import { priorityToVariant } from "@/lib/status";
 import type { TaskListResponse } from "@/lib/types";
 
 /**
- * Nhóm kết quả task cho ⌘K: GET /projects/:id/tasks?q= (backend chưa có endpoint tìm kiếm toàn cục — docs web-tich-hop §4).
+ * Nhóm kết quả task cho bảng lệnh: GET /projects/:id/tasks?q= (backend chưa có endpoint tìm kiếm toàn cục — docs web-tich-hop §4).
  * Nhúng vào CommandDialog của AppShell: `<TaskSearchGroup projectId={…} projectKey={…} query={q} onPick={() => setOpen(false)} />`.
  */
 export function TaskSearchGroup({ projectId, projectKey, query, onPick }: { projectId: string | null; projectKey: string; query: string; onPick?: () => void }) {

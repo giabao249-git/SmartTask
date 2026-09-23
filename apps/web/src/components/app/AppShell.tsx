@@ -30,6 +30,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { ShortcutsDialog } from "@/components/app/ShortcutsDialog";
+import { useModKey } from "@/lib/hooks/use-mod-key";
 import { PlatformBanner } from "@/components/app/PlatformBanner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -92,6 +93,7 @@ export function AppShell({ children }: AppShellProps) {
 
   const [commandOpen, setCommandOpen] = React.useState(false);
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
+  const mod = useModKey();
   const [isDark, setIsDark] = React.useState(false);
   const [notifications, setNotifications] = React.useState(MOCK_NOTIFICATIONS);
   const auth = useAuth();
@@ -163,7 +165,8 @@ export function AppShell({ children }: AppShellProps) {
 
   const isAssistantPage = pathname.includes("/assistant");
 
-  // Keyboard shortcuts: ⌘K for search, ⌘J for AI Assistant, ⌘B for Pin/Unpin, ? for shortcuts
+  // Phím tắt: Ctrl/Super + K tìm kiếm, + J Trợ lý AI, + B ghim sidebar, ? bảng phím tắt.
+  // metaKey trên Linux/Windows chính là phím Super nên cả hai đều ăn.
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -421,9 +424,9 @@ export function AppShell({ children }: AppShellProps) {
         isPinned ? "md:pl-[260px]" : "md:pl-14"
       )}
     >
-      {/* ⌘K Command Palette Dialog */}
+      {/* Bảng lệnh Ctrl/Super + K */}
       <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
-        <CommandInput placeholder="Tìm kiếm nhanh công việc, thành viên, điều hướng (⌘K)..." />
+        <CommandInput placeholder={`Tìm kiếm nhanh công việc, thành viên, điều hướng (${mod}+K)...`} />
         <CommandList>
           <CommandEmpty>Không tìm thấy kết quả phù hợp</CommandEmpty>
           <CommandGroup heading="Điều hướng nhanh">
@@ -450,7 +453,7 @@ export function AppShell({ children }: AppShellProps) {
               className="cursor-pointer"
             >
               <Bot className="mr-2 h-4 w-4 text-info" />
-              <span>Mở Trợ lý AI SmartTask (⌘J)</span>
+              <span>Mở Trợ lý AI SmartTask ({mod}+J)</span>
             </CommandItem>
             <CommandItem
               onSelect={() => {
@@ -530,8 +533,8 @@ export function AppShell({ children }: AppShellProps) {
                   "h-7 w-7 text-muted-foreground hover:text-foreground shrink-0",
                   isPinned && "text-primary hover:text-primary"
                 )}
-                aria-label={isPinned ? "Bỏ ghim sidebar (⌘B)" : "Ghim sidebar (⌘B)"}
-                title={isPinned ? "Bỏ ghim sidebar (⌘B)" : "Ghim sidebar (⌘B)"}
+                aria-label={isPinned ? `Bỏ ghim sidebar (${mod}+B)` : `Ghim sidebar (${mod}+B)`}
+                title={isPinned ? `Bỏ ghim sidebar (${mod}+B)` : `Ghim sidebar (${mod}+B)`}
               >
                 <Pin className={cn("h-4 w-4 transition-transform", isPinned ? "rotate-45 fill-current text-primary" : "rotate-0")} />
               </Button>
@@ -564,7 +567,7 @@ export function AppShell({ children }: AppShellProps) {
               >
                 <Bot className="h-4 w-4 shrink-0 text-info" />
                 <span className="truncate flex-1 text-left">Trợ lý AI</span>
-                <kbd className="hidden sm:inline text-[9px] bg-background/80 border px-1 rounded font-mono">⌘J</kbd>
+                <kbd className="hidden sm:inline text-[9px] bg-background/80 border px-1 rounded font-mono">{mod}+J</kbd>
               </Button>
             ) : (
               <Tooltip>
@@ -579,7 +582,7 @@ export function AppShell({ children }: AppShellProps) {
                     <Bot className="h-4 w-4 text-info" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="right">Trợ lý AI (⌘J)</TooltipContent>
+                <TooltipContent side="right">Trợ lý AI ({mod}+J)</TooltipContent>
               </Tooltip>
             )}
 
@@ -733,7 +736,7 @@ export function AppShell({ children }: AppShellProps) {
 
           {/* Right: Search, Notifications, Theme Toggle, User Presence */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Quick ⌘K Search Button */}
+            {/* Nút mở nhanh bảng lệnh */}
             <Button
               variant="outline"
               size="sm"
@@ -744,7 +747,7 @@ export function AppShell({ children }: AppShellProps) {
                 <Search className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Tìm kiếm...</span>
               </span>
-              <kbd className="text-[10px] font-mono bg-background border px-1 rounded">⌘K</kbd>
+              <kbd className="text-[10px] font-mono bg-background border px-1 rounded">{mod}+K</kbd>
             </Button>
 
             {/* Notification Bell with Popover */}
