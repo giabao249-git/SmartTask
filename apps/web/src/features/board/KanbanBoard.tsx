@@ -275,10 +275,27 @@ export function KanbanBoard() {
    */
   const quickPatch = React.useCallback(
     (task: TaskListItem, patch: Record<string, unknown>, what: string) => {
+      // Giá trị trước khi đổi, để dựng lời gọi hoàn tác
+      const before = Object.fromEntries(
+        Object.keys(patch).map((k) => [k, (task as unknown as Record<string, unknown>)[k] ?? null]),
+      );
       mut.update.mutate(
         { id: task.id, version: task.version, patch },
         {
-          onSuccess: () => toast.success(`${what} — ${taskKeyOf(project.key, task)}`),
+          onSuccess: (updated) =>
+            toast.success(`${what} — ${taskKeyOf(project.key, task)}`, {
+              action: {
+                label: "Hoàn tác",
+                onClick: () =>
+                  mut.update.mutate(
+                    { id: task.id, version: updated.version, patch: before },
+                    {
+                      onSuccess: () => toast.success("Đã hoàn tác"),
+                      onError: (e) => toast.error("Hoàn tác không được", { description: describeError(e).code }),
+                    },
+                  ),
+              },
+            }),
           onError: (e) => {
             const { code, message } = describeError(e);
             if (code === "TASK_VERSION_CONFLICT") toast.error(`${taskKeyOf(project.key, task)} vừa được người khác sửa — đã tải lại`, { description: code });
@@ -293,10 +310,24 @@ export function KanbanBoard() {
 
   const quickAssign = React.useCallback(
     (task: TaskListItem, userIds: string[], what: string) => {
+      const before = task.assignees.map((a) => a.id);
       mut.assignees.mutate(
         { id: task.id, version: task.version, userIds },
         {
-          onSuccess: () => toast.success(`${what} — ${taskKeyOf(project.key, task)}`),
+          onSuccess: (updated) =>
+            toast.success(`${what} — ${taskKeyOf(project.key, task)}`, {
+              action: {
+                label: "Hoàn tác",
+                onClick: () =>
+                  mut.assignees.mutate(
+                    { id: task.id, version: updated.version, userIds: before },
+                    {
+                      onSuccess: () => toast.success("Đã hoàn tác"),
+                      onError: (e) => toast.error("Hoàn tác không được", { description: describeError(e).code }),
+                    },
+                  ),
+              },
+            }),
           onError: (e) => {
             toast.error("Giao việc thất bại", { description: describeError(e).code });
             void tasksQuery.refetch();
@@ -477,10 +508,32 @@ export function KanbanBoard() {
     void tasksQuery.refetch();
   };
 
+  /**
+   * Chuyển cột có hoàn tác (docs 02/05 §B4). Hoàn tác gọi lại chính endpoint cũ với cột và vị trí
+   * TRƯỚC đó, nhưng mang `version` MỚI NHẤT do lần ghi vừa rồi trả về — dùng version cũ là 409 ngay.
+   */
   const doMove = (task: TaskListItem, columnId: string, position?: number) =>
     move.mutate(
       { task, columnId, position },
-      { onSuccess: (t) => toast.success(`Đã chuyển ${taskKeyOf(project.key, t)} sang ${columns.find((c) => c.id === columnId)?.name ?? "cột"}`), onError: (e) => failMove(e, task) },
+      {
+        onSuccess: (t) => {
+          const fromName = columns.find((c) => c.id === task.columnId)?.name ?? "cột cũ";
+          toast.success(`Đã chuyển ${taskKeyOf(project.key, t)} sang ${columns.find((c) => c.id === columnId)?.name ?? "cột"}`, {
+            action: {
+              label: "Hoàn tác",
+              onClick: () =>
+                move.mutate(
+                  { task: { ...task, version: t.version }, columnId: task.columnId, position: task.position },
+                  {
+                    onSuccess: () => toast.success(`Đã trả ${taskKeyOf(project.key, t)} về ${fromName}`),
+                    onError: (e) => failMove(e, task),
+                  },
+                ),
+            },
+          });
+        },
+        onError: (e) => failMove(e, task),
+      },
     );
 
   const handleDragStart = (e: DragStartEvent) => setActiveTask(local.find((t) => t.id === e.active.id) ?? null);
