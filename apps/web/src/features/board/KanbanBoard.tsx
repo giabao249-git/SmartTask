@@ -512,7 +512,18 @@ export function KanbanBoard() {
         </DndContext>
       )}
 
-      <TaskDetailSheet taskId={selectedId} project={project} open={sheetOpen} onOpenChange={setSheetOpen} />
+      <TaskDetailSheet
+        taskId={selectedId}
+        project={project}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onOpenFullPage={() => {
+          const t = (tasksQuery.data ?? []).find((x) => x.id === selectedId);
+          if (!t) return;
+          setSheetOpen(false);
+          router.push(`/projects/${project.id}/tasks/${taskKeyOf(project.key, t)}`);
+        }}
+      />
 
       {/* Xoá là hành động không hoàn tác được (chưa có endpoint khôi phục) → AlertDialog theo docs 10 §4. */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>

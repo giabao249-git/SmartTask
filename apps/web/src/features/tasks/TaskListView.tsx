@@ -216,7 +216,18 @@ export function TaskListView() {
         </div>
       )}
 
-      <TaskDetailSheet taskId={selectedId} project={project} open={sheetOpen} onOpenChange={setSheetOpen} />
+      <TaskDetailSheet
+        taskId={selectedId}
+        project={project}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onOpenFullPage={() => {
+          const t = (tasksQuery.data ?? []).find((x) => x.id === selectedId);
+          if (!t) return;
+          setSheetOpen(false);
+          router.push(`/projects/${project.id}/tasks/${taskKeyOf(project.key, t)}`);
+        }}
+      />
     </div>
   );
 }

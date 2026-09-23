@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AtSign, ChevronDown, Download, FileText, History, Loader2, MessageSquare, Paperclip, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { AtSign, ChevronDown, Download, FileText, History, Loader2, Maximize2, MessageSquare, Paperclip, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { ActivityList } from "@/features/activity/ActivityList";
 import { useTasks } from "@/features/board/hooks";
 import { Badge } from "@/components/ui/badge";
@@ -44,10 +44,12 @@ export interface TaskDetailSheetProps {
   project: ProjectDetail;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Bấm nút phóng to trong Sheet — nơi gọi tự điều hướng sang trang riêng. */
+  onOpenFullPage?: () => void;
 }
 
 /** Chi tiết task từ GET /tasks/:id — sửa trường qua PATCH có version (409 → toast + tải lại), subtask, bình luận @mention, đính kèm. */
-export function TaskDetailSheet({ taskId, project, open, onOpenChange }: TaskDetailSheetProps) {
+export function TaskDetailSheet({ taskId, project, open, onOpenChange, onOpenFullPage }: TaskDetailSheetProps) {
   const q = useTask(open ? taskId : null);
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -63,14 +65,48 @@ export function TaskDetailSheet({ taskId, project, open, onOpenChange }: TaskDet
             <ErrorState code={describeError(q.error).code} message={describeError(q.error).message} onRetry={() => q.refetch()} />
           </div>
         ) : (
-          <TaskBody task={q.data} project={project} onRefresh={() => q.refetch()} />
+          <TaskDetailBody task={q.data} project={project} onRefresh={() => q.refetch()} onOpenFullPage={onOpenFullPage} />
         )}
       </SheetContent>
     </Sheet>
   );
 }
 
-function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: ProjectDetail; onRefresh: () => void }) {
+type Variant = "sheet" | "page";
+const HeaderWrap = ({ variant, children }: { variant: Variant; children: React.ReactNode }) =>
+  variant === "sheet" ? (
+    <SheetHeader className="p-4 pb-3 border-b border-border/60 space-y-2">{children}</SheetHeader>
+  ) : (
+    <div className="p-4 pb-3 border-b border-border/60 space-y-2">{children}</div>
+  );
+const TitleWrap = ({ variant, children }: { variant: Variant; children: React.ReactNode }) =>
+  variant === "sheet" ? <SheetTitle className="text-left">{children}</SheetTitle> : <h1 className="text-left">{children}</h1>;
+const DescWrap = ({ variant, children }: { variant: Variant; children: React.ReactNode }) =>
+  variant === "sheet" ? (
+    <SheetDescription className="text-left text-[11px]">{children}</SheetDescription>
+  ) : (
+    <p className="text-left text-[11px] text-muted-foreground">{children}</p>
+  );
+
+/**
+ * Thân màn chi tiết — dùng chung cho CẢ Sheet (bấm thẻ trên bảng) và trang riêng
+ * /projects/:id/tasks/ST-n. Một nguồn sự thật, hai khung chứa: `variant` chỉ đổi phần
+ * tiêu đề, vì SheetTitle/SheetDescription của Radix cần context Dialog nên không dùng
+ * được ngoài Sheet (docs 02/05 §D2).
+ */
+export function TaskDetailBody({
+  task,
+  project,
+  onRefresh,
+  variant = "sheet",
+  onOpenFullPage,
+}: {
+  task: TaskDetail;
+  project: ProjectDetail;
+  onRefresh: () => void;
+  variant?: "sheet" | "page";
+  onOpenFullPage?: () => void;
+}) {
   const m = useTaskMutations(project.id);
   const [title, setTitle] = React.useState(task.title);
   const [description, setDescription] = React.useState(task.description ?? "");
@@ -95,7 +131,7 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
 
   return (
     <>
-      <SheetHeader className="p-4 pb-3 border-b border-border/60 space-y-2">
+      <HeaderWrap variant={variant}>
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" className="font-mono text-xs">
             {taskKeyOf(project.key, task)}
@@ -115,8 +151,20 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
             </Badge>
           )}
           <span className="text-[10px] text-muted-foreground ml-auto font-mono">v{task.version}</span>
+          {variant === "sheet" && onOpenFullPage && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              aria-label="Mở toàn màn hình"
+              title="Mở toàn màn hình (Ctrl+click mã công việc để mở tab mới)"
+              onClick={onOpenFullPage}
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
-        <SheetTitle className="text-left">
+        <TitleWrap variant={variant}>
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -124,11 +172,11 @@ function TaskBody({ task, project, onRefresh }: { task: TaskDetail; project: Pro
             disabled={!project.canEdit || busy}
             className="text-base font-semibold h-9 border-transparent hover:border-border focus-visible:border-border px-2"
           />
-        </SheetTitle>
-        <SheetDescription className="text-left text-[11px]">
+        </TitleWrap>
+        <DescWrap variant={variant}>
           Tạo bởi {task.createdBy.shortName ?? task.createdBy.fullName} · {fmtDay(task.createdAt)} · sửa lần cuối {fmtDay(task.updatedAt)}
-        </SheetDescription>
-      </SheetHeader>
+        </DescWrap>
+      </HeaderWrap>
 
       <div className="flex-1 overflow-y-auto p-4 text-xs flex flex-col lg:flex-row gap-4 items-start">
         {/* Cột trái: nội dung — mô tả, việc con, bình luận, đính kèm, hoạt động */}
