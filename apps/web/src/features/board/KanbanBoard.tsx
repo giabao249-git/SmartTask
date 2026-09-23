@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot, Filter, Loader2 } from "lucide-react";
+import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot, Filter, Loader2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -25,10 +25,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TaskCard, taskKeyOf } from "@/components/app/TaskCard";
+import { AssigneePicker, LabelPicker, SkillPicker } from "@/components/app/TaskFieldPickers";
 import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -125,6 +127,18 @@ export function KanbanBoard() {
   /** Cột nào đang mở ô tạo nhanh (mỗi lúc chỉ một). */
   const [composerColId, setComposerColId] = React.useState<string | null>(null);
   const [draftTitle, setDraftTitle] = React.useState("");
+  /** Các ô chọn nâng cao trong hộp thoại tạo — Popover nên FormData không đọc được, phải giữ state. */
+  const [newAssignees, setNewAssignees] = React.useState<string[]>([]);
+  const [newLabels, setNewLabels] = React.useState<string[]>([]);
+  const [newSkills, setNewSkills] = React.useState<{ skillId: string; minLevel: number }[]>([]);
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  const resetCreateForm = React.useCallback(() => {
+    setNewAssignees([]);
+    setNewLabels([]);
+    setNewSkills([]);
+    setMoreOpen(false);
+    setDraftTitle("");
+  }, []);
 
   const columns = React.useMemo(
     () => project.columns.slice().sort((a, b) => a.position - b.position),
@@ -425,7 +439,7 @@ export function KanbanBoard() {
         open={createOpen}
         onOpenChange={(o) => {
           setCreateOpen(o);
-          if (!o) setDraftTitle("");
+          if (!o) resetCreateForm();
         }}
       >
         <DialogContent className="sm:max-w-lg" key={draftTitle}>
@@ -433,7 +447,6 @@ export function KanbanBoard() {
             onSubmit={(e) => {
               e.preventDefault();
               const f = new FormData(e.currentTarget);
-              const assignee = String(f.get("assigneeId") ?? "");
               const col = String(f.get("columnId") ?? "") || selectedColumnId;
               const desc = String(f.get("description") ?? "").trim();
               mut.create.mutate(
@@ -442,15 +455,20 @@ export function KanbanBoard() {
                   description: desc || undefined,
                   type: String(f.get("type") ?? "TASK"),
                   priority: String(f.get("priority") ?? "MEDIUM"),
+                  difficulty: Number(f.get("difficulty")) || undefined,
                   estimateHours: Number(f.get("estimateHours")) || undefined,
+                  startDate: String(f.get("startDate") ?? "") || undefined,
                   dueDate: String(f.get("dueDate") ?? "") || undefined,
                   columnId: col && col !== "__first" ? col : undefined,
                   sprintId: createSprintId,
-                  assigneeIds: assignee && assignee !== "__none" ? [assignee] : [],
+                  assigneeIds: newAssignees,
+                  labelIds: newLabels,
+                  requiredSkills: newSkills,
                 },
                 {
                   onSuccess: (t) => {
                     setCreateOpen(false);
+                    resetCreateForm();
                     toast.success(`Đã tạo ${taskKeyOf(project.key, t)}`);
                   },
                   onError: (err) => toast.error(describeError(err).message, { description: describeError(err).code }),
@@ -547,23 +565,59 @@ export function KanbanBoard() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-foreground mb-1 block">Người thực hiện</label>
-                  <Select name="assigneeId" defaultValue="__none">
-                    <SelectTrigger className="text-xs h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none" className="text-xs">
-                        Chưa giao (Unassigned)
-                      </SelectItem>
-                      {project.members.map((m) => (
-                        <SelectItem key={m.id} value={m.id} className="text-xs">
-                          {m.fullName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <AssigneePicker value={newAssignees} members={project.members} disabled={mut.create.isPending} onChange={setNewAssignees} />
                 </div>
               </div>
+
+              {/*
+                Nhãn, kỹ năng yêu cầu, độ khó, ngày bắt đầu: để sau nút thu gọn cho form khỏi dài,
+                nhưng PHẢI có mặt ở bước tạo — kỹ năng và độ khó là đầu vào của tính tải (UC-24) và
+                bảng năng lực (UC-26); tạo xong bỏ trống thì việc đó vô hình với màn Cân bằng tải.
+              */}
+              <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="ghost" size="sm" className="h-7 w-full justify-between px-2 text-xs text-muted-foreground">
+                    <span>
+                      Thêm chi tiết
+                      {newLabels.length + newSkills.length > 0 && (
+                        <span className="ml-1 text-foreground">· đã đặt {newLabels.length + newSkills.length}</span>
+                      )}
+                    </span>
+                    <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", moreOpen && "rotate-180")} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-foreground mb-1 block">Nhãn</label>
+                      <LabelPicker value={newLabels} labels={project.labels} disabled={mut.create.isPending} onChange={setNewLabels} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-foreground mb-1 block">Kỹ năng yêu cầu</label>
+                      <SkillPicker value={newSkills} workspaceId={project.workspaceId} disabled={mut.create.isPending} onChange={setNewSkills} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-foreground mb-1 block">Độ khó (1–5)</label>
+                      <Select name="difficulty" defaultValue="3">
+                        <SelectTrigger className="text-xs h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4, 5].map((d) => (
+                            <SelectItem key={d} value={String(d)} className="text-xs">
+                              {d}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-foreground mb-1 block">Ngày bắt đầu</label>
+                      <Input name="startDate" type="date" className="text-xs h-9" />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
 
             <DialogFooter className="pt-2 border-t border-border/40">
