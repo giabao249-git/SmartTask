@@ -1,6 +1,12 @@
 # 05 · Nghiên cứu và đề xuất cải tiến Tạo task & Quản lý task
 
-**Phiên bản:** 1.0 — **Ngày:** 23/09/2026 (Tuần 03) — **Trạng thái:** chờ duyệt, chưa hiện thực
+**Phiên bản:** 1.1 — **Ngày:** 23/09/2026 (Tuần 03) — **Trạng thái:** đã duyệt; Phase 9 hiện thực xong phần lớn
+
+> **Cập nhật 23/09/2026:** 15 mục đã làm và commit (xem cột "Chốt làm gì" ở §12): A1, A2, A3, A5, A6,
+> A7, B3, B8, C3, D1, D2, D3, E1, E2, E3 — cộng việc bỏ ký hiệu phím Mac, hiện Ctrl theo hệ điều hành.
+> Còn lại của Phase 9–10: B1 (chọn nhiều + hàng loạt), B2 (sửa tại chỗ ở Danh sách), B4 (hoàn tác),
+> C1 (phím tắt toàn cục), C2 (bảng lệnh Ctrl/Super + K tìm & tạo việc — chờ `AppShell.tsx` rảnh), A4 (cú pháp `@ # !`),
+> B5, B6, B7, C4, C5.
 **Phạm vi:** UC-10 (công việc), UC-11 (subtask), UC-12 (Kanban), UC-15 (danh sách & bộ lọc).
 **Ràng buộc bắt buộc giữ nguyên:**
 
@@ -522,7 +528,7 @@ Kết luận: nới rộng và **tái cấu trúc bố cục** giải quyết đ
 |---|---|---|---|---|---|
 | 1 | A7 | Sửa lỗi tạo khi lọc Backlog | S | 🔴 lỗi dữ liệu | **MVP 06/11** |
 | 2 | B8 | Không mất bảng khi lọc rỗng | S | 🔴 chặn luồng | **MVP 06/11** |
-| 3 | C2 | ⌘K tìm & tạo công việc | S | 🔴 điểm nhấn demo | **MVP 06/11** |
+| 3 | C2 | Bảng lệnh (Ctrl/Super + K) tìm & tạo công việc | S | 🔴 điểm nhấn demo | **MVP 06/11** |
 | 4 | A1 | Tạo nhanh trong cột, Enter liên tiếp | S | 🔴 đã chốt là MVP (UC-12) | **MVP 06/11** |
 | 5 | A3 | Hộp thoại tạo đủ trường (kỹ năng, độ khó…) | M | 🔴 đầu vào của tính tải | **MVP 06/11** |
 | 6 | A6 | Cập nhật lạc quan khi tạo/sửa | S | 🟠 nền cho A1, B2 | **MVP 06/11** |
@@ -580,34 +586,34 @@ Kết luận: nới rộng và **tái cấu trúc bố cục** giải quyết đ
 
 | ✔ | Mã | Tên | Công sức | Quyết định (MVP 06/11 · nếu kịp · để sau · bỏ) |
 |---|---|---|---|---|
-| ☐ | A1 | Tạo nhanh trong cột, Enter tạo liên tiếp | S | |
-| ☐ | A2 | Dán nhiều dòng → nhiều task | S | |
-| ☐ | A3 | Hộp thoại tạo đủ trường (nhãn, kỹ năng, độ khó, ngày bắt đầu, nhiều người) | M | |
+| ✅ | A1 | Tạo nhanh trong cột, Enter tạo liên tiếp | S |  **đã làm 23/09** |
+| ✅ | A2 | Dán nhiều dòng → nhiều task | S |  **đã làm 23/09** |
+| ✅ | A3 | Hộp thoại tạo đủ trường (nhãn, kỹ năng, độ khó, ngày bắt đầu, nhiều người) | M |  **đã làm 23/09** |
 | ☐ | A4 | Cú pháp `@người #nhãn !ưu-tiên 4h t6` | M | |
-| ☐ | A5 | Nhân bản task / mẫu task | S | |
-| ☐ | A6 | Cập nhật lạc quan khi tạo & sửa | S | |
-| ☐ | A7 | Sửa lỗi tạo khi lọc Backlog rơi vào sprint | S | |
+| ✅ | A5 | Nhân bản task / mẫu task | S |  **đã làm 23/09** |
+| ✅ | A6 | Cập nhật lạc quan khi tạo & sửa | S |  **đã làm 23/09** |
+| ✅ | A7 | Sửa lỗi tạo khi lọc Backlog rơi vào sprint | S |  **đã làm 23/09** |
 | ☐ | B1 | Chọn nhiều + thao tác hàng loạt (≤ 50) | L | |
 | ☐ | B2 | Sửa tại chỗ trên Danh sách | M | |
-| ☐ | B3 | Sửa nhanh trên thẻ Kanban (giao/ưu tiên/hạn/nhân bản) | S | |
+| ✅ | B3 | Sửa nhanh trên thẻ Kanban (giao/ưu tiên/hạn/nhân bản) | S |  **đã làm 23/09** |
 | ☐ | B4 | Hoàn tác + xác nhận trước khi ghi hàng loạt | S | |
 | ☐ | B5 | Bộ lọc lưu được (localStorage) | S | |
 | ☐ | B6 | Swimlane theo người / ưu tiên | M | |
 | ☐ | B7 | Backlog tách khỏi sprint | M | |
-| ☐ | B8 | Lọc rỗng vẫn giữ bảng + nút “Xoá bộ lọc” | S | |
+| ✅ | B8 | Lọc rỗng vẫn giữ bảng + nút “Xoá bộ lọc” | S |  **đã làm 23/09** |
 | ☐ | C1 | Bộ phím tắt toàn cục kiểu Jira/Linear | M | |
-| ☐ | C2 | ⌘K tìm & tạo công việc | S | |
-| ☐ | C3 | Bớt request thừa khi mở Sheet | S | |
+| ☐ | C2 | Bảng lệnh (Ctrl/Super + K) tìm & tạo công việc | S | |
+| ✅ | C3 | Bớt request thừa khi mở Sheet | S |  **đã làm 23/09** |
 | ☐ | C4 | Không khoá cả Sheet khi lưu một trường | M | |
 | ☐ | C5 | Chế độ tập trung (phím `F`) | S | |
-| ☐ | D1 | Tái cấu trúc Sheet chi tiết (2 cột, gom nhóm, `sm:max-w-3xl`) | M | |
-| ☐ | D2 | Trang toàn màn hình `/projects/:id/tasks/ST-n` | M | |
-| ☐ | D3 | Chốt nguyên tắc trường nào ở form tạo, trường nào ở màn xem | — | |
-| ☐ | E1 | `TaskType` STORY/TASK/BUG (enum cố định) — **hay dùng nhãn quy ước thay thế?** | M | |
-| ☐ | E2 | Dọn `TaskSize` khỏi DTO (giữ cột CSDL) | S | |
-| ☐ | E3 | Đổi nhãn ưu tiên `URGENT` → “Rất cao”, làm rõ cờ Khẩn | S | |
+| ✅ | D1 | Tái cấu trúc Sheet chi tiết (2 cột, gom nhóm, `sm:max-w-3xl`) | M |  **đã làm 23/09** |
+| ✅ | D2 | Trang toàn màn hình `/projects/:id/tasks/ST-n` | M |  **đã làm 23/09** |
+| ✅ | D3 | Chốt nguyên tắc trường nào ở form tạo, trường nào ở màn xem | — |  **đã làm 23/09** |
+| ✅ | E1 | `TaskType` STORY/TASK/BUG (enum cố định) — **hay dùng nhãn quy ước thay thế?** | M |  **đã làm 23/09** |
+| ✅ | E2 | Dọn `TaskSize` khỏi DTO (giữ cột CSDL) | S |  **đã làm 23/09** |
+| ✅ | E3 | Đổi nhãn ưu tiên `URGENT` → “Rất cao”, làm rõ cờ Khẩn | S |  **đã làm 23/09** |
 | ☐ | E4 | Kết quả xử lý (huỷ / không làm) | M | |
-| ☐ | — | Sửa `ShortcutsDialog` chỉ liệt kê phím có thật | S | |
+| ✅ | — | Sửa `ShortcutsDialog` chỉ liệt kê phím có thật | S | **đã làm một phần 23/09** — mục phím C đã đúng; còn Space/Enter và mũi tên |
 | ☐ | — | `POST /projects/:id/tasks/bulk` | S | |
 | ☐ | — | `PATCH /tasks/bulk` | S | |
 | ☐ | — | `POST /tasks/:id/restore` | S | |
