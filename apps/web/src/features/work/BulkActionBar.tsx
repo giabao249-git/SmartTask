@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
 import { api, describeError } from "@/lib/api";
-import { useTaskMutations } from "@/features/board/hooks";
+import { useTaskCache, useTaskMutations } from "@/features/board/hooks";
 import { useSprints } from "@/lib/hooks/queries";
 import type { ProjectDetail, TaskListItem, TaskPriority } from "@/lib/types";
 import { toast } from "sonner";
@@ -54,6 +54,7 @@ interface PendingOp {
 export function BulkActionBar({ project, tasks }: { project: ProjectDetail; tasks: TaskListItem[] }) {
   const sel = useWorkSelection();
   const mut = useTaskMutations(project.id);
+  const cache = useTaskCache(project.id);
   const sprints = useSprints(project.id);
   const [pending, setPending] = React.useState<PendingOp | null>(null);
   const [progress, setProgress] = React.useState<{ done: number; total: number } | null>(null);
@@ -73,6 +74,9 @@ export function BulkActionBar({ project, tasks }: { project: ProjectDetail; task
         toast.success(`${op.label} — ${chosen.length} công việc`);
       } catch (e) {
         toast.error(`${op.label} thất bại`, { description: describeError(e).code });
+      } finally {
+        // Đường gộp gọi api.post thẳng, không qua mutation nên cache không tự cập nhật
+        cache.invalidate();
       }
       sel.clear();
       return;

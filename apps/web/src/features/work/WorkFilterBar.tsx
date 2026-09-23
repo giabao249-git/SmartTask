@@ -61,6 +61,8 @@ export function WorkFilterBar({ counts, syncing }: { counts: { my: number; unass
       </div>
 
       <Filter className="h-3.5 w-3.5 text-muted-foreground ml-1" />
+      {/* Màn Backlog theo định nghĩa là "chưa vào sprint" — ô lọc sprint không có nghĩa ở đó */}
+      {f.view !== "backlog" && (
       <Select value={f.sprint} onValueChange={(v) => f.set({ sprint: v })}>
         <SelectTrigger className="h-8 text-xs w-48">
           <SelectValue />
@@ -79,6 +81,7 @@ export function WorkFilterBar({ counts, syncing }: { counts: { my: number; unass
           ))}
         </SelectContent>
       </Select>
+      )}
       <Select value={f.assignee} onValueChange={(v) => f.set({ assignee: v })}>
         <SelectTrigger className="h-8 text-xs w-44">
           <SelectValue />

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CalendarRange, Grid2X2, Kanban, ListTodo, Minimize2 } from "lucide-react";
+import { CalendarRange, Grid2X2, Inbox, Kanban, ListTodo, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,6 +13,7 @@ import { KanbanBoard } from "@/features/board/KanbanBoard";
 import { TaskListView } from "@/features/tasks/TaskListView";
 import { TimelineGanttView } from "@/features/timeline/TimelineGanttView";
 import { EisenhowerMatrixView } from "@/features/eisenhower/EisenhowerMatrixView";
+import { BacklogView } from "@/features/backlog/BacklogView";
 import { WorkFilterBar } from "./WorkFilterBar";
 import { useWorkFilters, WORK_VIEWS, WorkFiltersProvider, type WorkView as ViewKey } from "./filters";
 import { WorkSelectionProvider } from "./selection";
@@ -24,6 +25,7 @@ const ICON: Record<ViewKey, typeof Kanban> = {
   list: ListTodo,
   timeline: CalendarRange,
   eisenhower: Grid2X2,
+  backlog: Inbox,
 };
 
 /** Màn "Công việc": 4 cách nhìn cùng một tập task (GET /projects/:id/tasks), chung bộ lọc và chung cache. */
@@ -131,9 +133,10 @@ function WorkBody() {
       {f.view === "list" && <TaskListView />}
       {f.view === "timeline" && <TimelineGanttView />}
       {f.view === "eisenhower" && <EisenhowerMatrixView />}
+      {f.view === "backlog" && <BacklogView />}
 
       {/* Chọn nhiều dùng chung cho Bảng và Danh sách nên thanh hành động đặt ở đây */}
-      {(f.view === "board" || f.view === "list") && <BulkActionBar project={project} tasks={tasks.data ?? []} />}
+      {(f.view === "board" || f.view === "list" || f.view === "backlog") && <BulkActionBar project={project} tasks={tasks.data ?? []} />}
     </div>
   );
 }

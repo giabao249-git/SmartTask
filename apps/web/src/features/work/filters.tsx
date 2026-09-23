@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { TaskListItem } from "@/lib/types";
 
-export type WorkView = "board" | "list" | "timeline" | "eisenhower";
+export type WorkView = "board" | "list" | "timeline" | "eisenhower" | "backlog";
 export type QuickFilter = "all" | "my" | "unassigned";
 /** Nhóm thẻ trên bảng Kanban thành các hàng (swimlane). */
 export type GroupBy = "none" | "assignee" | "priority";
@@ -14,6 +14,7 @@ export const WORK_VIEWS: { key: WorkView; label: string; short: string }[] = [
   { key: "list", label: "Danh sách", short: "Danh sách" },
   { key: "timeline", label: "Gantt / Timeline", short: "Timeline" },
   { key: "eisenhower", label: "Ma trận Eisenhower", short: "Eisenhower" },
+  { key: "backlog", label: "Backlog (chưa vào sprint)", short: "Backlog" },
 ];
 
 export interface WorkFilters {
@@ -82,9 +83,11 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
   const explicitSprint = params.get("sprint");
 
   const value = React.useMemo<WorkFiltersCtx>(() => {
+    // Màn Backlog luôn chỉ lấy việc chưa thuộc sprint — bộ lọc sprint không áp ở đây
+    const inBacklogView = view === "backlog";
     const query = {
-      sprintId: sprint !== "__all" && sprint !== "__backlog" ? sprint : undefined,
-      backlog: sprint === "__backlog" ? (true as const) : undefined,
+      sprintId: inBacklogView ? undefined : sprint !== "__all" && sprint !== "__backlog" ? sprint : undefined,
+      backlog: inBacklogView || sprint === "__backlog" ? (true as const) : undefined,
       assigneeId: assignee !== "__all" ? assignee : undefined,
       type: type !== "__all" ? type : undefined,
       q: q.trim() || undefined,
