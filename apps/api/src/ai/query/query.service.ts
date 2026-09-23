@@ -1,8 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma, TaskType } from '@prisma/client';
 import type {
   BlockItem,
   DataQuerySpec,
+  QueryIntent,
   QueryBlock,
   QueryResult,
   StatItem,
@@ -10,6 +12,7 @@ import type {
 import { AppError } from '../../common/app-error';
 import { ProjectAccessService } from '../../common/access/project-access.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { Env } from '../../config/env.schema';
 import { WorkloadService } from '../../workload/workload.service';
 import { CodeBook } from '../context/short-codes';
 
@@ -35,6 +38,52 @@ const TYPE_LABEL: Record<string, string> = {
   BUG: 'Bug',
 };
 
+/** Trần kích thước kết quả lưu kèm tin nhắn — tránh phình bảng chat_messages và prompt lượt sau. */
+const MAX_RESULT_BYTES = 48_000;
+
+/**
+ * Cắt bớt khối cho vừa trần: giữ nguyên thẻ số/ghi chú, rút ngắn danh sách dài.
+ * Trả về kết quả mới kèm ghi chú nói rõ đã cắt (không im lặng).
+ */
+export function trimQueryResult(result: QueryResult): QueryResult {
+  const size = (r: QueryResult) => Buffer.byteLength(JSON.stringify(r), 'utf8');
+  if (size(result) <= MAX_RESULT_BYTES) return result;
+  let trimmed: QueryResult = result;
+  for (const cap of [15, 8, 4, 2]) {
+    trimmed = {
+      ...result,
+      blocks: result.blocks.map((b) =>
+        b.kind === 'task_list' ||
+        b.kind === 'people_list' ||
+        b.kind === 'activity_list'
+          ? { ...b, items: b.items.slice(0, cap) }
+          : b.kind === 'agenda'
+            ? {
+                ...b,
+                groups: b.groups
+                  .slice(0, cap)
+                  .map((g) => ({ ...g, items: g.items.slice(0, cap) })),
+              }
+            : b.kind === 'table'
+              ? { ...b, rows: b.rows.slice(0, cap) }
+              : b,
+      ),
+    };
+    if (size(trimmed) <= MAX_RESULT_BYTES) break;
+  }
+  return {
+    ...trimmed,
+    blocks: [
+      ...trimmed.blocks,
+      {
+        kind: 'note',
+        text: 'Kết quả dài nên đã rút gọn để lưu vào hội thoại — mở màn Công việc để xem đầy đủ.',
+        tone: 'muted',
+      },
+    ],
+  };
+}
+
 /** Prisma trả Decimal cho giờ — đổi về number để tính và hiển thị. */
 const num = (v: unknown): number => (v == null ? 0 : Number(v));
 
@@ -47,6 +96,33 @@ const startOfWeek = (d: Date) => {
   const dow = (s.getUTCDay() + 6) % 7;
   return new Date(s.getTime() - dow * DAY);
 };
+
+/**
+ * Quyền theo từng ý định — PHẢI khớp endpoint tương ứng, nếu không hỏi qua chat sẽ là đường vòng
+ * lấy dữ liệu mà màn hình không cho xem. 'manage' = PM dự án hoặc OWNER/ADMIN workspace.
+ */
+const INTENT_PERMISSION: Record<QueryIntent, 'read' | 'manage'> = {
+  TASK_LIST: 'read',
+  TASK_AGENDA: 'read',
+  TASK_DETAIL: 'read',
+  TASK_STATS: 'read',
+  TASK_BLOCKED: 'read',
+  MEMBER_LIST: 'read',
+  MEMBER_PROFILE: 'read',
+  WORKLOAD_WEEK: 'read',
+  CAPACITY_FREE: 'manage', // GET /projects/:id/capacity-table yêu cầu assertManage
+  WHO_KNOWS_SKILL: 'read',
+  BUS_FACTOR: 'read',
+  SPRINT_LIST: 'read',
+  SPRINT_PROGRESS: 'read',
+  ACTIVITY_FEED: 'read',
+  NOTIFICATION_LIST: 'read',
+  AI_USAGE: 'manage', // sổ token là dữ liệu quản trị
+};
+
+/** Truy vấn nặng (tính tải, bảng năng lực) — chặn thời gian để không giữ khoá phiên chat quá lâu. */
+const HEAVY_INTENTS: QueryIntent[] = ['WORKLOAD_WEEK', 'CAPACITY_FREE'];
+const HEAVY_TIMEOUT_MS = 8_000;
 
 export interface QueryContext {
   userId: string;
@@ -62,14 +138,40 @@ export interface QueryContext {
  */
 @Injectable()
 export class AiQueryService {
+  /** Cửa sổ trượt 60 giây theo người dùng — chặn bấm "Làm mới" liên tục làm nặng CSDL. */
+  private readonly hits = new Map<string, number[]>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: ProjectAccessService,
     private readonly workload: WorkloadService,
+    private readonly config: ConfigService<Env, true>,
   ) {}
+
+  private assertRate(userId: string): void {
+    // Đọc thẳng biến môi trường: ConfigService cache theo tiến trình nên đổi trần lúc chạy sẽ không thấy
+    const limit =
+      Number(process.env.AI_QUERY_RATE_LIMIT_PER_MINUTE) ||
+      this.config.get('AI_QUERY_RATE_LIMIT_PER_MINUTE', { infer: true });
+    const now = Date.now();
+    const recent = (this.hits.get(userId) ?? []).filter(
+      (t) => now - t < 60_000,
+    );
+    if (recent.length >= limit) {
+      this.hits.set(userId, recent);
+      throw new AppError('RATE_LIMITED', HttpStatus.TOO_MANY_REQUESTS, {
+        limit,
+        windowSeconds: 60,
+      });
+    }
+    recent.push(now);
+    this.hits.set(userId, recent);
+    if (this.hits.size > 5_000) this.hits.clear(); // chặn rò bộ nhớ khi nhiều người dùng
+  }
 
   async run(spec: DataQuerySpec, context: QueryContext): Promise<QueryResult> {
     // Quyền: luôn kiểm theo dự án của phiên chat, không tin tham số LLM trả về
+    this.assertRate(context.userId);
     const acc = await this.access.assertRead(context.userId, context.projectId);
     const ctx = context.codes
       ? context
@@ -77,6 +179,62 @@ export class AiQueryService {
     const at = new Date();
     const base = { intent: spec.intent, generatedAt: at.toISOString() };
 
+    // Thiếu quyền → trả ghi chú, KHÔNG trả số (và không ném lỗi làm hỏng lượt chat)
+    if (INTENT_PERMISSION[spec.intent] === 'manage' && !acc.canManage)
+      return {
+        ...base,
+        source: { endpoint: '', params: {}, rowCount: 0 },
+        blocks: [
+          {
+            kind: 'note',
+            text: 'Mục này chỉ dành cho PM dự án hoặc quản trị workspace.',
+            tone: 'warning',
+          },
+        ],
+      };
+
+    if (HEAVY_INTENTS.includes(spec.intent))
+      return this.withTimeout(this.dispatch(spec, ctx, acc, at, base), base);
+    return this.dispatch(spec, ctx, acc, at, base);
+  }
+
+  /** Quá hạn thì trả ghi chú thay vì treo lượt chat (khoá phiên đang giữ). */
+  private async withTimeout(
+    work: Promise<QueryResult>,
+    base: { intent: QueryIntent; generatedAt: string },
+  ): Promise<QueryResult> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<QueryResult>((resolve) => {
+      timer = setTimeout(
+        () =>
+          resolve({
+            ...base,
+            source: { endpoint: '', params: {}, rowCount: 0 },
+            blocks: [
+              {
+                kind: 'note',
+                text: 'Truy vấn mất quá lâu nên đã dừng. Bạn thu hẹp phạm vi (một sprint, một người) rồi hỏi lại giúp nhé.',
+                tone: 'warning',
+              },
+            ],
+          }),
+        HEAVY_TIMEOUT_MS,
+      );
+    });
+    try {
+      return await Promise.race([work, timeout]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  private async dispatch(
+    spec: DataQuerySpec,
+    ctx: QueryContext,
+    acc: { workspaceId: string; canManage: boolean },
+    at: Date,
+    base: { intent: QueryIntent; generatedAt: string },
+  ): Promise<QueryResult> {
     switch (spec.intent) {
       case 'TASK_LIST':
       case 'TASK_AGENDA':

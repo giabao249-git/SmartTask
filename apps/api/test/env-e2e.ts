@@ -23,3 +23,5 @@ process.env.APP_KEY ??= 'e2e-app-key-phase-7';
 process.env.SYSTEM_ADMIN_EMAILS ??= '';
 // e2e không bao giờ gọi nhà cung cấp thật, kể cả khi ca kiểm thử tạo cấu hình AI cho workspace
 process.env.AI_FORCE_FAKE ??= '1';
+// Bộ e2e gọi /ai/query hàng chục lần trong một phút — nới trần cho môi trường kiểm thử
+process.env.AI_QUERY_RATE_LIMIT_PER_MINUTE ??= '500';

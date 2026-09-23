@@ -68,7 +68,7 @@ Người dùng ──▶ LLM ──▶ DATA_QUERY { intent, filters }   (KHÔNG 
 **Backend trả về** (`QueryResult`): `blocks[]` + `source { endpoint, params, rowCount }` + `generatedAt` + `truncated?`.
 Khối hiện có: `stat_row`, `task_list`, `agenda`, `people_list`, `person_card`, `table`, `heatmap`, `bar_chart`, `line_chart`, `activity_list`, `note`, `empty`. Mỗi item mang `ref { type, id, key }` để bấm mở đúng việc/người.
 
-## 5. Bảy rủi ro và cách chặn
+## 5. Mười một rủi ro và cách chặn
 
 | Rủi ro | Cách chặn | Kiểm bằng |
 |---|---|---|
@@ -79,6 +79,11 @@ Khối hiện có: `stat_row`, `task_list`, `agenda`, `people_list`, `person_car
 | Field lạ / chèn tham số | Schema `.strict()` — `rawSql` bị từ chối 400 | "chặn đầu vào lạ" |
 | Nhồi nghìn dòng vào chat | `limit` mặc định 25, trần 100, kèm `truncated { shown, total }` | "cắt theo limit, báo tổng thật" |
 | Số cũ trong lịch sử chat | Hiện "Số liệu lúc HH:mm" + nút **Làm mới** gọi `POST /ai/query` — **0 token, không tính hạn mức AI** | "chạy lại không tốn lượt AI" |
+| Chat thành đường vòng lấy dữ liệu màn hình không cho xem | `INTENT_PERMISSION` khớp từng endpoint: `CAPACITY_FREE` và `AI_USAGE` cần `canManage`; thiếu quyền → khối `note`, **không có số** | "thành viên không xem được bảng năng lực qua chat" |
+| Hammer nút "Làm mới" làm nặng CSDL | Cửa sổ trượt 60 giây theo người dùng, trần `AI_QUERY_RATE_LIMIT_PER_MINUTE` (mặc định 30) → `429 RATE_LIMITED` | "vượt trần bị chặn 429" (đo thật: 34 lần → 29×200, 5×429) |
+| Truy vấn nặng treo lượt chat (đang giữ khoá phiên) | `WORKLOAD_WEEK`/`CAPACITY_FREE` chạy dưới trần 8 giây, quá hạn trả `note` gợi ý thu hẹp phạm vi | — |
+| Phình bảng `chat_messages` | `trimQueryResult` cắt danh sách dài cho payload ≤ 48 KB, kèm ghi chú đã rút gọn | "kết quả quá dài bị rút gọn" |
+| Workspace bị đình chỉ / chỉ đọc | Đi qua `assertRead` nên tuân vòng đời như mọi API: `SOFT_SUSPENDED` → 403 `WORKSPACE_SUSPENDED` | "tra cứu tuân theo vòng đời" |
 
 Ngoài ra, lượt tra cứu lỗi **không làm hỏng cả lượt chat**: `ChatService` bắt lỗi và đính một khối `note` giải thích, phần còn lại của câu trả lời vẫn hiển thị.
 
@@ -91,7 +96,7 @@ Ngoài ra, lượt tra cứu lỗi **không làm hỏng cả lượt chat**: `Ch
 | Endpoint chạy lại | `apps/api/src/ai/query/query.controller.ts` (`POST /ai/query`) |
 | Dạy LLM | `apps/api/src/ai/prompt/master-prompt.ts` (mục CHAT) + `provider/response-schemas.ts` (enum `type` phải có `DATA_QUERY`, nếu không Gemini bị `responseSchema` chặn) |
 | Vẽ khối | `apps/web/src/features/assistant/QueryBlocks.tsx` |
-| Kiểm thử | `apps/api/test/ai-query.e2e-spec.ts` (13 ca) |
+| Kiểm thử | `apps/api/test/ai-query.e2e-spec.ts` (17 ca) |
 
 ## 7. Chưa làm
 

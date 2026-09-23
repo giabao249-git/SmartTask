@@ -27,7 +27,7 @@ import {
 } from '../proposals/proposals.service';
 import { AiProviderService } from '../provider/ai-provider.service';
 import { QuotaService } from '../quota/quota.service';
-import { AiQueryService } from '../query/query.service';
+import { AiQueryService, trimQueryResult } from '../query/query.service';
 import {
   ActionValidatorService,
   type DecomposeValidation,
@@ -338,7 +338,7 @@ export class ChatService {
             role: ChatRole.ASSISTANT,
             text: action.reply ?? '',
             structuredData: (queryResult
-              ? { ...action, queryResult }
+              ? { ...action, queryResult: trimQueryResult(queryResult) }
               : action) as unknown as Prisma.InputJsonValue,
             schemaVersion: action.schemaVersion ?? 1,
             parseFailed: !!(action as { parseFailed?: boolean }).parseFailed,

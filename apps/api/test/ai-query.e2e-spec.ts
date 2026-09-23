@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp, uniqueEmail } from './helpers';
+import { trimQueryResult } from '../src/ai/query/query.service';
 
 /**
  * Tra cứu trong hội thoại (docs 14): LLM chỉ chọn ý định + bộ lọc, backend chạy truy vấn thật.
@@ -390,6 +391,52 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
     expect(asDev.body.blocks[0].kind).toBe('note');
   });
 
+  it('rủi ro — quyền theo từng ý định: thành viên thường KHÔNG xem được bảng năng lực qua chat', async () => {
+    // GET /projects/:id/capacity-table yêu cầu PM — hỏi qua trợ lý cũng phải chặn như vậy
+    const direct = await api()
+      .get(`/api/v1/projects/${projectId}/capacity-table`)
+      .set(auth(dev))
+      .expect(403);
+    expect(direct.body.code).toBe('FORBIDDEN');
+
+    const viaChat = await runQuery(dev, { intent: 'CAPACITY_FREE' }).expect(
+      200,
+    );
+    expect(viaChat.body.blocks).toHaveLength(1);
+    expect(viaChat.body.blocks[0].kind).toBe('note');
+    expect(viaChat.body.source.rowCount).toBe(0);
+
+    const asPm = await runQuery(pm, { intent: 'CAPACITY_FREE' }).expect(200);
+    expect(
+      asPm.body.blocks.some((b: { kind: string }) => b.kind === 'table'),
+    ).toBe(true);
+  });
+
+  it('rủi ro — workspace bị đình chỉ / chỉ đọc: tra cứu tuân theo vòng đời như mọi API khác', async () => {
+    const admin = { email: uniqueEmail('root'), token: '', id: '' };
+    await register(admin, 'Quản trị nền tảng');
+    await prisma.user.update({
+      where: { id: admin.id },
+      data: { isSuperAdmin: true, platformRole: 'ROOT_ADMIN' },
+    });
+    const setStatus = (status: string) =>
+      api()
+        .patch(`/api/v1/admin/workspaces/${wsId}/status`)
+        .set(auth(admin))
+        .send({ status, reason: 'kiểm thử tra cứu' })
+        .expect(200);
+
+    await setStatus('READ_ONLY_ENFORCED');
+    await runQuery(pm, { intent: 'TASK_LIST' }).expect(200); // chỉ đọc vẫn tra cứu được
+
+    await setStatus('SOFT_SUSPENDED');
+    const blocked = await runQuery(pm, { intent: 'TASK_LIST' }).expect(403);
+    expect(blocked.body.code).toBe('WORKSPACE_SUSPENDED');
+
+    await setStatus('ACTIVE');
+    await runQuery(pm, { intent: 'TASK_LIST' }).expect(200);
+  });
+
   it('rủi ro — quyền: người ngoài dự án không tra cứu được (404), không lộ dữ liệu', async () => {
     const res = await runQuery(outsider, { intent: 'TASK_LIST' }).expect(404);
     expect(res.body.code).toBe('NOT_FOUND');
@@ -425,6 +472,52 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
     }).expect(200);
     expect(res.body.blocks[0].items).toHaveLength(2);
     expect(res.body.truncated).toMatchObject({ shown: 2, total: 4 });
+  });
+
+  it('rủi ro — hammer nút Làm mới: vượt trần thì bị chặn 429', async () => {
+    // Dựng app riêng với trần thấp để kiểm chính cơ chế chặn (app chính đặt trần cao cho e2e)
+    process.env.AI_QUERY_RATE_LIMIT_PER_MINUTE = '3';
+    const { app: limited } = await createTestApp();
+    try {
+      const codes: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const r = await request(limited.getHttpServer())
+          .post('/api/v1/ai/query')
+          .set(auth(pm))
+          .send({ projectId, query: { intent: 'TASK_LIST' } });
+        codes.push(r.status);
+      }
+      expect(codes.filter((c) => c === 200).length).toBeLessThanOrEqual(3);
+      expect(codes).toContain(429);
+    } finally {
+      await limited.close();
+      process.env.AI_QUERY_RATE_LIMIT_PER_MINUTE = '500';
+    }
+  });
+
+  it('rủi ro — phình lịch sử chat: kết quả quá dài bị rút gọn kèm ghi chú', () => {
+    const many = Array.from({ length: 400 }, (_, i) => ({
+      ref: { type: 'task' as const, id: `id-${i}`, key: `TC-${i}` },
+      title: `Công việc số ${i} với tiêu đề dài để đẩy payload vượt trần lưu trữ`,
+      badges: [{ text: 'Trung bình' }, { text: 'Task' }],
+      meta: [{ icon: 'user' as const, text: 'Đỗ Lập Trình' }],
+    }));
+    const big = {
+      intent: 'TASK_LIST' as const,
+      generatedAt: new Date().toISOString(),
+      source: {
+        endpoint: 'GET /projects/:id/tasks',
+        params: {},
+        rowCount: 400,
+      },
+      blocks: [{ kind: 'task_list' as const, items: many }],
+    };
+    const before = Buffer.byteLength(JSON.stringify(big), 'utf8');
+    const after = trimQueryResult(big);
+    const size = Buffer.byteLength(JSON.stringify(after), 'utf8');
+    expect(before).toBeGreaterThan(48_000);
+    expect(size).toBeLessThanOrEqual(48_000);
+    expect(after.blocks.at(-1)).toMatchObject({ kind: 'note' });
   });
 
   it('rủi ro — số cũ trong lịch sử: chạy lại truy vấn KHÔNG tốn lượt AI', async () => {
