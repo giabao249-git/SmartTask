@@ -162,7 +162,9 @@ export function AssistantView() {
   const endRef = React.useRef<HTMLDivElement>(null);
 
   const sessionsQuery = useSessions(project.id, showArchived);
-  const detail = useSessionDetail(activeSessionId);
+  // Lượt đang chạy trên server: tin cuối của phiên là của người dùng và mới gửi trong 5 phút
+  const [awaitingReply, setAwaitingReply] = React.useState(false);
+  const detail = useSessionDetail(activeSessionId, awaitingReply);
   const sprintsQuery = useSprints(project.id);
   const skillsQuery = useSkills(project.workspaceId);
   const quota = useQuota(project.workspaceId);
@@ -173,6 +175,7 @@ export function AssistantView() {
   const [typingMessageId, setTypingMessageId] = React.useState<string | null>(null);
   // Tin vừa gửi hiện ngay (lạc quan) trong lúc chờ AI, thay vì đợi lượt trả về mới thấy
   const [pendingText, setPendingText] = React.useState<string | null>(null);
+  // Lượt đang chạy trên server: tin cuối của phiên là của người dùng và mới gửi trong 5 phút
   const sessionMut = useSessionMutations(project.id);
   const turn = useChatTurn(project.id, project.workspaceId);
   const apply = useApplyProposal(activeSessionId);
@@ -189,6 +192,13 @@ export function AssistantView() {
   const sprints = React.useMemo(() => (sprintsQuery.data ?? []).map((s) => ({ id: s.id, name: s.name })), [sprintsQuery.data]);
   const activeSprintId = project.activeSprint?.id;
   const busy = turn.isPending || apply.isPending || reject.isPending || patchItem.isPending;
+  // Sau khi F5 / quay lại màn: server vẫn đang chạy lượt nếu tin cuối là của người dùng
+  React.useEffect(() => {
+    const last = messages[messages.length - 1];
+    const waiting =
+      !!last && last.role === "USER" && Date.now() - new Date(last.createdAt).getTime() < 5 * 60_000;
+    setAwaitingReply(waiting);
+  }, [messages]);
   const openDrafts = proposals.reduce((n, p) => n + p.items.filter((i) => i.status === "DRAFT").length, 0);
 
   // Keyboard shortcut ⌘H to toggle History panel, and ? to toggle Shortcuts modal
@@ -624,14 +634,13 @@ export function AssistantView() {
                     </div>
                   </div>
                 )}
-                {turn.isPending && (
+                {(turn.isPending || awaitingReply) && (
                   <div className="flex gap-3 max-w-[85%] mr-auto items-start flex-row text-xs">
                     <div className="h-8 w-8 rounded-full bg-info/10 text-info border border-info/25 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
                       <Bot className="h-4 w-4 text-info" />
                     </div>
                     <div className="flex flex-col gap-1 items-start min-w-0">
                       <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground px-1">
-                        <Sparkles className="h-3 w-3 text-info animate-spin" />
                         <span>{fmtDate(new Date().toISOString())}</span>
                       </div>
                       <div className="rounded-2xl rounded-tl-xs px-4 py-3 bg-muted/60 text-foreground border border-border/60 shadow-xs">

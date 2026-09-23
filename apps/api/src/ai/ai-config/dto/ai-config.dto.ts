@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AiCacheMode, AiProvider, AiPurpose } from '@prisma/client';
+import {
+  AiCacheMode,
+  AiLogStatus,
+  AiProvider,
+  AiPurpose,
+} from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -210,6 +215,48 @@ export class PutPromptDto {
   @IsString()
   @MaxLength(300)
   changeNote?: string;
+}
+
+export class UsageCallsQueryDto {
+  @ApiPropertyOptional({ example: '2026-09-01' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+  @ApiPropertyOptional({ example: '2026-09-30' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+  @ApiPropertyOptional({ enum: AiPurpose })
+  @IsOptional()
+  @IsEnum(AiPurpose)
+  purpose?: AiPurpose;
+  @ApiPropertyOptional({ description: 'Lọc theo người gọi' })
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
+  @ApiPropertyOptional({ enum: AiLogStatus })
+  @IsOptional()
+  @IsEnum(AiLogStatus)
+  status?: AiLogStatus;
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+  @ApiPropertyOptional({ default: 25, maximum: 200 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
+  @ApiPropertyOptional({ default: 26263 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  usdVnd?: number;
 }
 
 export class UsageQueryDto {

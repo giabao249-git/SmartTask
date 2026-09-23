@@ -82,6 +82,9 @@ Kiểm thử lại nhánh Platform Admin / DeepSeek (commit `e192301` → `b1932
 | Seed tạo cấu hình cho provider không có khoá | CHAT/GENERAL trỏ DeepSeek trong khi `.env` không có `DEEPSEEK_API_KEY` → Trợ lý AI 503 | Seed chỉ tạo cấu hình cho provider **có khoá thật**; thiếu khoá DeepSeek thì Gemini gánh cả GENERAL/CHAT |
 | Danh mục model không sửa được | `assertSystemAdmin` chỉ so `SYSTEM_ADMIN_EMAILS` (rỗng) → nút "Thêm Model Mới"/"Sửa" luôn 403, kể cả tài khoản ROOT_ADMIN | Chấp nhận cả Platform Admin trong CSDL (`isSuperAdmin`/`ROOT_ADMIN`) đúng mô hình Dual-Tier ở docs 13; web chỉ bật nút cho Platform Admin, kèm ghi chú danh mục là dữ liệu toàn nền tảng |
 | ErrorState luôn ghi "xung đột phiên bản" | Mọi lỗi (404/403/mạng) đều hiện tiêu đề xung đột phiên bản | Tiêu đề tra theo mã lỗi |
+| Lượt AI hỏng làm phiên treo | Nhà cung cấp lỗi / JSON sai → service ném lỗi, phiên chỉ còn tin người dùng; ai đã F5 hoặc rời trang thì thấy như "mất tin nhắn" và chờ vô hạn | `runTurnOrRecord` ghi một tin trợ lý báo lỗi kèm mã vào phiên; web nhận ra "tin cuối là của người dùng" thì hiện lại trạng thái đang suy luận và hỏi lại mỗi 3 giây (socket `ai:session:updated` vẫn là đường chính) |
+| Sổ token chỉ có số gộp | Chỉ nhóm theo ngày/mục đích/người, không tra được lượt nào tốn bao nhiêu | Thêm `GET /workspaces/:id/ai-usage/calls` (phân trang, lọc mục đích/người/trạng thái) và bảng "Từng lượt gọi" trong tab Sổ Token; e2e kiểm tổng số dòng khớp sổ gộp |
+| Tab Sổ token bịa số khi trống | `generateFallbackUsage` trả dữ liệu giả khi API chưa có lượt nào | Xoá hẳn, hiện 0 và trạng thái trống |
 | Báo cáo kiểm thử giả | `scripts/platform-admin-puppeteer-test.mjs` tự dựng server mock cổng 4005 với route không tồn tại, xuất "5/5 PASSED" | Xoá script và báo cáo/ảnh kèm theo; thay bằng `test/admin.e2e-spec.ts` (6 ca chạy trên API thật) |
 
 ## Chưa làm / phase sau

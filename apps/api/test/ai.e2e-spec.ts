@@ -714,6 +714,49 @@ describe('AI MVP (e2e)', () => {
       expect(log?.workspacePromptVersion).toBe(2);
     });
 
+    it('nhật ký từng lượt gọi: mỗi lần gọi một dòng, lọc theo mục đích, phân trang', async () => {
+      const all = await api()
+        .get(`/api/v1/workspaces/${wsId}/ai-usage/calls?limit=100`)
+        .set(auth(pm))
+        .expect(200);
+      expect(all.body.total).toBeGreaterThan(3);
+      expect(all.body.items.length).toBe(all.body.total);
+      const first = all.body.items[0];
+      expect(first).toMatchObject({
+        provider: expect.any(String),
+        model: expect.any(String),
+      });
+      expect(first.user).toMatchObject({ id: pm.id });
+      // Sắp xếp mới nhất trước
+      const times = all.body.items.map(
+        (i: { createdAt: string }) => i.createdAt,
+      );
+      expect([...times].sort().reverse()).toEqual(times);
+      // Tổng của từng dòng khớp sổ gộp
+      const byPurpose = await api()
+        .get(`/api/v1/workspaces/${wsId}/ai-usage?groupBy=purpose`)
+        .set(auth(pm))
+        .expect(200);
+      expect(all.body.total).toBe(byPurpose.body.totals.calls);
+      const decompose = await api()
+        .get(
+          `/api/v1/workspaces/${wsId}/ai-usage/calls?purpose=DECOMPOSE&limit=5`,
+        )
+        .set(auth(pm))
+        .expect(200);
+      expect(
+        decompose.body.items.every(
+          (i: { purpose: string }) => i.purpose === 'DECOMPOSE',
+        ),
+      ).toBe(true);
+      expect(decompose.body.items.length).toBeLessThanOrEqual(5);
+      // Thành viên thường không xem được sổ
+      await api()
+        .get(`/api/v1/workspaces/${wsId}/ai-usage/calls`)
+        .set(auth(lan))
+        .expect(403);
+    });
+
     it('sổ token theo mục đích/người/ngày', async () => {
       const byPurpose = await api()
         .get(`/api/v1/workspaces/${wsId}/ai-usage?groupBy=purpose`)

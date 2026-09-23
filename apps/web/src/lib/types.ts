@@ -759,3 +759,35 @@ export interface SystemTelemetry {
   };
 }
 
+
+export interface AiCallLogItem {
+  id: string;
+  createdAt: string;
+  endpoint: string;
+  purpose: AiPurpose;
+  provider: AiProvider;
+  model: string;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  durationMs: number;
+  status: "SUCCESS" | "ERROR" | "INVALID_OUTPUT" | "QUOTA" | "TIMEOUT";
+  errorMessage: string | null;
+  userMessage: string | null;
+  masterPromptVersion: number | null;
+  workspacePromptVersion: number | null;
+  user: { id: string; fullName: string; shortName: string | null } | null;
+  costUsd: number;
+  costVnd: number;
+}
+
+export interface AiCallLogPage {
+  from: string;
+  to: string;
+  usdVnd: number;
+  page: number;
+  limit: number;
+  total: number;
+  items: AiCallLogItem[];
+}

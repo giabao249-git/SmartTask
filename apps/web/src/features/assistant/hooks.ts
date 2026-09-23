@@ -22,11 +22,17 @@ export function useSessions(projectId: string, includeArchived: boolean) {
 }
 
 /** Mở phiên: một request trả đủ; rail vẽ TỪ `proposals` server — không giữ nháp trong localStorage. */
-export function useSessionDetail(sessionId: string | null) {
+/**
+ * Chi tiết phiên. `awaitingReply` = lượt đang chạy trên server (tin cuối là của người dùng):
+ * hỏi lại mỗi 3 giây để câu trả lời vẫn về dù người dùng đã F5 hay đi sang màn khác
+ * (socket ai:session:updated là đường chính, đây là lưới an toàn khi socket chưa kịp nối lại).
+ */
+export function useSessionDetail(sessionId: string | null, awaitingReply = false) {
   return useQuery({
     queryKey: aiKeys.session(sessionId ?? ""),
     queryFn: () => api.get<SessionDetail>(`/ai/sessions/${sessionId}`),
     enabled: !!sessionId,
+    refetchInterval: awaitingReply ? 3000 : false,
   });
 }
 

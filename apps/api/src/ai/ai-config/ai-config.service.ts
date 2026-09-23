@@ -32,6 +32,7 @@ import type {
   UpdateAiConfigDto,
   UpdateModelCatalogDto,
   UpsertModelCatalogDto,
+  UsageCallsQueryDto,
   UsageQueryDto,
 } from './dto/ai-config.dto';
 
@@ -616,6 +617,71 @@ export class AiConfigService implements OnModuleInit {
   }
 
   // ── Sổ token / chi phí (UC-32, 40) ─────────────────────────
+
+  /**
+   * Nhật ký TỪNG LƯỢT gọi AI (không gộp): ai gọi, mục đích, model, token vào/ra, chi phí,
+   * thời gian, trạng thái. Sổ gộp theo ngày/mục đích/người vẫn giữ ở `usage()`.
+   */
+  async usageCalls(workspaceId: string, q: UsageCallsQueryDto) {
+    const to = q.to ? new Date(q.to) : new Date();
+    const from = q.from
+      ? new Date(q.from)
+      : new Date(to.getTime() - 30 * 86_400_000);
+    const toEnd = new Date(to);
+    toEnd.setUTCHours(23, 59, 59, 999);
+    const where = {
+      workspaceId,
+      createdAt: { gte: from, lte: toEnd },
+      ...(q.purpose ? { purpose: q.purpose } : {}),
+      ...(q.userId ? { userId: q.userId } : {}),
+      ...(q.status ? { status: q.status } : {}),
+    };
+    const page = q.page ?? 1;
+    const limit = Math.min(q.limit ?? 25, 200);
+    const usdVnd = q.usdVnd ?? 26_263;
+    const [rows, total] = await Promise.all([
+      this.prisma.aiTokenLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          createdAt: true,
+          endpoint: true,
+          purpose: true,
+          provider: true,
+          model: true,
+          inputTokens: true,
+          cachedInputTokens: true,
+          outputTokens: true,
+          totalTokens: true,
+          estimatedCost: true,
+          durationMs: true,
+          status: true,
+          errorMessage: true,
+          userMessage: true,
+          masterPromptVersion: true,
+          workspacePromptVersion: true,
+          user: { select: { id: true, fullName: true, shortName: true } },
+        },
+      }),
+      this.prisma.aiTokenLog.count({ where }),
+    ]);
+    return {
+      from: from.toISOString().slice(0, 10),
+      to: to.toISOString().slice(0, 10),
+      usdVnd,
+      page,
+      limit,
+      total,
+      items: rows.map((r) => ({
+        ...r,
+        costUsd: round6(r.estimatedCost),
+        costVnd: Math.round(r.estimatedCost * usdVnd),
+      })),
+    };
+  }
 
   async usage(workspaceId: string, q: UsageQueryDto) {
     const to = q.to ? new Date(q.to) : new Date();

@@ -38,6 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
+import { AiCallLogTable } from "./AiCallLogTable";
 import type { AiPurpose, AiUsageReport } from "@/lib/types";
 
 const PURPOSE_META: Record<AiPurpose, { label: string; badge: string }> = {
@@ -48,285 +49,16 @@ const PURPOSE_META: Record<AiPurpose, { label: string; badge: string }> = {
   CHAT: { label: "Hội thoại Trợ lý", badge: "border-emerald-500/30 text-emerald-700 bg-emerald-500/10" },
 };
 
-function generateFallbackUsage(groupBy: "day" | "purpose" | "user"): AiUsageReport {
-  const usdVnd = 26263;
-  if (groupBy === "purpose") {
-    const rows = [
-      {
-        key: "CHAT",
-        label: "Hội thoại Trợ lý (CHAT)",
-        calls: 85,
-        tokens: 185200,
-        inputTokens: 142000,
-        cachedTokens: 92400,
-        outputTokens: 43200,
-        costUsd: 0.0584,
-        costVnd: Math.round(0.0584 * usdVnd),
-        durationMs: 30600,
-        errors: 0,
-        avgMs: 360,
-        errorRate: 0,
-        cachedRate: 0.65,
-      },
-      {
-        key: "DECOMPOSE",
-        label: "Phân rã yêu cầu (DECOMPOSE)",
-        calls: 42,
-        tokens: 142100,
-        inputTokens: 110000,
-        cachedTokens: 68500,
-        outputTokens: 32100,
-        costUsd: 0.0462,
-        costVnd: Math.round(0.0462 * usdVnd),
-        durationMs: 27300,
-        errors: 1,
-        avgMs: 650,
-        errorRate: 0.024,
-        cachedRate: 0.62,
-      },
-      {
-        key: "ASSIGN",
-        label: "Gợi ý phân công (ASSIGN)",
-        calls: 38,
-        tokens: 95400,
-        inputTokens: 76400,
-        cachedTokens: 44200,
-        outputTokens: 19000,
-        costUsd: 0.0315,
-        costVnd: Math.round(0.0315 * usdVnd),
-        durationMs: 15960,
-        errors: 0,
-        avgMs: 420,
-        errorRate: 0,
-        cachedRate: 0.58,
-      },
-      {
-        key: "EXPLAIN",
-        label: "Giải thích quyết định (EXPLAIN)",
-        calls: 26,
-        tokens: 63800,
-        inputTokens: 52000,
-        cachedTokens: 31800,
-        outputTokens: 11800,
-        costUsd: 0.0208,
-        costVnd: Math.round(0.0208 * usdVnd),
-        durationMs: 8060,
-        errors: 0,
-        avgMs: 310,
-        errorRate: 0,
-        cachedRate: 0.61,
-      },
-      {
-        key: "GENERAL",
-        label: "Tổng hợp chung (GENERAL)",
-        calls: 18,
-        tokens: 65200,
-        inputTokens: 51200,
-        cachedTokens: 14200,
-        outputTokens: 14000,
-        costUsd: 0.018,
-        costVnd: Math.round(0.018 * usdVnd),
-        durationMs: 8100,
-        errors: 0,
-        avgMs: 450,
-        errorRate: 0,
-        cachedRate: 0.28,
-      },
-    ];
-    return {
-      from: "2026-09-01",
-      to: "2026-09-18",
-      groupBy: "purpose",
-      usdVnd,
-      rows,
-      totals: {
-        calls: 209,
-        tokens: 551700,
-        cachedTokens: 251100,
-        costUsd: 0.1749,
-        costVnd: Math.round(0.1749 * usdVnd),
-        durationMs: 90020,
-        errors: 1,
-        avgMs: 430,
-        errorRate: 0.005,
-      },
-    };
-  }
 
-  if (groupBy === "user") {
-    const rows = [
-      {
-        key: "user-1",
-        label: "Nguyễn Văn An (Product Owner)",
-        calls: 98,
-        tokens: 258400,
-        inputTokens: 201000,
-        cachedTokens: 121000,
-        outputTokens: 57400,
-        costUsd: 0.0821,
-        costVnd: Math.round(0.0821 * usdVnd),
-        durationMs: 41160,
-        errors: 0,
-        avgMs: 420,
-        errorRate: 0,
-        cachedRate: 0.6,
-      },
-      {
-        key: "user-2",
-        label: "Trần Thị Bình (Tech Lead)",
-        calls: 62,
-        tokens: 154200,
-        inputTokens: 122000,
-        cachedTokens: 71000,
-        outputTokens: 32200,
-        costUsd: 0.0489,
-        costVnd: Math.round(0.0489 * usdVnd),
-        durationMs: 25420,
-        errors: 1,
-        avgMs: 410,
-        errorRate: 0.016,
-        cachedRate: 0.58,
-      },
-      {
-        key: "user-3",
-        label: "Lê Hoàng Cường (QA Lead)",
-        calls: 35,
-        tokens: 88900,
-        inputTokens: 71500,
-        cachedTokens: 41200,
-        outputTokens: 17400,
-        costUsd: 0.0279,
-        costVnd: Math.round(0.0279 * usdVnd),
-        durationMs: 14350,
-        errors: 0,
-        avgMs: 410,
-        errorRate: 0,
-        cachedRate: 0.57,
-      },
-      {
-        key: "user-4",
-        label: "Phạm Minh Đức (Fullstack Dev)",
-        calls: 14,
-        tokens: 50200,
-        inputTokens: 37100,
-        cachedTokens: 17900,
-        outputTokens: 13100,
-        costUsd: 0.016,
-        costVnd: Math.round(0.016 * usdVnd),
-        durationMs: 9090,
-        errors: 0,
-        avgMs: 649,
-        errorRate: 0,
-        cachedRate: 0.48,
-      },
-    ];
-    return {
-      from: "2026-09-01",
-      to: "2026-09-18",
-      groupBy: "user",
-      usdVnd,
-      rows,
-      totals: {
-        calls: 209,
-        tokens: 551700,
-        cachedTokens: 251100,
-        costUsd: 0.1749,
-        costVnd: Math.round(0.1749 * usdVnd),
-        durationMs: 90020,
-        errors: 1,
-        avgMs: 430,
-        errorRate: 0.005,
-      },
-    };
-  }
-
-  // Default: groupBy === 'day'
-  const rows = [
-    {
-      key: "2026-09-15",
-      label: "15/09/2026",
-      calls: 18,
-      tokens: 42300,
-      inputTokens: 32500,
-      cachedTokens: 14200,
-      outputTokens: 9800,
-      costUsd: 0.0135,
-      costVnd: Math.round(0.0135 * usdVnd),
-      durationMs: 7560,
-      errors: 0,
-      avgMs: 420,
-      errorRate: 0,
-      cachedRate: 0.44,
-    },
-    {
-      key: "2026-09-16",
-      label: "16/09/2026",
-      calls: 35,
-      tokens: 88100,
-      inputTokens: 69200,
-      cachedTokens: 34100,
-      outputTokens: 18900,
-      costUsd: 0.0281,
-      costVnd: Math.round(0.0281 * usdVnd),
-      durationMs: 13650,
-      errors: 0,
-      avgMs: 390,
-      errorRate: 0,
-      cachedRate: 0.49,
-    },
-    {
-      key: "2026-09-17",
-      label: "17/09/2026",
-      calls: 64,
-      tokens: 172400,
-      inputTokens: 135800,
-      cachedTokens: 78800,
-      outputTokens: 36600,
-      costUsd: 0.0551,
-      costVnd: Math.round(0.0551 * usdVnd),
-      durationMs: 26240,
-      errors: 1,
-      avgMs: 410,
-      errorRate: 0.015,
-      cachedRate: 0.58,
-    },
-    {
-      key: "2026-09-18",
-      label: "18/09/2026 (Hôm nay)",
-      calls: 92,
-      tokens: 248900,
-      inputTokens: 194100,
-      cachedTokens: 124000,
-      outputTokens: 54800,
-      costUsd: 0.0782,
-      costVnd: Math.round(0.0782 * usdVnd),
-      durationMs: 42570,
-      errors: 0,
-      avgMs: 462,
-      errorRate: 0,
-      cachedRate: 0.64,
-    },
-  ];
-
-  return {
-    from: "2026-09-15",
-    to: "2026-09-18",
-    groupBy: "day",
-    usdVnd,
-    rows,
-    totals: {
-      calls: 209,
-      tokens: 551700,
-      cachedTokens: 251100,
-      costUsd: 0.1749,
-      costVnd: Math.round(0.1749 * usdVnd),
-      durationMs: 90020,
-      errors: 1,
-      avgMs: 430,
-      errorRate: 0.005,
-    },
-  };
-}
+/** Không bịa số: chưa có lượt gọi nào thì mọi ô là 0 và bảng hiện trạng thái trống. */
+const EMPTY_REPORT: AiUsageReport = {
+  from: "",
+  to: "",
+  groupBy: "day",
+  usdVnd: 26263,
+  rows: [],
+  totals: { calls: 0, tokens: 0, cachedTokens: 0, costUsd: 0, costVnd: 0, errors: 0, errorRate: 0, durationMs: 0, avgMs: 0 },
+};
 
 export function AiUsageTab({ workspaceId }: { workspaceId: string }) {
   const qc = useQueryClient();
@@ -335,25 +67,15 @@ export function AiUsageTab({ workspaceId }: { workspaceId: string }) {
 
   const usageQuery = useQuery({
     queryKey: ["workspaces", workspaceId, "ai-usage", groupBy, timeRange],
-    queryFn: async () => {
-      try {
-        const to = new Date().toISOString().slice(0, 10);
-        const daysAgo = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
-        const from = new Date(Date.now() - daysAgo * 86400000).toISOString().slice(0, 10);
-        const res = await api.get<AiUsageReport>(
-          `/workspaces/${workspaceId}/ai-usage?groupBy=${groupBy}&from=${from}&to=${to}`
-        );
-        if (res && res.rows && res.rows.length > 0) {
-          return res;
-        }
-        return generateFallbackUsage(groupBy);
-      } catch {
-        return generateFallbackUsage(groupBy);
-      }
+    queryFn: () => {
+      const to = new Date().toISOString().slice(0, 10);
+      const daysAgo = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
+      const from = new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10);
+      return api.get<AiUsageReport>(`/workspaces/${workspaceId}/ai-usage`, { groupBy, from, to });
     },
   });
 
-  const report = usageQuery.data ?? generateFallbackUsage(groupBy);
+  const report = usageQuery.data ?? EMPTY_REPORT;
   const totals = report.totals;
 
   // Cached savings calculation
@@ -612,6 +334,9 @@ export function AiUsageTab({ workspaceId }: { workspaceId: string }) {
               </TableBody>
             </Table>
           </div>
+
+          {/* Nhật ký từng lượt gọi */}
+          <AiCallLogTable workspaceId={workspaceId} />
 
           {/* Audit Rule Explanations */}
           <div className="p-3 bg-muted/40 rounded-lg text-xs text-muted-foreground flex items-start gap-2.5">

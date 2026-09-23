@@ -262,37 +262,39 @@ export class ChatService {
           staged: { kind: 'none' },
           action: null,
         };
-        const turn = await this.ai.runTurn(
-          config,
-          {
-            userId,
-            projectId: dto.projectId,
-            purpose: 'CHAT',
-            sprintId: dto.sprintId,
-            requirement: dto.text,
-            session: {
-              id: session.id,
-              nextDraftSeq: nextSeq,
-              proposals: open,
-              messages: history.reverse(),
-              selectedCode: dto.selectedCode,
+        const turn = await this.runTurnOrRecord(session.id, () =>
+          this.ai.runTurn(
+            config,
+            {
+              userId,
+              projectId: dto.projectId,
+              purpose: 'CHAT',
+              sprintId: dto.sprintId,
+              requirement: dto.text,
+              session: {
+                id: session.id,
+                nextDraftSeq: nextSeq,
+                proposals: open,
+                messages: history.reverse(),
+                selectedCode: dto.selectedCode,
+              },
             },
-          },
-          endpoint,
-          dto.text,
-          async (action, ctx) => {
-            const r = await this.stage(
-              action,
-              ctx,
-              open,
-              nextSeq,
-              access.workspaceId,
-              dto.projectId,
-            );
-            hold.staged = r.staged;
-            hold.action = r.action;
-            return r.validation;
-          },
+            endpoint,
+            dto.text,
+            async (action, ctx) => {
+              const r = await this.stage(
+                action,
+                ctx,
+                open,
+                nextSeq,
+                access.workspaceId,
+                dto.projectId,
+              );
+              hold.staged = r.staged;
+              hold.action = r.action;
+              return r.validation;
+            },
+          ),
         );
         const action = hold.action ?? turn.action;
 
@@ -576,6 +578,35 @@ export class ChatService {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     };
+  }
+
+  /**
+   * Lượt AI hỏng (nhà cung cấp lỗi, JSON sai, hết hạn mức…) vẫn ghi một tin trợ lý báo lỗi vào phiên.
+   * Người dùng đã rời trang/F5 khi quay lại sẽ thấy vì sao không có trả lời, thay vì phiên treo
+   * mãi ở trạng thái "đang suy luận" và tưởng mất tin nhắn.
+   */
+  private async runTurnOrRecord<T>(
+    sessionId: string,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await run();
+    } catch (e) {
+      const code = e instanceof AppError ? e.code : 'INTERNAL';
+      const message =
+        e instanceof AppError ? e.message : 'Lỗi hệ thống khi gọi AI';
+      await this.prisma.chatMessage
+        .create({
+          data: {
+            sessionId,
+            role: ChatRole.ASSISTANT,
+            text: `Lượt này không hoàn tất: ${message} (${code}). Bạn gửi lại giúp nhé.`,
+            parseFailed: true,
+          },
+        })
+        .catch(() => undefined);
+      throw e;
+    }
   }
 
   private emitSession(row: SessionRow, change: string): void {

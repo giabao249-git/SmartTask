@@ -27,6 +27,7 @@ import {
   UpdateAiConfigDto,
   UpdateModelCatalogDto,
   UpsertModelCatalogDto,
+  UsageCallsQueryDto,
   UsageQueryDto,
 } from './ai-config/dto/ai-config.dto';
 import { AiProviderService } from './provider/ai-provider.service';
@@ -211,6 +212,19 @@ export class AiAdminController {
   }
 
   // ── Sổ token ───────────────────────────────────────────────
+
+  @Get('workspaces/:wsId/ai-usage/calls')
+  @WorkspaceRoles(WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
+  @ApiOperation({
+    summary:
+      'Nhật ký từng lượt gọi AI (không gộp): thời điểm, người gọi, mục đích, model, token, chi phí, trạng thái',
+  })
+  usageCalls(
+    @Param('wsId', ParseUUIDPipe) wsId: string,
+    @Query() q: UsageCallsQueryDto,
+  ) {
+    return this.aiConfig.usageCalls(wsId, q);
+  }
 
   @Get('workspaces/:wsId/ai-usage')
   @WorkspaceRoles(WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
