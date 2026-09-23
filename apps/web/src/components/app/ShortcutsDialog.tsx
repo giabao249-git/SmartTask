@@ -104,7 +104,7 @@ const SHORTCUT_SECTIONS: ShortcutSection[] = [
     items: [
       {
         keys: ["C"],
-        description: "Mở nhanh hộp thoại Tạo công việc thủ công",
+        description: "Mở ô tạo nhanh ở cột đầu — Enter tạo xong ô vẫn mở cho việc kế tiếp",
         badge: "Tạo task",
       },
       {

@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot, Filter } from "lucide-react";
+import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot, Filter, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -64,6 +65,22 @@ function SortableTaskItem({
 }
 
 const POSITION_STEP = 1000;
+/** Dán nhầm cả tệp thì không tạo hàng trăm việc — chặn cứng ở đây (docs 02/05 §A2). */
+const MAX_PASTE_LINES = 50;
+
+/**
+ * Tách nội dung dán thành danh sách tiêu đề: bỏ dòng trắng, bỏ tiền tố gạch đầu dòng và
+ * số thứ tự, cắt 200 ký tự cho khớp MaxLength của CreateTaskDto. Thuần tất định, không AI.
+ */
+function splitTitles(raw: string, keepAll = false): string[] {
+  const all = raw
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^\s*(?:[-*+•]|\d+[.)])\s+/, "").trim())
+    .filter(Boolean)
+    .map((l) => l.slice(0, 200));
+  return keepAll ? all : all.slice(0, MAX_PASTE_LINES);
+}
+
 
 /** Bảng Kanban (UC-12): cột từ project.columns, task từ GET /projects/:id/tasks; kéo thả → PATCH move có version. */
 export function KanbanBoard() {
@@ -105,6 +122,9 @@ export function KanbanBoard() {
   const [sheetOpen, setSheetOpen] = React.useState(!!params.get("task"));
   const [createOpen, setCreateOpen] = React.useState(false);
   const [selectedColumnId, setSelectedColumnId] = React.useState<string>("");
+  /** Cột nào đang mở ô tạo nhanh (mỗi lúc chỉ một). */
+  const [composerColId, setComposerColId] = React.useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = React.useState("");
 
   const columns = React.useMemo(
     () => project.columns.slice().sort((a, b) => a.position - b.position),
@@ -119,7 +139,38 @@ export function KanbanBoard() {
     [columns],
   );
 
-  // Shortcuts: Q để bật/tắt "Việc của tôi", C để mở tạo công việc thủ công
+  /**
+   * Tạo nhanh từ ô trong cột — tuần tự từng việc để không hai POST cùng lúc tranh `task_counter`
+   * và không đụng giới hạn 100 req/phút. Lỗi thì dừng, giữ nguyên phần chưa tạo cho người dùng.
+   */
+  const quickCreate = React.useCallback(
+    async (columnId: string, titles: string[]) => {
+      for (const title of titles) {
+        try {
+          await mut.create.mutateAsync({
+            title,
+            columnId,
+            sprintId: createSprintId,
+          });
+        } catch (err) {
+          const { code, message } = describeError(err);
+          toast.error(`Không tạo được "${title.slice(0, 40)}"`, { description: `${code}: ${message}` });
+          throw err;
+        }
+      }
+      if (titles.length > 1) toast.success(`Đã tạo ${titles.length} công việc`);
+    },
+    [mut.create, createSprintId],
+  );
+
+  const openComposer = React.useCallback(
+    (colId?: string) => {
+      setComposerColId(colId || columns[0]?.id || null);
+    },
+    [columns],
+  );
+
+  // Shortcuts: Q để bật/tắt "Việc của tôi", C để mở ô tạo nhanh ở cột đầu
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
@@ -130,12 +181,12 @@ export function KanbanBoard() {
       }
       if (!isInput && (e.key === "c" || e.key === "C") && project.canEdit) {
         e.preventDefault();
-        openCreateDialog();
+        openComposer();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openCreateDialog, project.canEdit, f]);
+  }, [openComposer, project.canEdit, f]);
 
   const handleClaimTask = React.useCallback(
     (task: TaskListItem) => {
@@ -243,12 +294,15 @@ export function KanbanBoard() {
             ))}
           </div>
           {project.canEdit && (
-            <Button size="sm" onClick={() => openCreateDialog()} className="gap-1.5 shadow-xs">
-              <Plus className="h-4 w-4" /> Tạo công việc
-              <kbd className="hidden sm:inline-block ml-1 text-[10px] font-mono px-1 py-0.2 rounded bg-primary-foreground/20 text-primary-foreground">
-                C
-              </kbd>
-            </Button>
+            <>
+              <Button size="sm" variant="outline" onClick={() => openComposer()} className="gap-1.5" title="Tạo nhanh trong cột đầu">
+                <Plus className="h-4 w-4" /> Tạo nhanh
+                <kbd className="hidden sm:inline-block ml-1 text-[10px] font-mono px-1 py-0.2 rounded bg-muted text-muted-foreground border">C</kbd>
+              </Button>
+              <Button size="sm" onClick={() => openCreateDialog()} className="gap-1.5 shadow-xs">
+                <Plus className="h-4 w-4" /> Tạo công việc
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -345,7 +399,15 @@ export function KanbanBoard() {
                   onOpen={openTask}
                   onMove={(t, colId) => doMove(t, colId)}
                   onClaim={handleClaimTask}
-                  onAddTask={openCreateDialog}
+                  onAddTask={openComposer}
+                  composerOpen={composerColId === col.id}
+                  onCloseComposer={() => setComposerColId(null)}
+                  onQuickCreate={(titles) => quickCreate(col.id, titles)}
+                  onOpenFull={(title) => {
+                    setComposerColId(null);
+                    setDraftTitle(title);
+                    openCreateDialog(col.id);
+                  }}
                   currentUserId={auth.user?.id}
                   canEdit={project.canEdit}
                 />
@@ -359,8 +421,14 @@ export function KanbanBoard() {
 
       <TaskDetailSheet taskId={selectedId} project={project} open={sheetOpen} onOpenChange={setSheetOpen} />
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog
+        open={createOpen}
+        onOpenChange={(o) => {
+          setCreateOpen(o);
+          if (!o) setDraftTitle("");
+        }}
+      >
+        <DialogContent className="sm:max-w-lg" key={draftTitle}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -408,7 +476,7 @@ export function KanbanBoard() {
                 <label className="text-xs font-medium text-foreground mb-1 block">
                   Tiêu đề công việc <span className="text-destructive">*</span>
                 </label>
-                <Input name="title" placeholder="Ví dụ: Thiết kế giao diện chi tiết task..." className="text-xs h-9" required minLength={1} maxLength={200} autoFocus />
+                <Input name="title" defaultValue={draftTitle} placeholder="Ví dụ: Thiết kế giao diện chi tiết task..." className="text-xs h-9" required minLength={1} maxLength={200} autoFocus />
               </div>
 
               <div>
@@ -513,6 +581,137 @@ export function KanbanBoard() {
   );
 }
 
+/**
+ * Ô tạo nhanh trong cột (docs 02/05 §A1, §A2) — Enter tạo xong ô vẫn mở cho việc kế tiếp,
+ * dán nhiều dòng thì hỏi tách thành nhiều công việc. Không có endpoint mới: vẫn là
+ * POST /projects/:id/tasks, chỉ khác là không phải mở hộp thoại cho từng việc.
+ */
+function ColumnComposer({
+  columnName,
+  onCreate,
+  onOpenFull,
+  onClose,
+}: {
+  columnName: string;
+  onCreate: (titles: string[]) => Promise<void>;
+  onOpenFull: (title: string) => void;
+  onClose: () => void;
+}) {
+  const ref = React.useRef<HTMLTextAreaElement>(null);
+  const [value, setValue] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [progress, setProgress] = React.useState<{ done: number; total: number } | null>(null);
+
+  // Ô bị `disabled` trong lúc lưu nên mất focus; lấy lại ngay khi lưu xong để gõ tiếp việc kế.
+  React.useEffect(() => {
+    if (!busy) ref.current?.focus();
+  }, [busy]);
+  // Ô cao dần theo nội dung, không cần thư viện autosize
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [value]);
+
+  const lines = React.useMemo(() => splitTitles(value), [value]);
+  const many = lines.length > 1;
+
+  const submit = async (titles: string[]) => {
+    if (!titles.length || busy) return;
+    setBusy(true);
+    setProgress(titles.length > 1 ? { done: 0, total: titles.length } : null);
+    try {
+      for (let i = 0; i < titles.length; i += 1) {
+        await onCreate([titles[i]]);
+        setProgress((p) => (p ? { ...p, done: i + 1 } : null));
+      }
+      setValue("");
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-2 space-y-2">
+      <Textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onClose();
+          }
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            if (!many) void submit(lines);
+          }
+        }}
+        placeholder={`Tiêu đề công việc trong "${columnName}"…`}
+        disabled={busy}
+        rows={1}
+        maxLength={MAX_PASTE_LINES * 210}
+        className="text-xs min-h-9 resize-none py-2"
+      />
+
+      {many && (
+        <Alert className="p-2">
+          <AlertDescription className="text-[11px] flex items-center justify-between gap-2 flex-wrap">
+            <span>
+              Phát hiện <strong>{lines.length}</strong> dòng
+              {splitTitles(value, true).length > MAX_PASTE_LINES && ` (đã cắt còn ${MAX_PASTE_LINES})`}
+            </span>
+            <span className="flex items-center gap-1.5 shrink-0">
+              <Button size="sm" className="h-6 text-[11px]" disabled={busy} onClick={() => void submit(lines)}>
+                Tạo {lines.length} công việc
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-[11px]"
+                disabled={busy}
+                onClick={() => void submit([lines.join(" ").slice(0, 200)])}
+              >
+                Giữ một công việc
+              </Button>
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {progress && <Progress value={(progress.done / progress.total) * 100} className="h-1" />}
+
+      <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+        <span>
+          {busy ? (
+            <span className="inline-flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {progress ? `Đang tạo ${progress.done}/${progress.total}…` : "Đang tạo…"}
+            </span>
+          ) : (
+            <>
+              <kbd className="px-1 rounded border bg-background font-mono">Enter</kbd> tạo ·{" "}
+              <kbd className="px-1 rounded border bg-background font-mono">Shift+Enter</kbd> xuống dòng ·{" "}
+              <kbd className="px-1 rounded border bg-background font-mono">Esc</kbd> đóng
+            </>
+          )}
+        </span>
+        <Button
+          variant="link"
+          size="sm"
+          className="h-5 px-0 text-[10px]"
+          disabled={busy}
+          onClick={() => onOpenFull(lines[0] ?? "")}
+        >
+          Mở đầy đủ…
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Column({
   col,
   tasks,
@@ -522,6 +721,10 @@ function Column({
   onMove,
   onClaim,
   onAddTask,
+  composerOpen,
+  onCloseComposer,
+  onQuickCreate,
+  onOpenFull,
   currentUserId,
   canEdit,
 }: {
@@ -533,6 +736,10 @@ function Column({
   onMove: (t: TaskListItem, colId: string) => void;
   onClaim?: (t: TaskListItem) => void;
   onAddTask?: (colId: string) => void;
+  composerOpen: boolean;
+  onCloseComposer: () => void;
+  onQuickCreate: (titles: string[]) => Promise<void>;
+  onOpenFull: (title: string) => void;
   currentUserId?: string;
   canEdit: boolean;
 }) {
@@ -585,16 +792,24 @@ function Column({
             </div>
           ))}
           {tasks.length === 0 && <div className="flex flex-1 items-center justify-center p-6 border border-dashed border-border/60 rounded-lg text-xs text-muted-foreground">Kéo thẻ vào đây</div>}
-          {canEdit && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onAddTask?.(col.id)}
-              className="w-full justify-start text-xs text-muted-foreground hover:text-foreground hover:bg-background/80 border border-dashed border-border/50 hover:border-border mt-1 h-8 gap-1.5 rounded-lg transition-colors"
-            >
-              <Plus className="h-3.5 w-3.5" /> Thêm công việc
-            </Button>
-          )}
+          {canEdit &&
+            (composerOpen ? (
+              <ColumnComposer
+                columnName={col.name}
+                onCreate={onQuickCreate}
+                onOpenFull={onOpenFull}
+                onClose={onCloseComposer}
+              />
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onAddTask?.(col.id)}
+                className="w-full justify-start text-xs text-muted-foreground hover:text-foreground hover:bg-background/80 border border-dashed border-border/50 hover:border-border mt-1 h-8 gap-1.5 rounded-lg transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" /> Thêm công việc
+              </Button>
+            ))}
         </div>
       </SortableContext>
     </div>
