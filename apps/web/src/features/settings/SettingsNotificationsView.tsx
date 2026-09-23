@@ -4,6 +4,7 @@ import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Bell,
+  GraduationCap,
   ShieldAlert,
   Sliders,
   Sparkles,
@@ -23,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { AiSettingsView } from "./AiSettingsView";
 import { MembersTab } from "./MembersTab";
 import { ProfileTab } from "./ProfileTab";
+import { SkillsCatalogTab } from "./SkillsCatalogTab";
 import { WorkspaceSettingsTab } from "./WorkspaceSettingsTab";
 
 const LAST_WS_KEY = "st.lastWorkspace";
@@ -34,7 +36,7 @@ const readLastWorkspace = () => {
   }
 };
 
-type SettingsTab = "profile" | "notifications" | "members" | "settings" | "ai";
+type SettingsTab = "profile" | "notifications" | "members" | "skills" | "settings" | "ai";
 
 /** Cài đặt & thông báo (UC-05/06/23/29): 3 phân nhóm rõ ràng (Cá nhân / Workspace / Hệ thống toàn cục) kèm RBAC */
 export function SettingsNotificationsView() {
@@ -47,7 +49,7 @@ export function SettingsNotificationsView() {
   const [wsId, setWsIdState] = React.useState<string | null>(() => params.get("ws") ?? readLastWorkspace());
   const [activeTab, setActiveTab] = React.useState<SettingsTab>(() => {
     const t = params.get("tab") as SettingsTab | null;
-    if (t && ["profile", "notifications", "members", "settings", "ai"].includes(t)) return t;
+    if (t && ["profile", "notifications", "members", "skills", "settings", "ai"].includes(t)) return t;
     return "profile";
   });
 
@@ -198,6 +200,27 @@ export function SettingsNotificationsView() {
 
             <button
               type="button"
+              onClick={() => handleTabChange("skills")}
+              className={cn(
+                "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
+                activeTab === "skills"
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <GraduationCap className="h-4 w-4 shrink-0" />
+                <span>Danh mục kỹ năng</span>
+              </div>
+              {!isAdmin && (
+                <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground border-border/80">
+                  Chỉ xem
+                </Badge>
+              )}
+            </button>
+
+            <button
+              type="button"
               onClick={() => handleTabChange("settings")}
               className={cn(
                 "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
@@ -267,6 +290,10 @@ export function SettingsNotificationsView() {
             ) : (
               <NoWorkspace />
             )
+          )}
+
+          {activeTab === "skills" && (
+            effective && ws ? <SkillsCatalogTab workspaceId={effective} canEdit={canEdit} /> : <NoWorkspace />
           )}
 
           {activeTab === "settings" && (

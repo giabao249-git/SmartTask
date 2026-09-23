@@ -34,6 +34,9 @@ Chi tiết 19 ma sát và ảnh chụp: [02/05 §2](../02-phan-tich/05-cai-tien-
 Backend Phase 3 phủ đủ hơn dự tính: ba endpoint đã có sẵn mà web **chưa từng gọi** nay đều dùng tới —
 `POST /tasks/:id/duplicate`, `GET /tasks/by-key/:projectKey/:number`, `GET /workspaces/:wsId/tasks/search`.
 
+Rà thêm sau đó còn ba endpoint nữa cùng cảnh: `POST /workspaces/:wsId/skills`, `PATCH /skills/:id`,
+`POST /skills/:id/merge` — xem §I.
+
 ## C. Web — theo nhóm
 
 ### Tạo việc
@@ -149,3 +152,16 @@ Một ca e2e đỏ ngẫu nhiên **không thuộc đợt này**: `admin.e2e-spec
 - `POST /tasks/:id/restore` để hoàn tác xoá — hiện xoá đi qua `AlertDialog` và không hứa hoàn tác.
 - Tìm **thành viên** trong bảng lệnh — backend chưa có endpoint.
 - Chuông thông báo trên AppShell vẫn dùng `src/mocks/notifications.ts` ([web-tich-hop §4](web-tich-hop.md)).
+
+## I. Bổ sung 24/09 — danh mục kỹ năng
+
+Workspace **không có chỗ nào thêm kỹ năng mới**: web chỉ đọc `GET /workspaces/:wsId/skills` và ghi mức kỹ năng cá nhân, còn ba endpoint quản lý danh mục (thêm / sửa / gộp) có từ Phase 2 mà chưa màn nào gọi. Hậu quả không nhỏ: danh mục bị khoá cứng ở 30 kỹ năng seed sẵn, nên ô "Kỹ năng yêu cầu" khi tạo/sửa công việc, heatmap năng lực và bảng năng lực khi giao việc đều không phản ánh được đội hình thật.
+
+Thêm mục **Cài đặt › Danh mục kỹ năng** (`features/settings/SkillsCatalogTab.tsx`): thêm kỹ năng kèm nhóm và alias, sửa tại chỗ, ẩn/hiện, gộp hai kỹ năng. Nhóm hiện dưới dạng `datalist` gợi ý từ các nhóm đã có, tìm theo tên lẫn alias và bỏ dấu.
+
+- **Quyền:** chỉ OWNER/ADMIN sửa (đúng `WorkspaceRoles` của endpoint); thành viên khác vẫn xem danh mục và thấy `Alert` chỉ sang chỗ tự khai mức kỹ năng.
+- **Ẩn ≠ xoá:** ẩn thì kỹ năng biến khỏi ô chọn nhưng dữ liệu cũ vẫn giữ — đã kiểm `GET .../skills` (không kèm `includeInactive`) không còn trả về nó.
+- **Gộp đi qua `AlertDialog`** vì không hoàn tác được; hộp thoại nói rõ mọi khai báo và yêu cầu kỹ năng sẽ chuyển sang đích, tên nguồn thành alias của đích.
+- Mỗi lần đổi danh mục đều `invalidate` cả ba khoá cache (`skills`, `skills/all`, `skill-matrix`) để ô chọn ở task và heatmap thấy ngay.
+
+Kiểm: thêm kỹ năng có nhóm + 2 alias → API trả đúng; thêm trùng tên bị chặn 409 và báo rõ; ẩn → `isActive=false` và mất khỏi ô chọn; sửa tên + alias qua giao diện đúng; gộp → kỹ năng nguồn biến mất và tên nó thành alias của đích; kỹ năng vừa thêm hiện ngay trong ô "Kỹ năng yêu cầu" khi tạo việc.
