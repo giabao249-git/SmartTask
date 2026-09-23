@@ -23,12 +23,17 @@ export interface TaskFilters {
   backlog?: boolean;
 }
 
-/** GET /projects/:id/tasks → { items, deletedIds, serverTime } (docs 11 §3.6); task gốc, không phân trang. */
-export function useTasks(projectId: string, filters: TaskFilters = {}) {
+/**
+ * GET /projects/:id/tasks → { items, deletedIds, serverTime } (docs 11 §3.6); task gốc, không phân trang.
+ * `enabled: false` cho nơi chỉ cần danh sách khi người dùng mở ô chọn (xem DependencyPicker) —
+ * trước đây mỗi lần mở Sheet là kéo lại toàn bộ danh sách chỉ để đổ combobox phụ thuộc.
+ */
+export function useTasks(projectId: string, filters: TaskFilters = {}, opts: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: [...taskKeys.list(projectId), filters] as const,
     queryFn: () => api.get<TaskListResponse>(`/projects/${projectId}/tasks`, { ...filters, backlog: filters.backlog ? "true" : undefined }),
     select: (r) => r.items,
+    enabled: opts.enabled ?? true,
   });
 }
 
@@ -211,6 +216,11 @@ export function useTaskMutations(projectId: string) {
     mutationFn: (v: { id: string; version: number; columnId: string }) => api.patch<TaskDetail>(`/tasks/${v.id}/move`, { version: v.version, columnId: v.columnId }),
     onSuccess: done,
   });
+  /** POST /tasks/:id/duplicate — endpoint có từ Phase 3 nhưng trước đây không nút nào trên web gọi. */
+  const duplicate = useMutation({
+    mutationFn: (v: { id: string; withSubtasks?: boolean }) => api.post<TaskDetail>(`/tasks/${v.id}/duplicate`, { withSubtasks: v.withSubtasks ?? false }),
+    onSuccess: done,
+  });
   const remove = useMutation({
     mutationFn: (id: string) => api.delete(`/tasks/${id}`),
     onSuccess: (_r, id) => {
@@ -218,7 +228,7 @@ export function useTaskMutations(projectId: string) {
       qc.removeQueries({ queryKey: taskKeys.detail(id) });
     },
   });
-  return { create, update, progress, assignees, labels, skills, dependencies, subtask, move, remove };
+  return { create, update, progress, assignees, labels, skills, dependencies, subtask, move, duplicate, remove };
 }
 
 export function useComments(taskId: string | null) {

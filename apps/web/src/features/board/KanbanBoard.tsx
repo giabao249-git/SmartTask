@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot, Filter, Loader2, ChevronDown } from "lucide-react";
+import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot, Filter, Loader2, ChevronDown, Copy, Trash2, UserPlus, Flag, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -28,9 +28,20 @@ import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TaskCard, taskKeyOf } from "@/components/app/TaskCard";
 import { AssigneePicker, LabelPicker, SkillPicker } from "@/components/app/TaskFieldPickers";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -39,8 +50,9 @@ import { describeError, isApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useWorkFilters } from "@/features/work/filters";
-import type { BoardColumn, TaskListItem } from "@/lib/types";
+import type { BoardColumn, ProjectDetail, TaskListItem } from "@/lib/types";
 import { TASK_TYPES, typeToHint, typeToLabel } from "@/lib/status";
+import { PriorityBadge } from "@/components/app/PriorityBadge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useBoardRealtime, useMoveTask, useTaskMutations, useTasks } from "./hooks";
@@ -69,6 +81,19 @@ function SortableTaskItem({
 const POSITION_STEP = 1000;
 /** Dán nhầm cả tệp thì không tạo hàng trăm việc — chặn cứng ở đây (docs 02/05 §A2). */
 const MAX_PASTE_LINES = 50;
+
+/** Mốc hạn hay dùng trong menu nhanh của thẻ; tính theo ngày địa phương, trả YYYY-MM-DD. */
+const dayFromNow = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const DUE_PRESETS = [
+  { label: "Hôm nay", value: () => dayFromNow(0) },
+  { label: "Ngày mai", value: () => dayFromNow(1) },
+  { label: "Cuối tuần này", value: () => dayFromNow((7 - new Date().getDay()) % 7 || 7) },
+  { label: "Tuần sau", value: () => dayFromNow(7) },
+];
 
 /**
  * Tách nội dung dán thành danh sách tiêu đề: bỏ dòng trắng, bỏ tiền tố gạch đầu dòng và
@@ -223,6 +248,46 @@ export function KanbanBoard() {
     },
     [auth.user?.id, mut.update, project.key],
   );
+
+  /**
+   * Thao tác nhanh trên thẻ (docs 02/05 §B3) — dùng lại đúng các mutation đã có, mang `version`
+   * và phát task:* như thường; không mở đường ghi mới. Giao việc từ bảng còn 2 thao tác thay vì 4.
+   */
+  const quickPatch = React.useCallback(
+    (task: TaskListItem, patch: Record<string, unknown>, what: string) => {
+      mut.update.mutate(
+        { id: task.id, version: task.version, patch },
+        {
+          onSuccess: () => toast.success(`${what} — ${taskKeyOf(project.key, task)}`),
+          onError: (e) => {
+            const { code, message } = describeError(e);
+            if (code === "TASK_VERSION_CONFLICT") toast.error(`${taskKeyOf(project.key, task)} vừa được người khác sửa — đã tải lại`, { description: code });
+            else toast.error(`${what} thất bại`, { description: `${code}: ${message}` });
+            void tasksQuery.refetch();
+          },
+        },
+      );
+    },
+    [mut.update, project.key, tasksQuery],
+  );
+
+  const quickAssign = React.useCallback(
+    (task: TaskListItem, userIds: string[], what: string) => {
+      mut.assignees.mutate(
+        { id: task.id, version: task.version, userIds },
+        {
+          onSuccess: () => toast.success(`${what} — ${taskKeyOf(project.key, task)}`),
+          onError: (e) => {
+            toast.error("Giao việc thất bại", { description: describeError(e).code });
+            void tasksQuery.refetch();
+          },
+        },
+      );
+    },
+    [mut.assignees, project.key, tasksQuery],
+  );
+
+  const [confirmDelete, setConfirmDelete] = React.useState<TaskListItem | null>(null);
 
   const isLeader = project.canManage || project.myRole === "PM";
   const myTasks = React.useMemo(() => {
@@ -413,6 +478,20 @@ export function KanbanBoard() {
                   onOpen={openTask}
                   onMove={(t, colId) => doMove(t, colId)}
                   onClaim={handleClaimTask}
+                  members={project.members}
+                  selfId={auth.user?.id}
+                  onPatch={quickPatch}
+                  onAssign={quickAssign}
+                  onDuplicate={(t) =>
+                    mut.duplicate.mutate(
+                      { id: t.id },
+                      {
+                        onSuccess: (copy) => toast.success(`Đã nhân bản thành ${taskKeyOf(project.key, copy)} (ở cột đầu)`),
+                        onError: (e) => toast.error("Nhân bản thất bại", { description: describeError(e).code }),
+                      },
+                    )
+                  }
+                  onAskDelete={setConfirmDelete}
                   onAddTask={openComposer}
                   composerOpen={composerColId === col.id}
                   onCloseComposer={() => setComposerColId(null)}
@@ -434,6 +513,37 @@ export function KanbanBoard() {
       )}
 
       <TaskDetailSheet taskId={selectedId} project={project} open={sheetOpen} onOpenChange={setSheetOpen} />
+
+      {/* Xoá là hành động không hoàn tác được (chưa có endpoint khôi phục) → AlertDialog theo docs 10 §4. */}
+      <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base">
+              Xoá {confirmDelete ? taskKeyOf(project.key, confirmDelete) : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs">
+              &quot;{confirmDelete?.title}&quot; sẽ bị xoá cùng mọi việc con. Hiện chưa có chức năng khôi phục.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="text-xs">Huỷ</AlertDialogCancel>
+            <AlertDialogAction
+              className="text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                const t = confirmDelete;
+                setConfirmDelete(null);
+                if (!t) return;
+                mut.remove.mutate(t.id, {
+                  onSuccess: () => toast.success(`Đã xoá ${taskKeyOf(project.key, t)}`),
+                  onError: (e) => toast.error("Xoá thất bại", { description: describeError(e).code }),
+                });
+              }}
+            >
+              Xoá
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         open={createOpen}
@@ -774,6 +884,12 @@ function Column({
   onOpen,
   onMove,
   onClaim,
+  members,
+  selfId,
+  onPatch,
+  onAssign,
+  onDuplicate,
+  onAskDelete,
   onAddTask,
   composerOpen,
   onCloseComposer,
@@ -789,6 +905,12 @@ function Column({
   onOpen: (t: TaskListItem) => void;
   onMove: (t: TaskListItem, colId: string) => void;
   onClaim?: (t: TaskListItem) => void;
+  members: ProjectDetail["members"];
+  selfId?: string;
+  onPatch: (t: TaskListItem, patch: Record<string, unknown>, what: string) => void;
+  onAssign: (t: TaskListItem, userIds: string[], what: string) => void;
+  onDuplicate: (t: TaskListItem) => void;
+  onAskDelete: (t: TaskListItem) => void;
   onAddTask?: (colId: string) => void;
   composerOpen: boolean;
   onCloseComposer: () => void;
@@ -828,17 +950,79 @@ function Column({
                         <MoreHorizontal className="h-3.5 w-3.5" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48 text-xs">
-                      <DropdownMenuLabel>Chuyển sang cột</DropdownMenuLabel>
+                    <DropdownMenuContent align="end" className="w-56 text-xs" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="text-xs gap-2">
+                          <UserPlus className="h-3.5 w-3.5" /> Giao cho
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="text-xs">
+                          {selfId && (
+                            <DropdownMenuItem onClick={() => onAssign(task, [selfId], "Đã giao cho tôi")}>Giao cho tôi</DropdownMenuItem>
+                          )}
+                          {members.map((m) => (
+                            <DropdownMenuItem key={m.id} onClick={() => onAssign(task, [m.id], `Đã giao cho ${m.shortName ?? m.fullName}`)}>
+                              {m.fullName}
+                            </DropdownMenuItem>
+                          ))}
+                          {task.assignees.length > 0 && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => onAssign(task, [], "Đã bỏ giao")}>Bỏ giao</DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="text-xs gap-2">
+                          <Flag className="h-3.5 w-3.5" /> Đặt ưu tiên
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="text-xs">
+                          {(["LOW", "MEDIUM", "HIGH", "URGENT"] as const).map((p) => (
+                            <DropdownMenuItem key={p} disabled={task.priority === p} onClick={() => onPatch(task, { priority: p }, "Đã đổi ưu tiên")}>
+                              <PriorityBadge priority={p} />
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="text-xs gap-2">
+                          <CalendarDays className="h-3.5 w-3.5" /> Đặt hạn
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="text-xs">
+                          {DUE_PRESETS.map((d) => (
+                            <DropdownMenuItem key={d.label} onClick={() => onPatch(task, { dueDate: d.value() }, `Đã đặt hạn ${d.label.toLowerCase()}`)}>
+                              {d.label}
+                            </DropdownMenuItem>
+                          ))}
+                          {task.dueDate && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => onPatch(task, { dueDate: null }, "Đã bỏ hạn")}>Bỏ hạn</DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-[10px] font-normal text-muted-foreground">Chuyển sang cột</DropdownMenuLabel>
                       {columns
                         .filter((c) => c.id !== task.columnId)
                         .map((c) => (
-                          <DropdownMenuItem key={c.id} onClick={(e) => { e.stopPropagation(); onMove(task, c.id); }}>
+                          <DropdownMenuItem key={c.id} onClick={() => onMove(task, c.id)}>
                             {c.name}
                           </DropdownMenuItem>
                         ))}
+
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onOpen(task); }}>Xem chi tiết</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onOpen(task)}>Xem chi tiết</DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2" onClick={() => onDuplicate(task)}>
+                        <Copy className="h-3.5 w-3.5" /> Nhân bản
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={() => onAskDelete(task)}>
+                        <Trash2 className="h-3.5 w-3.5" /> Xoá công việc
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>

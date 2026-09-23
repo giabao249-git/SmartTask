@@ -652,8 +652,9 @@ function AttachmentsPanel({ taskId, canEdit }: { taskId: string; canEdit: boolea
 
 /** Phụ thuộc: chọn task cùng dự án phải xong trước (PUT /tasks/:id/dependencies; 422 khi tạo vòng). */
 function DependencyPicker({ taskId, value, projectId, projectKey, disabled, onChange }: { taskId: string; value: string[]; projectId: string; projectKey: string; disabled: boolean; onChange: (ids: string[]) => void }) {
-  const tasks = useTasks(projectId, {});
   const [open, setOpen] = React.useState(false);
+  // Chỉ kéo danh sách khi người dùng thật sự mở ô chọn phụ thuộc, không phải mỗi lần mở Sheet.
+  const tasks = useTasks(projectId, {}, { enabled: open });
   const [draft, setDraft] = React.useState<string[]>(value);
   const [q, setQ] = React.useState("");
   React.useEffect(() => setDraft(value), [value]);
