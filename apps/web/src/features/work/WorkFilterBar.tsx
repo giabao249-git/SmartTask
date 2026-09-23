@@ -11,6 +11,7 @@ import { useSprints } from "@/lib/hooks/queries";
 import { cn } from "@/lib/utils";
 import { TASK_TYPES, typeToLabel } from "@/lib/status";
 import { useWorkFilters, type QuickFilter } from "./filters";
+import { SavedFilters } from "./SavedFilters";
 
 /** Thanh lọc dùng chung cho cả 4 cách nhìn công việc; mọi thay đổi ghi vào URL. */
 export function WorkFilterBar({ counts, syncing }: { counts: { my: number; unassigned: number }; syncing?: boolean }) {
@@ -109,6 +110,12 @@ export function WorkFilterBar({ counts, syncing }: { counts: { my: number; unass
         </SelectContent>
       </Select>
       <Input value={draftQ} onChange={(e) => setDraftQ(e.target.value)} placeholder="Tìm tiêu đề…" className="h-8 text-xs w-56" />
+      <SavedFilters projectId={project.id} />
+      {f.isFiltered && (
+        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={() => f.clear()}>
+          Xoá lọc
+        </Button>
+      )}
       {syncing && <span className="text-[10px] text-muted-foreground">đang đồng bộ…</span>}
     </div>
   );
