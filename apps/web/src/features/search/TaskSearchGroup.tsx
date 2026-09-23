@@ -42,7 +42,7 @@ export function TaskSearchGroup({ projectId, projectKey, query, onPick }: { proj
           className="cursor-pointer gap-2"
           onSelect={() => {
             onPick?.();
-            router.push(`/projects/${projectId}/board?task=${t.id}`);
+            router.push(`/projects/${projectId}/work?task=${t.id}`);
           }}
         >
           <span className="font-mono text-xs text-muted-foreground">

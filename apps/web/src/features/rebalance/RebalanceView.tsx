@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/app/PageHeader";
 import { ErrorState } from "@/components/app/ErrorState";
 import { WorkloadBadge } from "@/components/app/WorkloadBadge";
 import { api, describeError } from "@/lib/api";
@@ -50,11 +49,10 @@ export function RebalanceView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Cân bằng tải · ${project.key}`}
-        description="Hệ thống tính tải và bảng năng lực; Trợ lý AI đề xuất chuyển việc thành bản nháp, PM duyệt từng mục mới ghi thật."
-        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Cân bằng tải" }]}
-      >
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs text-muted-foreground">
+          Hệ thống tính tải và bảng năng lực; Trợ lý AI đề xuất chuyển việc thành bản nháp, PM duyệt từng mục mới ghi thật.
+        </p>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="gap-1.5 text-xs" disabled={recompute.isPending || !project.canManage} onClick={() => recompute.mutate()}>
             <RefreshCw className="h-3.5 w-3.5" /> Tính lại tải
@@ -63,7 +61,7 @@ export function RebalanceView() {
             <Bot className="h-3.5 w-3.5" /> Xin đề xuất từ Trợ lý AI
           </Button>
         </div>
-      </PageHeader>
+      </div>
 
       {workload.isPending ? (
         <Skeleton className="h-32 w-full" />

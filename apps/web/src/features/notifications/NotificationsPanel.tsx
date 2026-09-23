@@ -42,7 +42,7 @@ export function NotificationsPanel({ compact = false, onNavigate }: { compact?: 
 
   const open = (n: NotificationView) => {
     if (!n.isRead) mut.markRead.mutate(n.id);
-    const link = n.link ?? (typeof n.data?.projectId === "string" ? `/projects/${n.data.projectId}/board${typeof n.data.taskId === "string" ? `?task=${n.data.taskId}` : ""}` : null);
+    const link = n.link ?? (typeof n.data?.projectId === "string" ? `/projects/${n.data.projectId}/work${typeof n.data.taskId === "string" ? `?task=${n.data.taskId}` : ""}` : null);
     if (link) {
       onNavigate?.();
       router.push(link);

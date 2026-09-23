@@ -154,7 +154,7 @@ export function ProjectDashboardView() {
                     ))}
                   </div>
                 )}
-                <Button variant="outline" size="sm" className="w-full h-7 text-xs mt-1" onClick={() => router.push(`/projects/${project.id}/workload`)}>
+                <Button variant="outline" size="sm" className="w-full h-7 text-xs mt-1" onClick={() => router.push(`/projects/${project.id}/people`)}>
                   Xem chi tiết tải
                 </Button>
               </CardContent>

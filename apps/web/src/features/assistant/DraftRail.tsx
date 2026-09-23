@@ -289,7 +289,7 @@ function DraftItemCard({ item, projectId, assigneeName, taskKey, skillLabel, mem
               </Badge>
               {isApplied && item.taskId && (
                 <Button asChild variant="link" size="sm" className="h-5 p-0 text-success font-mono font-bold text-xs gap-1">
-                  <Link href={`/projects/${projectId}/board?task=${item.taskId}`}>
+                  <Link href={`/projects/${projectId}/work?task=${item.taskId}`}>
                     <CheckCircle2 className="h-3 w-3" /> {taskKey ?? "Đã tạo"} <ExternalLink className="h-2.5 w-2.5" />
                   </Link>
                 </Button>

@@ -7,11 +7,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Kanban,
-  ListTodo,
-  CalendarRange,
-  Grid2X2,
+  Settings2,
   Users2,
-  Award,
   Sparkles,
   Scale,
   Building2,
@@ -214,40 +211,16 @@ export function AppShell({ children }: AppShellProps) {
               icon: LayoutDashboard,
             },
             {
-              title: "Bảng Kanban",
-              href: `${projectBase}/board`,
+              title: "Công việc",
+              href: `${projectBase}/work`,
               icon: Kanban,
-              badge: "WIP 4/3",
-              badgeVariant: "warning" as const,
-              dotColor: "bg-warning",
+              badge: "4 cách xem",
+              badgeVariant: "secondary" as const,
             },
             {
-              title: "Danh sách task",
-              href: `${projectBase}/tasks`,
-              icon: ListTodo,
-            },
-            {
-              title: "Gantt / Timeline",
-              href: `${projectBase}/timeline`,
-              icon: CalendarRange,
-            },
-            {
-              title: "Ma trận Eisenhower",
-              href: `${projectBase}/eisenhower`,
-              icon: Grid2X2,
-            },
-            {
-              title: "Tải nhân sự (Workload)",
-              href: `${projectBase}/workload`,
+              title: "Nhân sự & kỹ năng",
+              href: `${projectBase}/people`,
               icon: Users2,
-              badge: "1 quá tải",
-              badgeVariant: "destructive" as const,
-              dotColor: "bg-destructive",
-            },
-            {
-              title: "Ma trận kỹ năng",
-              href: `${projectBase}/skills`,
-              icon: Award,
             },
             {
               title: "Trợ lý AI",
@@ -258,9 +231,9 @@ export function AppShell({ children }: AppShellProps) {
               dotColor: "bg-info",
             },
             {
-              title: "Đề xuất cân bằng tải",
-              href: `${projectBase}/rebalance`,
-              icon: Scale,
+              title: "Cấu hình dự án",
+              href: `${projectBase}/settings`,
+              icon: Settings2,
             },
           ]
         : [],
@@ -491,7 +464,7 @@ export function AppShell({ children }: AppShellProps) {
             </CommandItem>
             <CommandItem
               onSelect={() => {
-                if (projectBase) router.push(`${projectBase}/rebalance`);
+                if (projectBase) router.push(`${projectBase}/people?tab=balance`);
                 setCommandOpen(false);
               }}
               className="cursor-pointer"
@@ -737,7 +710,7 @@ export function AppShell({ children }: AppShellProps) {
             {/* Project Breadcrumb */}
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 truncate">
               <Link
-                href={projectBase ? `${projectBase}/board` : "/workspaces"}
+                href={projectBase ? `${projectBase}/work` : "/workspaces"}
                 className="font-semibold text-foreground/90 hover:text-foreground flex items-center gap-1.5 hover:underline truncate"
               >
                 <FolderKanban className="h-3.5 w-3.5 text-primary shrink-0" />

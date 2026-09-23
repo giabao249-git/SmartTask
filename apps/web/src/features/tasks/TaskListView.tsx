@@ -2,13 +2,11 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpDown, Search, Sparkles, ListTodo } from "lucide-react";
+import { ArrowUpDown, Sparkles, ListTodo } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PageHeader } from "@/components/app/PageHeader";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -17,7 +15,8 @@ import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
 import { fmtDay, taskKeyOf } from "@/components/app/TaskCard";
 import { describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
-import { useSprints } from "@/lib/hooks/queries";
+import { useAuth } from "@/lib/auth";
+import { useWorkFilters } from "@/features/work/filters";
 import { statusToVariant } from "@/lib/status";
 import type { TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -29,9 +28,10 @@ const PRIORITY_RANK: Record<string, number> = { URGENT: 4, HIGH: 3, MEDIUM: 2, L
 /** Danh sách task (UC-15): bộ lọc lưu trong URL, sắp xếp cột, cùng dữ liệu với Kanban. */
 export function TaskListView() {
   const project = useCurrentProject();
+  const auth = useAuth();
   const router = useRouter();
   const params = useSearchParams();
-  const sprintsQuery = useSprints(project.id);
+  const f = useWorkFilters();
   const get = (k: string, d = "") => params.get(k) ?? d;
   const setParam = (k: string, v: string) => {
     const next = new URLSearchParams(params.toString());
@@ -39,27 +39,22 @@ export function TaskListView() {
     else next.delete(k);
     router.replace(`?${next.toString()}`);
   };
-  const sprint = get("sprint", "__all");
-  const assignee = get("assignee", "__all");
   const priority = get("priority", "__all");
   const column = get("column", "__all");
-  const q = get("q");
   const sortKey = (get("sort", "number") as SortKey) || "number";
   const sortDir = get("dir", "asc") === "desc" ? "desc" : "asc";
 
-  const tasksQuery = useTasks(project.id, {
-    sprintId: sprint !== "__all" && sprint !== "__backlog" ? sprint : undefined,
-    backlog: sprint === "__backlog" || undefined,
-    assigneeId: assignee !== "__all" ? assignee : undefined,
-    priority: priority !== "__all" ? priority : undefined,
-    q: q || undefined,
-  });
+  // Cùng khoá truy vấn với Kanban/Timeline/Eisenhower → đổi cách nhìn không gọi lại API.
+  const tasksQuery = useTasks(project.id, f.query);
   useBoardRealtime(project.id);
   const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
   const [sheetOpen, setSheetOpen] = React.useState(!!params.get("task"));
 
   const rows = React.useMemo(() => {
-    const list = (tasksQuery.data ?? []).filter((t) => column === "__all" || t.columnId === column);
+    const list = f
+      .applyQuick(tasksQuery.data ?? [], auth.user?.id)
+      .filter((t) => column === "__all" || t.columnId === column)
+      .filter((t) => priority === "__all" || t.priority === priority);
     const cmp = (a: TaskListItem, b: TaskListItem): number => {
       switch (sortKey) {
         case "title":
@@ -79,7 +74,7 @@ export function TaskListView() {
       }
     };
     return [...list].sort((a, b) => (sortDir === "asc" ? cmp(a, b) : cmp(b, a)));
-  }, [tasksQuery.data, column, sortKey, sortDir]);
+  }, [tasksQuery.data, column, priority, sortKey, sortDir, f, auth.user?.id]);
 
   const toggleSort = (k: SortKey) => {
     const next = new URLSearchParams(params.toString());
@@ -102,35 +97,9 @@ export function TaskListView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Danh sách công việc · ${project.key}`}
-        description={`${rows.length} công việc theo bộ lọc hiện tại (lưu trong URL)`}
-        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Danh sách task" }]}
-      />
 
       <div className="flex items-center gap-2 flex-wrap text-xs">
-        <div className="relative">
-          <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
-          <Input defaultValue={q} onChange={(e) => setParam("q", e.target.value)} placeholder="Tìm tiêu đề…" className="h-8 text-xs pl-8 w-56" />
-        </div>
-        <Select value={sprint} onValueChange={(v) => setParam("sprint", v)}>
-          <SelectTrigger className="h-8 text-xs w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all" className="text-xs">
-              Mọi sprint
-            </SelectItem>
-            <SelectItem value="__backlog" className="text-xs">
-              Backlog
-            </SelectItem>
-            {(sprintsQuery.data ?? []).map((s) => (
-              <SelectItem key={s.id} value={s.id} className="text-xs">
-                {s.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <span className="text-muted-foreground">Lọc riêng của bảng:</span>
         <Select value={column} onValueChange={(v) => setParam("column", v)}>
           <SelectTrigger className="h-8 text-xs w-40">
             <SelectValue />
@@ -142,21 +111,6 @@ export function TaskListView() {
             {project.columns.map((c) => (
               <SelectItem key={c.id} value={c.id} className="text-xs">
                 {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={assignee} onValueChange={(v) => setParam("assignee", v)}>
-          <SelectTrigger className="h-8 text-xs w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all" className="text-xs">
-              Mọi người
-            </SelectItem>
-            {project.members.map((m) => (
-              <SelectItem key={m.id} value={m.id} className="text-xs">
-                {m.fullName}
               </SelectItem>
             ))}
           </SelectContent>
@@ -176,6 +130,7 @@ export function TaskListView() {
             ))}
           </SelectContent>
         </Select>
+        <span className="text-muted-foreground ml-auto">{rows.length} công việc</span>
       </div>
 
       {tasksQuery.isPending ? (
@@ -187,7 +142,7 @@ export function TaskListView() {
       ) : tasksQuery.isError ? (
         <ErrorState code={describeError(tasksQuery.error).code} message={describeError(tasksQuery.error).message} onRetry={() => tasksQuery.refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyState icon={ListTodo} title="Không có công việc" description="Đổi bộ lọc hoặc tạo công việc mới trên bảng Kanban." actionLabel="Mở bảng Kanban" onAction={() => router.push(`/projects/${project.id}/board`)} />
+        <EmptyState icon={ListTodo} title="Không có công việc" description="Đổi bộ lọc hoặc tạo công việc mới trên bảng Kanban." actionLabel="Mở bảng Kanban" onAction={() => f.setView("board")} />
       ) : (
         <div className="rounded-xl border border-border/80 overflow-x-auto">
           <Table>

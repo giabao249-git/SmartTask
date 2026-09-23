@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, MoreHorizontal, AlertTriangle, Filter, ShieldCheck, User, Scale, Bot } from "lucide-react";
+import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -29,13 +29,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { TaskCard, taskKeyOf } from "@/components/app/TaskCard";
 import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
 import { UserAvatar } from "@/components/app/UserAvatar";
-import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { describeError, isApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useCurrentProject } from "@/lib/hooks/use-project";
-import { useSprints } from "@/lib/hooks/queries";
+import { useWorkFilters } from "@/features/work/filters";
 import type { BoardColumn, TaskListItem } from "@/lib/types";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -70,20 +69,9 @@ export function KanbanBoard() {
   const auth = useAuth();
   const router = useRouter();
   const params = useSearchParams();
-  const sprintsQuery = useSprints(project.id);
-  const [sprintFilter, setSprintFilter] = React.useState<string>(project.activeSprint?.id ?? "__all");
-  const [assigneeFilter, setAssigneeFilter] = React.useState<string>("__all");
-  const [q, setQ] = React.useState("");
-  const filters = React.useMemo(
-    () => ({
-      sprintId: sprintFilter !== "__all" && sprintFilter !== "__backlog" ? sprintFilter : undefined,
-      backlog: sprintFilter === "__backlog" || undefined,
-      assigneeId: assigneeFilter !== "__all" ? assigneeFilter : undefined,
-      q: q.trim() || undefined,
-    }),
-    [sprintFilter, assigneeFilter, q],
-  );
-  const tasksQuery = useTasks(project.id, filters);
+  const f = useWorkFilters();
+  const sprintFilter = f.sprint;
+  const tasksQuery = useTasks(project.id, f.query);
   const move = useMoveTask(project.id);
   const mut = useTaskMutations(project.id);
   useBoardRealtime(project.id, {
@@ -103,7 +91,6 @@ export function KanbanBoard() {
   const [sheetOpen, setSheetOpen] = React.useState(!!params.get("task"));
   const [createOpen, setCreateOpen] = React.useState(false);
   const [selectedColumnId, setSelectedColumnId] = React.useState<string>("");
-  const [quickFilter, setQuickFilter] = React.useState<"all" | "my" | "unassigned">("all");
 
   const columns = React.useMemo(
     () => project.columns.slice().sort((a, b) => a.position - b.position),
@@ -125,7 +112,7 @@ export function KanbanBoard() {
       const isInput = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement | null)?.isContentEditable;
       if (!isInput && (e.key === "q" || e.key === "Q")) {
         e.preventDefault();
-        setQuickFilter((prev) => (prev === "my" ? "all" : "my"));
+        f.set({ quick: f.quick === "my" ? "all" : "my" });
       }
       if (!isInput && (e.key === "c" || e.key === "C") && project.canEdit) {
         e.preventDefault();
@@ -134,7 +121,7 @@ export function KanbanBoard() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openCreateDialog, project.canEdit]);
+  }, [openCreateDialog, project.canEdit, f]);
 
   const handleClaimTask = React.useCallback(
     (task: TaskListItem) => {
@@ -165,18 +152,12 @@ export function KanbanBoard() {
     return local.filter((t) => t.assignees.some((a) => a.id === currentUserId));
   }, [local, auth.user?.id]);
   const myHours = myTasks.reduce((s, t) => s + (t.remainingHours ?? t.estimateHours ?? 0), 0);
-  const unassignedTasks = React.useMemo(() => local.filter((t) => t.assignees.length === 0), [local]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor));
   const colTasks = (colId: string) =>
     local
       .filter((t) => t.columnId === colId)
-      .filter((t) => {
-        const currentUserId = auth.user?.id;
-        if (quickFilter === "my") return currentUserId ? t.assignees.some((a) => a.id === currentUserId) : true;
-        if (quickFilter === "unassigned") return t.assignees.length === 0;
-        return true;
-      })
+      .filter((t) => f.applyQuick([t], auth.user?.id).length > 0)
       .sort((a, b) => a.position - b.position);
 
   const openTask = (t: TaskListItem) => {
@@ -229,11 +210,10 @@ export function KanbanBoard() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Bảng Kanban · ${project.key}`}
-        description={project.activeSprint ? `${project.activeSprint.name} · ${project.activeSprint.startDate.slice(0, 10)} → ${project.activeSprint.endDate.slice(0, 10)}` : "Chưa có sprint đang chạy"}
-        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Bảng Kanban" }]}
-      >
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-xs text-muted-foreground">
+          {project.activeSprint ? `${project.activeSprint.name} · ${project.activeSprint.startDate.slice(0, 10)} → ${project.activeSprint.endDate.slice(0, 10)}` : "Chưa có sprint đang chạy"}
+        </div>
         <div className="flex items-center gap-3 shrink-0">
           <div className="hidden md:flex items-center -space-x-2 border-r border-border/60 pr-3 shrink-0">
             {project.members.map((m) => (
@@ -249,7 +229,7 @@ export function KanbanBoard() {
             </Button>
           )}
         </div>
-      </PageHeader>
+      </div>
 
       {/* Thanh phân vai PM/Leader vs Thành viên thường */}
       {isLeader ? (
@@ -266,7 +246,7 @@ export function KanbanBoard() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => router.push(`/projects/${project.id}/rebalance`)}
+              onClick={() => router.push(`/projects/${project.id}/people?tab=balance`)}
               className="h-7 text-xs gap-1 text-info hover:text-info border-info/30 hover:bg-info/10"
             >
               <Scale className="h-3 w-3" /> Cân bằng tải AI
@@ -297,89 +277,6 @@ export function KanbanBoard() {
         </div>
       )}
 
-      {/* Bộ lọc */}
-      <div className="flex items-center gap-2 flex-wrap text-xs">
-        {/* Segmented Quick Filter */}
-        <div className="flex items-center rounded-lg border border-border/80 bg-muted/40 p-0.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setQuickFilter("all")}
-            className={cn(
-              "h-7 px-2.5 text-xs rounded-md font-medium transition-colors",
-              quickFilter === "all" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            Tất cả
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setQuickFilter(quickFilter === "my" ? "all" : "my")}
-            className={cn(
-              "h-7 px-2.5 text-xs rounded-md font-medium transition-colors gap-1.5",
-              quickFilter === "my" ? "bg-primary text-primary-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <span>Việc của tôi</span>
-            <Badge variant={quickFilter === "my" ? "secondary" : "outline"} className="text-[10px] px-1 py-0 font-mono">
-              {myTasks.length}
-            </Badge>
-            <kbd className={cn("text-[9px] font-mono px-1 rounded border", quickFilter === "my" ? "bg-primary-foreground/20 border-transparent text-primary-foreground" : "bg-background")}>Q</kbd>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setQuickFilter(quickFilter === "unassigned" ? "all" : "unassigned")}
-            className={cn(
-              "h-7 px-2.5 text-xs rounded-md font-medium transition-colors gap-1.5",
-              quickFilter === "unassigned" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <span>Chưa giao</span>
-            <Badge variant="outline" className="text-[10px] px-1 py-0 font-mono">
-              {unassignedTasks.length}
-            </Badge>
-          </Button>
-        </div>
-
-        <Filter className="h-3.5 w-3.5 text-muted-foreground ml-1" />
-        <Select value={sprintFilter} onValueChange={setSprintFilter}>
-          <SelectTrigger className="h-8 text-xs w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all" className="text-xs">
-              Mọi sprint + backlog
-            </SelectItem>
-            <SelectItem value="__backlog" className="text-xs">
-              Backlog
-            </SelectItem>
-            {(sprintsQuery.data ?? []).map((s) => (
-              <SelectItem key={s.id} value={s.id} className="text-xs">
-                {s.name} · {s.status}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
-          <SelectTrigger className="h-8 text-xs w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all" className="text-xs">
-              Mọi người
-            </SelectItem>
-            {project.members.map((m) => (
-              <SelectItem key={m.id} value={m.id} className="text-xs">
-                {m.fullName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tiêu đề…" className="h-8 text-xs w-56" />
-        {tasksQuery.isFetching && <span className="text-[10px] text-muted-foreground">đang đồng bộ…</span>}
-      </div>
 
       {tasksQuery.isPending ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -5,13 +5,14 @@ import { Grid2X2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { TaskCard } from "@/components/app/TaskCard";
 import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
 import { describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
+import { useAuth } from "@/lib/auth";
+import { useWorkFilters } from "@/features/work/filters";
 import type { TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useTasks } from "@/features/board/hooks";
@@ -38,10 +39,15 @@ const QUADRANTS = [
 /** Ma trận Eisenhower (UC-14): xếp 4 ô từ task mở của sprint đang chạy (quy tắc ở trên, tính trên web từ dữ liệu API). */
 export function EisenhowerMatrixView() {
   const project = useCurrentProject();
-  const tasksQuery = useTasks(project.id, { sprintId: project.activeSprint?.id });
+  const auth = useAuth();
+  const f = useWorkFilters();
+  const tasksQuery = useTasks(project.id, f.query);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const today = Math.floor(Date.now() / DAY);
-  const open = React.useMemo(() => (tasksQuery.data ?? []).filter((t) => !t.completedAt), [tasksQuery.data]);
+  const open = React.useMemo(
+    () => f.applyQuick(tasksQuery.data ?? [], auth.user?.id).filter((t) => !t.completedAt),
+    [tasksQuery.data, f, auth.user?.id],
+  );
   const grouped = React.useMemo(() => {
     const g: Record<string, TaskListItem[]> = { do: [], schedule: [], delegate: [], eliminate: [] };
     for (const t of open) g[quadrantOf(t, today)].push(t);
@@ -50,11 +56,9 @@ export function EisenhowerMatrixView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Ma trận Eisenhower · ${project.key}`}
-        description={`${open.length} việc mở ${project.activeSprint ? `trong ${project.activeSprint.name}` : "toàn dự án"} · khẩn = hạn ≤ 3 ngày hoặc cờ khẩn · quan trọng = ưu tiên Cao/Khẩn hoặc độ khó ≥ 4`}
-        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Eisenhower" }]}
-      />
+      <p className="text-xs text-muted-foreground">
+        {open.length} việc mở theo bộ lọc hiện tại · khẩn = cờ khẩn hoặc hạn ≤ 3 ngày · quan trọng = ưu tiên Cao/Khẩn hoặc độ khó ≥ 4
+      </p>
       {tasksQuery.isPending ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[0, 1, 2, 3].map((i) => (

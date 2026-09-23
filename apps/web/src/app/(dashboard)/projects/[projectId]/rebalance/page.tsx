@@ -1,5 +1,7 @@
-import { RebalanceView } from "@/features/rebalance/RebalanceView";
+import { redirect } from "next/navigation";
 
-export default function RebalancePage() {
-  return <RebalanceView />;
+/** Đường cũ → màn Nhân sự (tab tương ứng). */
+export default async function LegacyPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = await params;
+  redirect(`/projects/${projectId}/people?tab=balance`);
 }

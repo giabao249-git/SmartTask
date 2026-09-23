@@ -62,7 +62,7 @@ export default function WorkspacesPage() {
       await queryClient.invalidateQueries({ queryKey: qk.projects(wsId ?? "") });
       setNewProjectOpen(false);
       toast.success(`Đã tạo dự án ${p.key} — ${p.name}`);
-      router.push(`/projects/${p.id}/board`);
+      router.push(`/projects/${p.id}/work`);
     },
     onError: (e) => {
       const { code, message } = describeError(e);
@@ -193,7 +193,7 @@ export default function WorkspacesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {projectsQuery.data.map((p) => (
-              <ProjectCard key={p.id} project={p} onOpen={() => router.push(`/projects/${p.id}/board`)} />
+              <ProjectCard key={p.id} project={p} onOpen={() => router.push(`/projects/${p.id}/work`)} />
             ))}
           </div>
         ))}

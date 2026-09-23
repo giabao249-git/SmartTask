@@ -1,0 +1,101 @@
+"use client";
+
+import * as React from "react";
+import { CalendarRange, Grid2X2, Kanban, ListTodo } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PageHeader } from "@/components/app/PageHeader";
+import { useAuth } from "@/lib/auth";
+import { useCurrentProject } from "@/lib/hooks/use-project";
+import { useTasks } from "@/features/board/hooks";
+import { KanbanBoard } from "@/features/board/KanbanBoard";
+import { TaskListView } from "@/features/tasks/TaskListView";
+import { TimelineGanttView } from "@/features/timeline/TimelineGanttView";
+import { EisenhowerMatrixView } from "@/features/eisenhower/EisenhowerMatrixView";
+import { WorkFilterBar } from "./WorkFilterBar";
+import { useWorkFilters, WORK_VIEWS, WorkFiltersProvider, type WorkView as ViewKey } from "./filters";
+
+const ICON: Record<ViewKey, typeof Kanban> = {
+  board: Kanban,
+  list: ListTodo,
+  timeline: CalendarRange,
+  eisenhower: Grid2X2,
+};
+
+/** Màn "Công việc": 4 cách nhìn cùng một tập task (GET /projects/:id/tasks), chung bộ lọc và chung cache. */
+export function WorkView() {
+  const project = useCurrentProject();
+  return (
+    <WorkFiltersProvider defaultSprintId={project.activeSprint?.id}>
+      <WorkBody />
+    </WorkFiltersProvider>
+  );
+}
+
+function WorkBody() {
+  const project = useCurrentProject();
+  const auth = useAuth();
+  const f = useWorkFilters();
+  // Cùng khoá với 4 view bên trong → chỉ một lần gọi API cho cả màn
+  const tasks = useTasks(project.id, f.query);
+  const counts = React.useMemo(() => {
+    const list = tasks.data ?? [];
+    const selfId = auth.user?.id;
+    return {
+      my: selfId ? list.filter((t) => t.assignees.some((a) => a.id === selfId)).length : 0,
+      unassigned: list.filter((t) => t.assignees.length === 0).length,
+    };
+  }, [tasks.data, auth.user?.id]);
+
+  const current = WORK_VIEWS.find((v) => v.key === f.view) ?? WORK_VIEWS[0];
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title={`Công việc · ${project.key}`}
+        description="Bốn cách nhìn cùng một danh sách công việc — đổi cách nhìn vẫn giữ nguyên bộ lọc."
+        breadcrumbs={[
+          { label: "Workspace", href: "/workspaces" },
+          { label: project.name, href: `/projects/${project.id}/dashboard` },
+          { label: current.label },
+        ]}
+      />
+
+      {/* Chọn cách nhìn: tab trên màn rộng, select trên điện thoại */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <Tabs value={f.view} onValueChange={(v) => f.setView(v as ViewKey)} className="hidden sm:block">
+          <TabsList className="h-9">
+            {WORK_VIEWS.map((v) => {
+              const Icon = ICON[v.key];
+              return (
+                <TabsTrigger key={v.key} value={v.key} className="text-xs gap-1.5">
+                  <Icon className="h-3.5 w-3.5" />
+                  {v.short}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </Tabs>
+        <Select value={f.view} onValueChange={(v) => f.setView(v as ViewKey)}>
+          <SelectTrigger className="h-9 text-xs w-48 sm:hidden">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {WORK_VIEWS.map((v) => (
+              <SelectItem key={v.key} value={v.key} className="text-xs">
+                {v.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <WorkFilterBar counts={counts} syncing={tasks.isFetching} />
+
+      {f.view === "board" && <KanbanBoard />}
+      {f.view === "list" && <TaskListView />}
+      {f.view === "timeline" && <TimelineGanttView />}
+      {f.view === "eisenhower" && <EisenhowerMatrixView />}
+    </div>
+  );
+}

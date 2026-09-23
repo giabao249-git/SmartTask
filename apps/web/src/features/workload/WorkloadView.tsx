@@ -10,8 +10,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { UserAvatar } from "@/components/app/UserAvatar";
@@ -28,7 +26,7 @@ const fmtWeek = (iso: string) => {
   return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
-/** Tải nhân sự (UC-24/25): GET /projects/:id/workload (người × tuần), chi tiết cấu thành, bảng năng lực (UC-26, không xếp hạng). */
+/** Tải nhân sự theo tuần (tab trong màn Nhân sự) (UC-24/25): GET /projects/:id/workload (người × tuần), chi tiết cấu thành, bảng năng lực (UC-26, không xếp hạng). */
 export function WorkloadView() {
   const project = useCurrentProject();
   const router = useRouter();
@@ -46,11 +44,10 @@ export function WorkloadView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Tải nhân sự · ${project.key}`}
-        description="Giờ còn lại theo tuần × năng lực hiệu dụng (trừ họp, nghỉ) → mức sử dụng; số do backend tính, không xếp hạng ai."
-        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Tải nhân sự" }]}
-      >
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs text-muted-foreground">
+          Giờ còn lại theo tuần × năng lực hiệu dụng (trừ họp, nghỉ) → mức sử dụng; số do backend tính, không xếp hạng ai.
+        </p>
         <div className="flex items-center gap-2">
           {project.canManage && (
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" disabled={recompute.isPending} onClick={() => recompute.mutate()}>
@@ -61,19 +58,8 @@ export function WorkloadView() {
             <Scale className="h-3.5 w-3.5" /> Xem đề xuất cân bằng
           </Button>
         </div>
-      </PageHeader>
+      </div>
 
-      <Tabs defaultValue="weeks">
-        <TabsList className="h-8">
-          <TabsTrigger value="weeks" className="text-xs gap-1">
-            <Users2 className="h-3.5 w-3.5" /> Người × tuần
-          </TabsTrigger>
-          <TabsTrigger value="capacity" className="text-xs gap-1">
-            <Table2 className="h-3.5 w-3.5" /> Bảng năng lực
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="weeks" className="pt-3">
           {wl.isPending ? (
             <Skeleton className="h-64 w-full" />
           ) : wl.isError ? (
@@ -137,12 +123,6 @@ export function WorkloadView() {
               </CardContent>
             </Card>
           )}
-        </TabsContent>
-
-        <TabsContent value="capacity" className="pt-3">
-          <CapacityTable projectId={project.id} sprintId={project.activeSprint?.id} canView={project.canManage} />
-        </TabsContent>
-      </Tabs>
 
       <Sheet open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">

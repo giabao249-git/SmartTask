@@ -9,9 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { SkillLevel } from "@/components/app/SkillLevel";
@@ -33,7 +32,7 @@ interface MySkill {
 }
 
 /** Ma trận kỹ năng (UC-22/23): heatmap thành viên × kỹ năng, bus factor, tự khai mức, PM xác nhận. */
-export function SkillsMatrixView() {
+export function SkillsMatrixView({ section = "matrix" }: { section?: "matrix" | "mine" }) {
   const project = useCurrentProject();
   const auth = useAuth();
   const qc = useQueryClient();
@@ -74,11 +73,6 @@ export function SkillsMatrixView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Ma trận kỹ năng · ${project.key}`}
-        description="Mức 1–5 tự khai, PM xác nhận (✓). Bus factor: kỹ năng chỉ ≤ 1 người đạt mức tối thiểu."
-        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Ma trận kỹ năng" }]}
-      >
         <div className="flex items-center gap-2 text-xs">
           <span className="text-muted-foreground">Mức tối thiểu</span>
           <Select value={String(minLevel)} onValueChange={(v) => setMinLevel(Number(v))}>
@@ -94,17 +88,8 @@ export function SkillsMatrixView() {
             </SelectContent>
           </Select>
         </div>
-      </PageHeader>
 
-      <Tabs defaultValue="matrix">
-        <TabsList className="h-8">
-          <TabsTrigger value="matrix" className="text-xs gap-1">
-            <Award className="h-3.5 w-3.5" /> Heatmap
-          </TabsTrigger>
-          <TabsTrigger value="mine" className="text-xs gap-1">
-            <BadgeCheck className="h-3.5 w-3.5" /> Kỹ năng của tôi
-          </TabsTrigger>
-        </TabsList>
+      <Tabs value={section}>
 
         <TabsContent value="matrix" className="pt-3 space-y-4">
           {matrix.isPending ? (

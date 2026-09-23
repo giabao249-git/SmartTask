@@ -15,6 +15,21 @@
 | Lint / build | `eslint.config.mjs`, `package.json` | `next/core-web-vitals + typescript + unused-imports`; `npm run web:build` dùng `NEXT_DIST_DIR=.next-build` để không phá `.next` của dev server |
 | `.env.example` | `NEXT_PUBLIC_API_URL=http://localhost:3000/api/v1`, `NEXT_PUBLIC_USE_MOCK=0` | Cờ mock hiện không còn màn nào dùng (giữ để tương thích) |
 
+## 1b. Gộp màn thành tab (23/09/2026)
+
+Sidebar dự án từ 8 mục còn 4. Hai nhóm được gộp vì **cùng một nguồn dữ liệu**, không phải để cho gọn menu:
+
+| Màn mới | Tab | Màn cũ (vẫn redirect) |
+|---|---|---|
+| `/projects/:id/work` | `?view=board` \| `list` \| `timeline` \| `eisenhower` | `/board`, `/tasks`, `/timeline`, `/eisenhower` |
+| `/projects/:id/people` | `?tab=workload` \| `balance` \| `skills` \| `mine` | `/workload`, `/rebalance`, `/skills` |
+
+- **Bộ lọc dùng chung** (`features/work/filters.tsx`): sprint, người, từ khoá, lọc nhanh (Tất cả / Việc của tôi / Chưa giao) nằm trong URL `?view=&sprint=&assignee=&q=&quick=&task=` → đổi cách nhìn không mất lọc, F5 và chia sẻ link ra đúng khung nhìn.
+- **Một lần gọi API cho cả màn**: 4 view dùng chung khoá TanStack Query `["projects", id, "tasks", filters]`; đo thực tế đổi 3 tab = **0 request** thêm.
+- **Đường cũ không chết**: 7 route cũ chuyển hướng sang tab tương ứng và **giữ nguyên `?task=`** — thông báo, ⌘K, link đã chia sẻ và ảnh trong tài liệu vẫn mở đúng công việc.
+- Màn hẹp (< 640px) đổi tab bằng `Select` thay cho `TabsList`.
+- Giữ riêng: Dashboard (điểm vào), Trợ lý AI (layout 3 cột), Cấu hình dự án (đã là tabs).
+
 ## 2. Bảng màn ↔ endpoint ↔ trạng thái
 
 Ký hiệu: ✅ nối API thật · 🟡 tính trên web từ dữ liệu API (không có endpoint riêng) · ⏳ chờ backend.
@@ -27,15 +42,15 @@ Ký hiệu: ✅ nối API thật · 🟡 tính trên web từ dữ liệu API (k
 | Trợ lý AI `/projects/:id/assistant` | `features/assistant/*` | `GET/POST/PATCH/DELETE /ai/sessions[/:id]`, `GET /ai/sessions/:id/proposals`, `POST /ai/chat`, `PATCH /ai/proposals/:id/items/:draftKey`, `POST /ai/proposals/:id/apply {draftKeys?, version}`, `POST …/reject {draftKeys?}`, `GET /ai/quota` | `ai:proposal:updated`, `ai:session:updated` | ✅ — 409 `AI_TURN_IN_PROGRESS`/429 → toast; 503 `AI_PROVIDER_UNAVAILABLE` → Alert; 409 `PROPOSAL_VERSION_CONFLICT` → Alert "đã đổi ở tab khác" + tải lại; item duyệt xanh lá với key task thật |
 | Cài đặt › Trợ lý AI | `features/settings/AiPolicyView.tsx` | `GET/PUT /workspaces/:id/ai/prompt`, `GET/POST/DELETE /workspaces/:id/member-aliases`, `PATCH /workspaces/:id/members/:userId/identity` | — | ✅ (409 alias trùng, 422 quản lý là chính mình) |
 | AI phân rã `/projects/:id/ai-decompose` | `features/ai-decompose/AIDecomposeView.tsx` | `POST /projects/:id/ai/decompose`, `GET /ai/proposals/:id`, `POST …/apply`, `POST …/reject` | — | ✅ — form một lượt; sửa từng mục chuyển sang Trợ lý AI (nút "Chat nhiều lượt" mang prompt) |
-| Kanban `/projects/:id/board` | `features/board/*` | `GET /projects/:id/tasks {items, deletedIds, serverTime}`, `POST /projects/:id/tasks`, `PATCH /tasks/:id/move {columnId, position, version}`, `GET /projects/:id/sprints` | `task:*` (bỏ qua actorId của mình, debounce 300 ms) | ✅ — 409 `TASK_VERSION_CONFLICT`/422 WIP → hoàn tác + toast |
+| Công việc › Bảng `/projects/:id/work?view=board` | `features/board/*` | `GET /projects/:id/tasks {items, deletedIds, serverTime}`, `POST /projects/:id/tasks`, `PATCH /tasks/:id/move {columnId, position, version}`, `GET /projects/:id/sprints` | `task:*` (bỏ qua actorId của mình, debounce 300 ms) | ✅ — 409 `TASK_VERSION_CONFLICT`/422 WIP → hoàn tác + toast |
 | Chi tiết task (Sheet) | `components/app/TaskDetailSheet.tsx` | `GET/PATCH/DELETE /tasks/:id` (mọi PATCH kèm `version`, gồm `isUrgent`), `PUT /tasks/:id/assignees`, `PUT /tasks/:id/labels`, `PUT /tasks/:id/skills`, `PUT /tasks/:id/dependencies` (mới — 422 `DEPENDENCY_CYCLE`), `PATCH /tasks/:id/progress`, `POST /tasks/:id/subtasks`, `GET/POST/PATCH/DELETE /tasks/:id/comments`, `GET /projects/:id/members/suggest?q=`, `GET/POST /tasks/:id/attachments` (sign → PUT → confirm), `GET /attachments/:id/download-url`, `DELETE /attachments/:id`, `GET /projects/:id/activity?taskId=` (tab Hoạt động) | `comment:*` | ✅ |
-| Danh sách task `/projects/:id/tasks` | `features/tasks/TaskListView.tsx` | `GET /projects/:id/tasks` (lọc/sắp xếp trong URL) | `task:*` | ✅ |
-| Timeline `/projects/:id/timeline` | `features/timeline/TimelineGanttView.tsx` | `GET /projects/:id/tasks`, `GET /projects/:id/sprints`, `PATCH /tasks/:id {startDate, dueDate, version}` | `task:*` | ✅ Gantt vẽ trên web; kéo thanh dời ngày, kéo mép phải đổi hạn (409 → tải lại) |
-| Eisenhower `/projects/:id/eisenhower` | `features/eisenhower/EisenhowerMatrixView.tsx` | `GET /projects/:id/tasks?sprintId=` | `task:*` | 🟡 4 ô tính trên web: khẩn = `isUrgent` hoặc hạn ≤ 3 ngày; quan trọng = ưu tiên HIGH/URGENT hoặc độ khó ≥ 4 |
+| Công việc › Danh sách `?view=list` | `features/tasks/TaskListView.tsx` | `GET /projects/:id/tasks` (lọc/sắp xếp trong URL) | `task:*` | ✅ |
+| Công việc › Timeline `?view=timeline` | `features/timeline/TimelineGanttView.tsx` | `GET /projects/:id/tasks`, `GET /projects/:id/sprints`, `PATCH /tasks/:id {startDate, dueDate, version}` | `task:*` | ✅ Gantt vẽ trên web; kéo thanh dời ngày, kéo mép phải đổi hạn (409 → tải lại) |
+| Công việc › Eisenhower `?view=eisenhower` | `features/eisenhower/EisenhowerMatrixView.tsx` | `GET /projects/:id/tasks?sprintId=` | `task:*` | 🟡 4 ô tính trên web: khẩn = `isUrgent` hoặc hạn ≤ 3 ngày; quan trọng = ưu tiên HIGH/URGENT hoặc độ khó ≥ 4 |
 | Dashboard `/projects/:id/dashboard` | `features/dashboard/ProjectDashboardView.tsx` | `GET /projects/:id/dashboard`, `GET /sprints/:id/burndown`, `GET /sprints/:id/forecast`, `POST /sprints/:id/forecast/explain`, `GET /projects/:id/activity` | — | ✅ (thẻ RISK_EXPLANATION parse zod; thẻ Hoạt động gần đây UC-16; nút Cấu hình dự án) |
-| Tải nhân sự `/projects/:id/workload` | `features/workload/WorkloadView.tsx` | `GET /projects/:id/workload?weeks=`, `GET /users/:id/workload/details?week=`, `GET /projects/:id/capacity-table` (PM), `POST /projects/:id/workload/recompute` | — | ✅ — nút "Xem đề xuất cân bằng" mở Trợ lý AI với tin mồi |
-| Cân bằng tải `/projects/:id/rebalance` | `features/rebalance/RebalanceView.tsx` | `GET /projects/:id/workload`, `GET /projects/:id/capacity-table`, `POST …/workload/recompute` | — | ✅ — **không có endpoint "đề xuất"**: backend chỉ tính; đề xuất chuyển việc là bản nháp của LLM trong Trợ lý AI, PM duyệt mới ghi (quy tắc AI) |
-| Ma trận kỹ năng `/projects/:id/skills` | `features/skills/SkillsMatrixView.tsx` | `GET /workspaces/:id/skill-matrix?projectId=&minLevel=`, `GET /workspaces/:id/skills`, `PUT /workspaces/:id/me/skills`, `PATCH /workspaces/:id/users/:userId/skills/:skillId/verify` | — | ✅ |
+| Nhân sự › Tải theo tuần `/projects/:id/people` | `features/workload/WorkloadView.tsx` | `GET /projects/:id/workload?weeks=`, `GET /users/:id/workload/details?week=`, `GET /projects/:id/capacity-table` (PM), `POST /projects/:id/workload/recompute` | — | ✅ — nút "Xem đề xuất cân bằng" mở Trợ lý AI với tin mồi |
+| Nhân sự › Năng lực & cân bằng `?tab=balance` | `features/rebalance/RebalanceView.tsx` | `GET /projects/:id/workload`, `GET /projects/:id/capacity-table`, `POST …/workload/recompute` | — | ✅ — **không có endpoint "đề xuất"**: backend chỉ tính; đề xuất chuyển việc là bản nháp của LLM trong Trợ lý AI, PM duyệt mới ghi (quy tắc AI) |
+| Nhân sự › Kỹ năng `?tab=skills` / `?tab=mine` | `features/skills/SkillsMatrixView.tsx` | `GET /workspaces/:id/skill-matrix?projectId=&minLevel=`, `GET /workspaces/:id/skills`, `PUT /workspaces/:id/me/skills`, `PATCH /workspaces/:id/users/:userId/skills/:skillId/verify` | — | ✅ |
 | Cài đặt › Thông báo `/settings` | `features/notifications/*` | `GET /notifications?unreadOnly=`, `GET /notifications/unread-count`, `PATCH /notifications/:id/read`, `POST /notifications/read-all` | `notification:new` (toast + invalidate) | ✅ — bấm mở `link` hoặc `/projects/:pid/board?task=` |
 | Cài đặt › Thành viên | `features/settings/MembersTab.tsx` | `GET /workspaces/:id/members`, `PATCH …/members/:userId {role}`, `DELETE …/members/:userId`, `GET/POST/DELETE /workspaces/:id/invitations[/:id]` | — | ✅ (OWNER/chính mình khoá; link mời chép clipboard) |
 | Cài đặt › Tham số | `features/settings/WorkspaceSettingsTab.tsx` | `GET/PATCH /workspaces/:id/settings` | — | ✅ (năng lực, ngày/giờ làm, ngưỡng tải, spread, hạn mức & mục đích AI). Ngày lễ, trọng số burnout, retention: chỉ qua API |

@@ -1,5 +1,7 @@
-import { SkillsMatrixView } from "@/features/skills/SkillsMatrixView";
+import { redirect } from "next/navigation";
 
-export default function SkillsPage() {
-  return <SkillsMatrixView />;
+/** Đường cũ → màn Nhân sự (tab tương ứng). */
+export default async function LegacyPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = await params;
+  redirect(`/projects/${projectId}/people?tab=skills`);
 }

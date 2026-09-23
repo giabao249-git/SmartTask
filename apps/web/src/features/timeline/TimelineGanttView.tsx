@@ -8,9 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { UserAvatar } from "@/components/app/UserAvatar";
@@ -18,7 +16,9 @@ import { TaskDetailSheet } from "@/components/app/TaskDetailSheet";
 import { taskKeyOf } from "@/components/app/TaskCard";
 import { describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
+import { useAuth } from "@/lib/auth";
 import { useSprints } from "@/lib/hooks/queries";
+import { useWorkFilters } from "@/features/work/filters";
 import { priorityToVariant } from "@/lib/status";
 import type { TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -153,11 +153,12 @@ const SIDEBAR_WIDTH = 340;
 export function TimelineGanttView() {
   const project = useCurrentProject();
   const params = useSearchParams();
+  const f = useWorkFilters();
+  const auth = useAuth();
   const sprints = useSprints(project.id);
-  const [sprintFilter, setSprintFilter] = React.useState<string>("__all");
   const [zoom, setZoom] = React.useState<Zoom>("week");
   const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
-  const tasksQuery = useTasks(project.id, { sprintId: sprintFilter !== "__all" ? sprintFilter : undefined });
+  const tasksQuery = useTasks(project.id, f.query);
   const px = ZOOM[zoom];
   const today = Math.floor(Date.now() / DAY);
   const m = useTaskMutations(project.id);
@@ -227,7 +228,10 @@ export function TimelineGanttView() {
     );
   };
 
-  const rows = React.useMemo(() => (tasksQuery.data ?? []).filter((t) => t.startDate || t.dueDate), [tasksQuery.data]);
+  const rows = React.useMemo(
+    () => f.applyQuick(tasksQuery.data ?? [], auth.user?.id).filter((t) => t.startDate || t.dueDate),
+    [tasksQuery.data, f, auth.user?.id],
+  );
   const range = React.useMemo(() => {
     if (!rows.length) return { start: today - 7, end: today + 21 };
     const starts = rows.map((t) => toDay(t.startDate ?? t.dueDate!));
@@ -275,51 +279,26 @@ export function TimelineGanttView() {
   return (
     <TooltipProvider delayDuration={150}>
       <div className="flex flex-col h-[calc(100vh-8.5rem)] min-h-[620px] space-y-3">
-        <PageHeader
-          title={`Gantt / Timeline · ${project.key}`}
-          description={
-            project.canEdit
-              ? "Kéo thanh để dời ngày, kéo mép phải để đổi hạn (lưu kèm version). Rê chuột để xem thông tin chi tiết, bấm để mở hội thoại."
-              : "Chế độ xem. Rê chuột để xem thông tin chi tiết, bấm để mở hội thoại."
-          }
-          breadcrumbs={[
-            { label: "Workspace", href: "/workspaces" },
-            { label: project.name, href: `/projects/${project.id}/dashboard` },
-            { label: "Timeline" },
-          ]}
-          className="shrink-0"
-        >
-          <div className="flex items-center gap-2">
-            <Select value={sprintFilter} onValueChange={setSprintFilter}>
-              <SelectTrigger className="h-8 text-xs w-40 bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all" className="text-xs">
-                  Mọi sprint
-                </SelectItem>
-                {(sprints.data ?? []).map((s) => (
-                  <SelectItem key={s.id} value={s.id} className="text-xs">
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="flex items-center rounded-md border border-border/80 bg-background">
-              {(["day", "week", "month"] as Zoom[]).map((z) => (
-                <Button
-                  key={z}
-                  variant={zoom === z ? "default" : "ghost"}
-                  size="sm"
-                  className="h-8 text-xs rounded-none first:rounded-l-md last:rounded-r-md"
-                  onClick={() => setZoom(z)}
-                >
-                  {z === "day" ? <ZoomIn className="h-3.5 w-3.5" /> : z === "month" ? <ZoomOut className="h-3.5 w-3.5" /> : "Tuần"}
-                </Button>
-              ))}
-            </div>
+        <div className="flex items-center justify-between gap-2 flex-wrap shrink-0">
+          <p className="text-xs text-muted-foreground">
+            {project.canEdit
+              ? "Kéo thanh để dời ngày, kéo mép phải để đổi hạn (lưu kèm version). Rê chuột để xem chi tiết, bấm để mở hội thoại."
+              : "Chế độ xem. Rê chuột để xem chi tiết, bấm để mở hội thoại."}
+          </p>
+          <div className="flex items-center rounded-md border border-border/80 bg-background">
+            {(["day", "week", "month"] as Zoom[]).map((z) => (
+              <Button
+                key={z}
+                variant={zoom === z ? "default" : "ghost"}
+                size="sm"
+                className="h-8 text-xs rounded-none first:rounded-l-md last:rounded-r-md"
+                onClick={() => setZoom(z)}
+              >
+                {z === "day" ? <ZoomIn className="h-3.5 w-3.5" /> : z === "month" ? <ZoomOut className="h-3.5 w-3.5" /> : "Tuần"}
+              </Button>
+            ))}
           </div>
-        </PageHeader>
+        </div>
 
         {tasksQuery.isPending ? (
           <Skeleton className="flex-1 w-full rounded-xl" />

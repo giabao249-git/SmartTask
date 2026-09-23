@@ -63,7 +63,7 @@ export function AIDecomposeView() {
     mutationFn: () => api.post<ApplyResponse>(`/ai/proposals/${proposal!.id}/apply`, { version: proposal!.version }),
     onSuccess: (r) => {
       setProposal(r.proposal);
-      toast.success(`Đã tạo ${r.createdTasks.length} công việc: ${r.createdTasks.map((t) => t.key).join(", ")}`, { action: { label: "Mở Kanban", onClick: () => router.push(`/projects/${project.id}/board`) } });
+      toast.success(`Đã tạo ${r.createdTasks.length} công việc: ${r.createdTasks.map((t) => t.key).join(", ")}`, { action: { label: "Mở Kanban", onClick: () => router.push(`/projects/${project.id}/work`) } });
     },
     onError: (e) => {
       const { code, message } = describeError(e);
