@@ -1,4 +1,13 @@
 import { z } from 'zod';
+import { dataQuerySpecSchema } from './data-query';
+import {
+  prioritySchema,
+  riskLevelSchema,
+  shortCode,
+  taskTypeSchema,
+} from './primitives';
+
+export { prioritySchema, riskLevelSchema, shortCode, taskTypeSchema };
 
 /**
  * Structured action — đầu ra duy nhất của LLM (docs/04-kien-truc/05 §4).
@@ -8,18 +17,10 @@ import { z } from 'zod';
  */
 export const STRUCTURED_ACTION_SCHEMA_VERSION = 1;
 
-/** Mã ngắn theo lượt: u = người, t = task, s = sprint, k = kỹ năng, d = bản nháp trong cùng đề xuất. */
-export const shortCode = (prefix: 'u' | 't' | 's' | 'k') =>
-  z.string().regex(new RegExp(`^${prefix}\\d{1,4}$`), `mã ${prefix}N`);
-
 export const draftKeySchema = z
   .string()
   .regex(/^d\d{1,3}$/, 'draftKey dạng d1, d2…');
 
-export const prioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
-/** Loại công việc — cố định, trùng enum TaskType của Prisma. Đặt tên `taskType` để không lẫn với `type` của action. */
-export const taskTypeSchema = z.enum(['STORY', 'TASK', 'BUG']);
-export const riskLevelSchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'UNKNOWN']);
 
 const base = {
   schemaVersion: z
@@ -242,6 +243,17 @@ export const chatResponseSchema = z.object({
 });
 export type ChatResponse = z.infer<typeof chatResponseSchema>;
 
+/**
+ * Tra cứu dữ liệu: LLM chọn ý định + bộ lọc, backend chạy truy vấn thật rồi đính `blocks`
+ * vào tin trả lời (docs 14). LLM KHÔNG được tự điền số vào `reply` cho phần tra cứu.
+ */
+export const dataQueryActionSchema = z.object({
+  type: z.literal('DATA_QUERY'),
+  ...base,
+  query: dataQuerySpecSchema,
+});
+export type DataQueryAction = z.infer<typeof dataQueryActionSchema>;
+
 export const structuredActionSchema = z.discriminatedUnion('type', [
   decomposeProposalSchema,
   createTaskDraftSchema,
@@ -253,6 +265,7 @@ export const structuredActionSchema = z.discriminatedUnion('type', [
   memoryProposalSchema,
   askClarificationSchema,
   chatResponseSchema,
+  dataQueryActionSchema,
 ]);
 export type StructuredAction = z.infer<typeof structuredActionSchema>;
 export type StructuredActionType = StructuredAction['type'];

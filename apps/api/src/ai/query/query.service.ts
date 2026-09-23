@@ -1,0 +1,1367 @@
+import { Injectable } from '@nestjs/common';
+import { Prisma, TaskType } from '@prisma/client';
+import type {
+  BlockItem,
+  DataQuerySpec,
+  QueryBlock,
+  QueryResult,
+  StatItem,
+} from '@smarttask/shared';
+import { AppError } from '../../common/app-error';
+import { ProjectAccessService } from '../../common/access/project-access.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { WorkloadService } from '../../workload/workload.service';
+import { CodeBook } from '../context/short-codes';
+
+const DAY = 86_400_000;
+const PRIORITY_TONE: Record<
+  string,
+  'danger' | 'warning' | 'muted' | 'default'
+> = {
+  URGENT: 'danger',
+  HIGH: 'warning',
+  MEDIUM: 'default',
+  LOW: 'muted',
+};
+const PRIORITY_LABEL: Record<string, string> = {
+  URGENT: 'Rất cao',
+  HIGH: 'Cao',
+  MEDIUM: 'Trung bình',
+  LOW: 'Thấp',
+};
+const TYPE_LABEL: Record<string, string> = {
+  STORY: 'Story',
+  TASK: 'Task',
+  BUG: 'Bug',
+};
+
+/** Prisma trả Decimal cho giờ — đổi về number để tính và hiển thị. */
+const num = (v: unknown): number => (v == null ? 0 : Number(v));
+
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+const startOfDay = (d: Date) =>
+  new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+/** Thứ Hai của tuần chứa `d` (giờ UTC). */
+const startOfWeek = (d: Date) => {
+  const s = startOfDay(d);
+  const dow = (s.getUTCDay() + 6) % 7;
+  return new Date(s.getTime() - dow * DAY);
+};
+
+export interface QueryContext {
+  userId: string;
+  projectId: string;
+  /** Bảng mã của phiên chat; thiếu thì nạp lại từ phiên (nút "Làm mới" gọi sau nhiều ngày). */
+  codes?: CodeBook | null;
+  sessionId?: string;
+}
+
+/**
+ * Chạy TRUY VẤN TRA CỨU cho Trợ lý AI (docs 14). LLM chỉ chọn ý định + bộ lọc; mọi con số ở đây
+ * đều đọc thẳng từ CSDL dưới quyền người hỏi. Chỉ đọc, không ghi, không nhận field tự do.
+ */
+@Injectable()
+export class AiQueryService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly access: ProjectAccessService,
+    private readonly workload: WorkloadService,
+  ) {}
+
+  async run(spec: DataQuerySpec, context: QueryContext): Promise<QueryResult> {
+    // Quyền: luôn kiểm theo dự án của phiên chat, không tin tham số LLM trả về
+    const acc = await this.access.assertRead(context.userId, context.projectId);
+    const ctx = context.codes
+      ? context
+      : { ...context, codes: await this.codesOfSession(context) };
+    const at = new Date();
+    const base = { intent: spec.intent, generatedAt: at.toISOString() };
+
+    switch (spec.intent) {
+      case 'TASK_LIST':
+      case 'TASK_AGENDA':
+      case 'TASK_BLOCKED':
+      case 'TASK_STATS':
+        return { ...base, ...(await this.tasks(spec, ctx, at)) };
+      case 'TASK_DETAIL':
+        return { ...base, ...(await this.taskDetail(spec, ctx)) };
+      case 'MEMBER_LIST':
+        return { ...base, ...(await this.members(ctx)) };
+      case 'MEMBER_PROFILE':
+        return { ...base, ...(await this.memberProfile(spec, ctx, at)) };
+      case 'WORKLOAD_WEEK':
+        return {
+          ...base,
+          ...(await this.workloadWeeks(ctx, acc.workspaceId, at)),
+        };
+      case 'CAPACITY_FREE':
+        return {
+          ...base,
+          ...(await this.capacity(spec, ctx)),
+        };
+      case 'WHO_KNOWS_SKILL':
+        return {
+          ...base,
+          ...(await this.whoKnows(spec, ctx, acc.workspaceId)),
+        };
+      case 'BUS_FACTOR':
+        return {
+          ...base,
+          ...(await this.busFactor(spec, ctx, acc.workspaceId)),
+        };
+      case 'SPRINT_LIST':
+        return { ...base, ...(await this.sprints(ctx)) };
+      case 'SPRINT_PROGRESS':
+        return { ...base, ...(await this.sprintProgress(spec, ctx, at)) };
+      case 'ACTIVITY_FEED':
+        return { ...base, ...(await this.activity(spec, ctx)) };
+      case 'NOTIFICATION_LIST':
+        return { ...base, ...(await this.notifications(spec, ctx)) };
+      case 'AI_USAGE':
+        return {
+          ...base,
+          ...(await this.aiUsage(spec, ctx, acc.workspaceId, acc.canManage)),
+        };
+    }
+  }
+
+  /**
+   * Nút "Làm mới" chạy lại truy vấn cũ: mã ngắn trong truy vấn chỉ có nghĩa theo bảng mã của phiên,
+   * nên nạp lại `code_map` mới nhất của phiên đó (phiên của người khác → không nạp).
+   */
+  private async codesOfSession(ctx: QueryContext): Promise<CodeBook | null> {
+    if (!ctx.sessionId) return null;
+    const row = await this.prisma.aiProposal.findFirst({
+      where: { sessionId: ctx.sessionId, session: { userId: ctx.userId } },
+      orderBy: { createdAt: 'desc' },
+      select: { codeMap: true },
+    });
+    return row?.codeMap ? CodeBook.from(row.codeMap as never) : null;
+  }
+
+  // ── Giải mã tham chiếu ─────────────────────────────────────
+
+  private userId(
+    code: string | undefined,
+    ctx: QueryContext,
+  ): string | undefined {
+    if (!code) return undefined;
+    if (code === 'me') return ctx.userId;
+    const id = ctx.codes?.idOf('u', code);
+    if (!id)
+      throw AppError.unprocessable('UNKNOWN_CODE', { field: 'assignee', code });
+    return id;
+  }
+
+  private sprintId(
+    spec: DataQuerySpec,
+    ctx: QueryContext,
+  ): string | undefined | null {
+    if (!spec.sprint) return undefined; // để nơi gọi quyết định (sprint đang chạy)
+    if (spec.sprint === '__all') return undefined;
+    if (spec.sprint === '__backlog') return null;
+    const id = ctx.codes?.idOf('s', spec.sprint);
+    if (!id)
+      throw AppError.unprocessable('UNKNOWN_CODE', {
+        field: 'sprint',
+        code: spec.sprint,
+      });
+    return id;
+  }
+
+  private taskId(code: string | undefined, ctx: QueryContext): string {
+    const id = code ? ctx.codes?.idOf('t', code) : undefined;
+    if (!id)
+      throw AppError.unprocessable('UNKNOWN_CODE', {
+        field: 'task',
+        code: code ?? null,
+      });
+    return id;
+  }
+
+  private range(
+    spec: DataQuerySpec,
+    at: Date,
+  ): { from?: Date; to?: Date; overdue?: boolean; noDue?: boolean } {
+    const r = spec.filters.dueRange;
+    if (!r) return {};
+    if (r.preset === 'TODAY')
+      return {
+        from: startOfDay(at),
+        to: new Date(startOfDay(at).getTime() + DAY - 1),
+      };
+    if (r.preset === 'TOMORROW') {
+      const d = new Date(startOfDay(at).getTime() + DAY);
+      return { from: d, to: new Date(d.getTime() + DAY - 1) };
+    }
+    if (r.preset === 'THIS_WEEK') {
+      const s = startOfWeek(at);
+      return { from: s, to: new Date(s.getTime() + 7 * DAY - 1) };
+    }
+    if (r.preset === 'NEXT_WEEK') {
+      const s = new Date(startOfWeek(at).getTime() + 7 * DAY);
+      return { from: s, to: new Date(s.getTime() + 7 * DAY - 1) };
+    }
+    if (r.preset === 'OVERDUE') return { overdue: true, to: startOfDay(at) };
+    if (r.preset === 'NO_DUE') return { noDue: true };
+    return {
+      from: r.from ? new Date(r.from) : undefined,
+      to: r.to ? new Date(`${r.to}T23:59:59.999Z`) : undefined,
+    };
+  }
+
+  // ── Công việc ──────────────────────────────────────────────
+
+  private async tasks(spec: DataQuerySpec, ctx: QueryContext, at: Date) {
+    const f = spec.filters;
+    const sprint = this.sprintId(spec, ctx);
+    const activeSprint =
+      spec.sprint === undefined
+        ? await this.prisma.sprint.findFirst({
+            where: { projectId: ctx.projectId, status: 'ACTIVE' },
+            select: { id: true },
+          })
+        : null;
+    const sprintFilter =
+      sprint === null
+        ? { sprintId: null }
+        : sprint
+          ? { sprintId: sprint }
+          : activeSprint
+            ? { sprintId: activeSprint.id }
+            : {};
+    const rng = this.range(spec, at);
+    const assigneeIds = (f.assignee ?? [])
+      .map((c) => this.userId(c, ctx))
+      .filter((x): x is string => !!x);
+
+    const where: Prisma.TaskWhereInput = {
+      projectId: ctx.projectId,
+      deletedAt: null,
+      parentId: null,
+      ...sprintFilter,
+      ...(f.status === 'DONE'
+        ? { completedAt: { not: null } }
+        : f.status === 'ALL'
+          ? {}
+          : { completedAt: null }),
+      ...(f.taskType?.length ? { type: { in: f.taskType as TaskType[] } } : {}),
+      ...(f.priority?.length ? { priority: { in: f.priority } } : {}),
+      ...(assigneeIds.length
+        ? { assignees: { some: { userId: { in: assigneeIds } } } }
+        : {}),
+      ...(f.unassignedOnly ? { assignees: { none: {} } } : {}),
+      ...(f.q ? { title: { contains: f.q.trim(), mode: 'insensitive' } } : {}),
+      ...(rng.noDue ? { dueDate: null } : {}),
+      ...(rng.overdue ? { dueDate: { lt: rng.to } } : {}),
+      ...(!rng.overdue && !rng.noDue && (rng.from || rng.to)
+        ? {
+            dueDate: {
+              ...(rng.from ? { gte: rng.from } : {}),
+              ...(rng.to ? { lte: rng.to } : {}),
+            },
+          }
+        : {}),
+      ...(spec.intent === 'TASK_BLOCKED'
+        ? { dependsOn: { some: { dependsOn: { completedAt: null } } } }
+        : {}),
+    };
+
+    const orderBy: Prisma.TaskOrderByWithRelationInput =
+      spec.sort?.field === 'PRIORITY'
+        ? { priority: spec.sort.dir === 'DESC' ? 'desc' : 'asc' }
+        : spec.sort?.field === 'REMAINING_HOURS'
+          ? { remainingHours: spec.sort.dir === 'DESC' ? 'desc' : 'asc' }
+          : spec.sort?.field === 'UPDATED_AT'
+            ? { updatedAt: spec.sort.dir === 'DESC' ? 'desc' : 'asc' }
+            : spec.sort?.field === 'NUMBER'
+              ? { number: spec.sort.dir === 'DESC' ? 'desc' : 'asc' }
+              : { dueDate: spec.sort?.dir === 'DESC' ? 'desc' : 'asc' };
+
+    const [rows, total, project] = await Promise.all([
+      this.prisma.task.findMany({
+        where,
+        orderBy,
+        take: spec.limit,
+        select: {
+          id: true,
+          number: true,
+          title: true,
+          priority: true,
+          type: true,
+          dueDate: true,
+          remainingHours: true,
+          estimateHours: true,
+          progress: true,
+          completedAt: true,
+          column: { select: { name: true } },
+          assignees: {
+            select: { user: { select: { fullName: true, shortName: true } } },
+          },
+          dependsOn: {
+            select: {
+              dependsOn: { select: { number: true, completedAt: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.task.count({ where }),
+      this.prisma.project.findUniqueOrThrow({
+        where: { id: ctx.projectId },
+        select: { key: true },
+      }),
+    ]);
+
+    const today = startOfDay(at).getTime();
+    const toItem = (r: (typeof rows)[number]): BlockItem => {
+      const overdue =
+        !r.completedAt && r.dueDate ? r.dueDate.getTime() < today : false;
+      const people = r.assignees.map(
+        (a) => a.user.shortName ?? a.user.fullName,
+      );
+      const blockers = r.dependsOn
+        .filter((d) => !d.dependsOn.completedAt)
+        .map((d) => `${project.key}-${d.dependsOn.number}`);
+      return {
+        ref: { type: 'task', id: r.id, key: `${project.key}-${r.number}` },
+        title: r.title,
+        badges: [
+          {
+            text: PRIORITY_LABEL[r.priority] ?? r.priority,
+            tone: PRIORITY_TONE[r.priority],
+          },
+          { text: TYPE_LABEL[r.type] ?? r.type, tone: 'muted' },
+          ...(r.completedAt
+            ? [{ text: 'Xong', tone: 'success' as const }]
+            : []),
+          ...(overdue ? [{ text: 'Quá hạn', tone: 'danger' as const }] : []),
+        ],
+        meta: [
+          {
+            icon: 'user' as const,
+            text: people.length ? people.join(', ') : 'chưa giao',
+          },
+          ...(r.remainingHours != null
+            ? [
+                {
+                  icon: 'clock' as const,
+                  text: `${num(r.remainingHours)}h còn lại`,
+                },
+              ]
+            : []),
+          ...(r.dueDate
+            ? [{ icon: 'calendar' as const, text: `hạn ${iso(r.dueDate)}` }]
+            : []),
+          ...(blockers.length
+            ? [{ icon: 'link' as const, text: `chờ ${blockers.join(', ')}` }]
+            : []),
+        ],
+      };
+    };
+
+    const params = {
+      sprintId: sprintFilter,
+      status: spec.filters.status ?? 'OPEN',
+      dueRange: spec.filters.dueRange ?? null,
+      limit: spec.limit,
+    };
+    const source = {
+      endpoint: 'GET /projects/:id/tasks',
+      params,
+      rowCount: rows.length,
+    };
+
+    if (spec.intent === 'TASK_STATS') {
+      const byColumn = new Map<string, number>();
+      const byPriority = new Map<string, number>();
+      let overdue = 0;
+      let unassigned = 0;
+      let hours = 0;
+      for (const r of rows) {
+        byColumn.set(r.column.name, (byColumn.get(r.column.name) ?? 0) + 1);
+        byPriority.set(r.priority, (byPriority.get(r.priority) ?? 0) + 1);
+        if (!r.completedAt && r.dueDate && r.dueDate.getTime() < today)
+          overdue += 1;
+        if (r.assignees.length === 0) unassigned += 1;
+        hours += num(r.remainingHours) || num(r.estimateHours);
+      }
+      const stats: StatItem[] = [
+        { label: 'Công việc', value: total },
+        {
+          label: 'Quá hạn',
+          value: overdue,
+          tone: overdue ? 'danger' : 'muted',
+        },
+        {
+          label: 'Chưa giao',
+          value: unassigned,
+          tone: unassigned ? 'warning' : 'muted',
+        },
+        { label: 'Giờ còn lại', value: Math.round(hours * 10) / 10, unit: 'h' },
+      ];
+      const blocks: QueryBlock[] = [
+        { kind: 'stat_row', items: stats },
+        {
+          kind: 'bar_chart',
+          series: [...byColumn].map(([label, value]) => ({ label, value })),
+          unit: 'việc',
+        },
+        {
+          kind: 'table',
+          columns: [
+            { key: 'priority', label: 'Ưu tiên' },
+            { key: 'count', label: 'Số việc', align: 'right' },
+          ],
+          rows: [...byPriority].map(([p, c]) => ({
+            cells: { priority: PRIORITY_LABEL[p] ?? p, count: c },
+          })),
+        },
+      ];
+      return { source, blocks };
+    }
+
+    if (rows.length === 0)
+      return {
+        source,
+        blocks: [
+          {
+            kind: 'empty',
+            title: 'Không có công việc khớp bộ lọc',
+            description: 'Thử nới bộ lọc hoặc hỏi lại theo sprint khác.',
+          } as QueryBlock,
+        ],
+      };
+
+    if (spec.intent === 'TASK_AGENDA' || spec.groupBy === 'DUE_DATE') {
+      const groups = new Map<string, BlockItem[]>();
+      for (const r of rows) {
+        const key = r.dueDate ? iso(r.dueDate) : 'no-due';
+        groups.set(key, [...(groups.get(key) ?? []), toItem(r)]);
+      }
+      const labelOf = (k: string) => {
+        if (k === 'no-due') return 'Chưa đặt hạn';
+        const d = new Date(`${k}T00:00:00.000Z`).getTime();
+        if (d === today) return `Hôm nay · ${k.slice(8, 10)}/${k.slice(5, 7)}`;
+        if (d === today + DAY)
+          return `Ngày mai · ${k.slice(8, 10)}/${k.slice(5, 7)}`;
+        if (d < today) return `Quá hạn · ${k.slice(8, 10)}/${k.slice(5, 7)}`;
+        return `${k.slice(8, 10)}/${k.slice(5, 7)}`;
+      };
+      const blocks: QueryBlock[] = [
+        {
+          kind: 'agenda',
+          groups: [...groups.entries()]
+            .sort(([a], [b]) =>
+              a === 'no-due' ? 1 : b === 'no-due' ? -1 : a.localeCompare(b),
+            )
+            .map(([k, items]) => ({
+              label: labelOf(k),
+              tone:
+                k !== 'no-due' &&
+                new Date(`${k}T00:00:00.000Z`).getTime() < today
+                  ? ('danger' as const)
+                  : undefined,
+              items,
+            })),
+        },
+      ];
+      return { source, blocks, truncated: this.trunc(rows.length, total) };
+    }
+
+    return {
+      source,
+      blocks: [{ kind: 'task_list', items: rows.map(toItem) } as QueryBlock],
+      truncated: this.trunc(rows.length, total),
+    };
+  }
+
+  private trunc(shown: number, total: number) {
+    return shown < total ? { shown, total } : undefined;
+  }
+
+  private async taskDetail(spec: DataQuerySpec, ctx: QueryContext) {
+    const id = this.taskId(spec.filters.task, ctx);
+    const t = await this.prisma.task.findFirst({
+      where: { id, projectId: ctx.projectId, deletedAt: null },
+      select: {
+        id: true,
+        number: true,
+        title: true,
+        description: true,
+        priority: true,
+        type: true,
+        progress: true,
+        estimateHours: true,
+        remainingHours: true,
+        startDate: true,
+        dueDate: true,
+        completedAt: true,
+        column: { select: { name: true } },
+        sprint: { select: { name: true } },
+        assignees: {
+          select: { user: { select: { fullName: true, shortName: true } } },
+        },
+        skills: {
+          select: { minLevel: true, skill: { select: { name: true } } },
+        },
+        project: { select: { key: true } },
+        _count: {
+          select: { comments: true, attachments: true, subtasks: true },
+        },
+      },
+    });
+    if (!t) throw AppError.notFound({ task: spec.filters.task });
+    const key = `${t.project.key}-${t.number}`;
+    const blocks: QueryBlock[] = [
+      {
+        kind: 'person_card',
+        item: {
+          ref: { type: 'task', id: t.id, key },
+          title: t.title,
+          subtitle: t.description?.slice(0, 300) ?? undefined,
+          badges: [
+            { text: t.column.name, tone: 'info' },
+            {
+              text: PRIORITY_LABEL[t.priority] ?? t.priority,
+              tone: PRIORITY_TONE[t.priority],
+            },
+            ...(t.sprint
+              ? [{ text: t.sprint.name, tone: 'muted' as const }]
+              : []),
+          ],
+          meta: [
+            {
+              icon: 'user',
+              text:
+                t.assignees
+                  .map((a) => a.user.shortName ?? a.user.fullName)
+                  .join(', ') || 'chưa giao',
+            },
+            ...(t.dueDate
+              ? [{ icon: 'calendar' as const, text: `hạn ${iso(t.dueDate)}` }]
+              : []),
+            ...(t.skills.length
+              ? [
+                  {
+                    icon: 'flag' as const,
+                    text: t.skills
+                      .map((s) => `${s.skill.name} ≥ ${s.minLevel}`)
+                      .join(', '),
+                  },
+                ]
+              : []),
+          ],
+        },
+        stats: [
+          { label: 'Tiến độ', value: t.progress, unit: '%' },
+          {
+            label: 'Giờ ước / còn',
+            value: `${num(t.estimateHours)} / ${num(t.remainingHours)}`,
+            unit: 'h',
+          },
+          { label: 'Việc con', value: t._count.subtasks },
+          { label: 'Bình luận', value: t._count.comments },
+        ],
+      },
+    ];
+    return {
+      source: {
+        endpoint: 'GET /tasks/:id',
+        params: { task: key },
+        rowCount: 1,
+      },
+      blocks,
+    };
+  }
+
+  // ── Con người ──────────────────────────────────────────────
+
+  private async members(ctx: QueryContext) {
+    const rows = await this.prisma.projectMember.findMany({
+      where: { projectId: ctx.projectId },
+      select: {
+        role: true,
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            shortName: true,
+            email: true,
+            workspaceMembers: {
+              select: { title: true, department: true },
+              take: 1,
+            },
+            userSkills: {
+              select: { level: true, skill: { select: { name: true } } },
+              orderBy: { level: 'desc' },
+              take: 4,
+            },
+            taskAssignees: {
+              where: {
+                task: {
+                  projectId: ctx.projectId,
+                  deletedAt: null,
+                  completedAt: null,
+                },
+              },
+              select: { task: { select: { remainingHours: true } } },
+            },
+          },
+        },
+      },
+      orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
+    });
+    const items: BlockItem[] = rows.map((m) => {
+      const hours = m.user.taskAssignees.reduce(
+        (sum, a) => sum + num(a.task.remainingHours),
+        0,
+      );
+      const w = m.user.workspaceMembers[0];
+      return {
+        ref: {
+          type: 'user',
+          id: m.user.id,
+          key: m.user.shortName ?? m.user.fullName,
+        },
+        title: m.user.fullName,
+        subtitle:
+          [w?.title, w?.department].filter(Boolean).join(' · ') || m.user.email,
+        badges: [
+          { text: m.role, tone: m.role === 'PM' ? 'info' : 'muted' },
+          ...m.user.userSkills.map((sk) => ({
+            text: `${sk.skill.name} ${sk.level}`,
+            tone: 'muted' as const,
+          })),
+        ],
+        meta: [
+          {
+            icon: 'clock',
+            text: `${m.user.taskAssignees.length} việc đang mở · ${Math.round(hours * 10) / 10}h còn lại`,
+          },
+        ],
+      };
+    });
+    return {
+      source: {
+        endpoint: 'GET /projects/:id (members)',
+        params: {},
+        rowCount: items.length,
+      },
+      blocks: (items.length
+        ? [{ kind: 'people_list', items }]
+        : [
+            { kind: 'empty', title: 'Dự án chưa có thành viên' },
+          ]) as QueryBlock[],
+    };
+  }
+
+  private async memberProfile(
+    spec: DataQuerySpec,
+    ctx: QueryContext,
+    at: Date,
+  ) {
+    const userId = this.userId(spec.filters.user ?? 'me', ctx)!;
+    const [user, tasks] = await Promise.all([
+      this.prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: {
+          id: true,
+          fullName: true,
+          shortName: true,
+          email: true,
+          userSkills: {
+            select: {
+              level: true,
+              verifiedAt: true,
+              skill: { select: { name: true } },
+            },
+            orderBy: { level: 'desc' },
+            take: 8,
+          },
+        },
+      }),
+      this.prisma.task.findMany({
+        where: {
+          projectId: ctx.projectId,
+          deletedAt: null,
+          completedAt: null,
+          assignees: { some: { userId } },
+        },
+        orderBy: { dueDate: 'asc' },
+        take: spec.limit,
+        select: {
+          id: true,
+          number: true,
+          title: true,
+          priority: true,
+          type: true,
+          dueDate: true,
+          remainingHours: true,
+          project: { select: { key: true } },
+        },
+      }),
+    ]);
+    const today = startOfDay(at).getTime();
+    const overdue = tasks.filter(
+      (t) => t.dueDate && t.dueDate.getTime() < today,
+    ).length;
+    const hours = tasks.reduce((sum, t) => sum + num(t.remainingHours), 0);
+    const blocks: QueryBlock[] = [
+      {
+        kind: 'person_card',
+        item: {
+          ref: {
+            type: 'user',
+            id: user.id,
+            key: user.shortName ?? user.fullName,
+          },
+          title: user.fullName,
+          subtitle: user.email,
+          badges: user.userSkills.map((sk) => ({
+            text: `${sk.skill.name} ${sk.level}${sk.verifiedAt ? ' ✓' : ''}`,
+            tone: 'muted' as const,
+          })),
+        },
+        stats: [
+          { label: 'Việc đang mở', value: tasks.length },
+          {
+            label: 'Quá hạn',
+            value: overdue,
+            tone: overdue ? 'danger' : 'muted',
+          },
+          {
+            label: 'Giờ còn lại',
+            value: Math.round(hours * 10) / 10,
+            unit: 'h',
+          },
+        ],
+      },
+      tasks.length
+        ? {
+            kind: 'task_list',
+            items: tasks.map((t) => ({
+              ref: {
+                type: 'task' as const,
+                id: t.id,
+                key: `${t.project.key}-${t.number}`,
+              },
+              title: t.title,
+              badges: [
+                {
+                  text: PRIORITY_LABEL[t.priority] ?? t.priority,
+                  tone: PRIORITY_TONE[t.priority],
+                },
+              ],
+              meta: [
+                ...(t.dueDate
+                  ? [
+                      {
+                        icon: 'calendar' as const,
+                        text: `hạn ${iso(t.dueDate)}`,
+                      },
+                    ]
+                  : []),
+                ...(t.remainingHours != null
+                  ? [
+                      {
+                        icon: 'clock' as const,
+                        text: `${num(t.remainingHours)}h`,
+                      },
+                    ]
+                  : []),
+              ],
+            })),
+          }
+        : { kind: 'empty', title: 'Không có việc đang mở' },
+    ];
+    return {
+      source: {
+        endpoint: 'GET /projects/:id/tasks?assigneeId=',
+        params: { userId },
+        rowCount: tasks.length,
+      },
+      blocks,
+    };
+  }
+
+  private async workloadWeeks(
+    ctx: QueryContext,
+    workspaceId: string,
+    at: Date,
+  ) {
+    const members = await this.prisma.projectMember.findMany({
+      where: { projectId: ctx.projectId },
+      select: {
+        user: { select: { id: true, fullName: true, shortName: true } },
+      },
+    });
+    const { users, settings, spread } = await this.workload.computeUsers(
+      workspaceId,
+      members.map((m) => m.user.id),
+      startOfWeek(at),
+      4,
+      { projectId: ctx.projectId, today: at },
+    );
+    const nameOf = new Map(
+      members.map((m) => [m.user.id, m.user.shortName ?? m.user.fullName]),
+    );
+    const toneOf = (u: number) =>
+      u >= settings.workload.thresholds.overload
+        ? 'danger'
+        : u >= settings.workload.thresholds.full
+          ? 'warning'
+          : u >= settings.workload.thresholds.high
+            ? 'info'
+            : 'success';
+    const columns =
+      users[0]?.weeks.map((w) => `Tuần ${w.weekStart.slice(5)}`) ?? [];
+    const blocks: QueryBlock[] = [
+      {
+        kind: 'stat_row',
+        items: [
+          {
+            label: 'Spread nhóm',
+            value: Math.round(spread * 100),
+            unit: '%',
+            hint: `mục tiêu ≤ ${Math.round(settings.workload.fairnessTarget * 100)}%`,
+          },
+        ],
+      },
+      {
+        kind: 'heatmap',
+        columns,
+        rows: users.map((u) => ({
+          label: nameOf.get(u.userId) ?? u.userId.slice(0, 8),
+          ref: { type: 'user', id: u.userId },
+          cells: u.weeks.map((w) => ({
+            text: `${Math.round(w.utilization * 100)}%`,
+            tone: toneOf(w.utilization),
+          })),
+        })),
+      },
+    ];
+    return {
+      source: {
+        endpoint: 'GET /projects/:id/workload',
+        params: { weeks: 4 },
+        rowCount: users.length,
+      },
+      blocks,
+    };
+  }
+
+  private async capacity(spec: DataQuerySpec, ctx: QueryContext) {
+    const table = await this.workload.capacityTable(ctx.projectId, {});
+    const rows = table.members.slice(0, spec.limit).map((m) => ({
+      ref: {
+        type: 'user' as const,
+        id: m.userId,
+        key: m.shortName ?? m.fullName,
+      },
+      cells: {
+        member: m.fullName,
+        utilization: `${Math.round(m.utilizationBefore * 100)}%`,
+        free: `${Math.round(m.freeByDay.reduce((s, d) => s + d.freeHours, 0) * 10) / 10}h`,
+        skills: m.skills.map((s) => `${s.name} ${s.level}`).join(', ') || '—',
+      },
+    }));
+    return {
+      source: {
+        endpoint: 'GET /projects/:id/capacity-table',
+        params: { window: table.window },
+        rowCount: rows.length,
+      },
+      blocks: [
+        {
+          kind: 'note',
+          text: `Cửa sổ ${table.window.from} + ${table.window.days} ngày · ${table.tasks.length} việc chưa giao`,
+          tone: 'muted',
+        },
+        {
+          kind: 'table',
+          columns: [
+            { key: 'member', label: 'Thành viên' },
+            { key: 'utilization', label: 'Mức dùng', align: 'right' },
+            { key: 'free', label: 'Giờ trống', align: 'right' },
+            { key: 'skills', label: 'Kỹ năng' },
+          ],
+          rows,
+        },
+      ] as QueryBlock[],
+    };
+  }
+
+  private async whoKnows(
+    spec: DataQuerySpec,
+    ctx: QueryContext,
+    workspaceId: string,
+  ) {
+    const skillId = spec.filters.skill
+      ? ctx.codes?.idOf('k', spec.filters.skill)
+      : undefined;
+    if (!skillId)
+      throw AppError.unprocessable('UNKNOWN_CODE', {
+        field: 'skill',
+        code: spec.filters.skill ?? null,
+      });
+    const minLevel = spec.filters.minLevel ?? 3;
+    const rows = await this.prisma.userSkill.findMany({
+      where: {
+        skillId,
+        level: { gte: minLevel },
+        user: { workspaceMembers: { some: { workspaceId } } },
+      },
+      orderBy: { level: 'desc' },
+      take: spec.limit,
+      select: {
+        level: true,
+        verifiedAt: true,
+        skill: { select: { name: true } },
+        user: { select: { id: true, fullName: true, shortName: true } },
+      },
+    });
+    const skillName =
+      rows[0]?.skill.name ??
+      (
+        await this.prisma.skill.findUnique({
+          where: { id: skillId },
+          select: { name: true },
+        })
+      )?.name ??
+      '';
+    return {
+      source: {
+        endpoint: 'GET /workspaces/:id/skill-matrix',
+        params: { skill: skillName, minLevel },
+        rowCount: rows.length,
+      },
+      blocks: (rows.length
+        ? [
+            {
+              kind: 'people_list',
+              items: rows.map((r) => ({
+                ref: {
+                  type: 'user' as const,
+                  id: r.user.id,
+                  key: r.user.shortName ?? r.user.fullName,
+                },
+                title: r.user.fullName,
+                badges: [
+                  {
+                    text: `${r.skill.name} mức ${r.level}`,
+                    tone:
+                      r.level >= 4 ? ('success' as const) : ('muted' as const),
+                  },
+                  ...(r.verifiedAt
+                    ? [{ text: 'đã xác nhận', tone: 'info' as const }]
+                    : []),
+                ],
+              })),
+            },
+          ]
+        : [
+            {
+              kind: 'empty',
+              title: `Chưa ai khai ${skillName} từ mức ${minLevel}`,
+              description:
+                'Nhờ thành viên cập nhật ở màn Nhân sự › Kỹ năng của tôi.',
+            },
+          ]) as QueryBlock[],
+    };
+  }
+
+  private async busFactor(
+    spec: DataQuerySpec,
+    ctx: QueryContext,
+    workspaceId: string,
+  ) {
+    const minLevel = spec.filters.minLevel ?? 3;
+    const skills = await this.prisma.skill.findMany({
+      where: { workspaceId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        userSkills: {
+          where: {
+            level: { gte: minLevel },
+            user: { workspaceMembers: { some: { workspaceId } } },
+          },
+          select: { userId: true },
+        },
+      },
+    });
+    const risky = skills
+      .filter((sk) => sk.userSkills.length <= 1)
+      .slice(0, spec.limit);
+    return {
+      source: {
+        endpoint: 'GET /workspaces/:id/skill-matrix (busFactor)',
+        params: { minLevel },
+        rowCount: risky.length,
+      },
+      blocks: (risky.length
+        ? [
+            {
+              kind: 'note',
+              text: `${risky.length} kỹ năng chỉ có ≤ 1 người đạt mức ${minLevel} — rủi ro khi người đó nghỉ.`,
+              tone: 'warning',
+            },
+            {
+              kind: 'table',
+              columns: [
+                { key: 'skill', label: 'Kỹ năng' },
+                { key: 'holders', label: 'Số người đạt', align: 'right' },
+              ],
+              rows: risky.map((sk) => ({
+                cells: { skill: sk.name, holders: sk.userSkills.length },
+              })),
+            },
+          ]
+        : [
+            {
+              kind: 'empty',
+              title: 'Không có kỹ năng nào rủi ro',
+              description: `Mọi kỹ năng đều có ≥ 2 người đạt mức ${minLevel}.`,
+            },
+          ]) as QueryBlock[],
+    };
+  }
+
+  // ── Sprint & hoạt động ─────────────────────────────────────
+
+  private async sprints(ctx: QueryContext) {
+    const rows = await this.prisma.sprint.findMany({
+      where: { projectId: ctx.projectId },
+      orderBy: { startDate: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        goal: true,
+        _count: { select: { tasks: true } },
+      },
+    });
+    return {
+      source: {
+        endpoint: 'GET /projects/:id/sprints',
+        params: {},
+        rowCount: rows.length,
+      },
+      blocks: [
+        {
+          kind: 'table',
+          columns: [
+            { key: 'name', label: 'Sprint' },
+            { key: 'status', label: 'Trạng thái' },
+            { key: 'time', label: 'Thời gian' },
+            { key: 'tasks', label: 'Việc', align: 'right' },
+          ],
+          rows: rows.map((s) => ({
+            ref: { type: 'sprint' as const, id: s.id, key: s.name },
+            cells: {
+              name: s.name,
+              status: s.status,
+              time: `${iso(s.startDate)} → ${iso(s.endDate)}`,
+              tasks: s._count.tasks,
+            },
+          })),
+        },
+      ] as QueryBlock[],
+    };
+  }
+
+  private async sprintProgress(
+    spec: DataQuerySpec,
+    ctx: QueryContext,
+    at: Date,
+  ) {
+    const id = this.sprintId(spec, ctx);
+    const sprint = await this.prisma.sprint.findFirst({
+      where: id
+        ? { id, projectId: ctx.projectId }
+        : { projectId: ctx.projectId, status: 'ACTIVE' },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        scopeHoursInitial: true,
+      },
+    });
+    if (!sprint)
+      return {
+        source: {
+          endpoint: 'GET /projects/:id/sprints',
+          params: {},
+          rowCount: 0,
+        },
+        blocks: [
+          { kind: 'empty', title: 'Chưa có sprint đang chạy' },
+        ] as QueryBlock[],
+      };
+    const tasks = await this.prisma.task.findMany({
+      where: { sprintId: sprint.id, deletedAt: null },
+      select: {
+        completedAt: true,
+        remainingHours: true,
+        estimateHours: true,
+        dueDate: true,
+      },
+    });
+    const done = tasks.filter((t) => t.completedAt).length;
+    const remaining = tasks.reduce(
+      (sum, t) =>
+        sum +
+        (t.completedAt ? 0 : num(t.remainingHours) || num(t.estimateHours)),
+      0,
+    );
+    const daysLeft = Math.max(
+      0,
+      Math.ceil((sprint.endDate.getTime() - startOfDay(at).getTime()) / DAY),
+    );
+    const overdue = tasks.filter(
+      (t) =>
+        !t.completedAt &&
+        t.dueDate &&
+        t.dueDate.getTime() < startOfDay(at).getTime(),
+    ).length;
+    return {
+      source: {
+        endpoint: 'GET /sprints/:id/burndown',
+        params: { sprintId: sprint.id },
+        rowCount: tasks.length,
+      },
+      blocks: [
+        {
+          kind: 'stat_row',
+          items: [
+            { label: sprint.name, value: sprint.status },
+            { label: 'Xong', value: `${done}/${tasks.length}`, unit: 'việc' },
+            {
+              label: 'Giờ còn lại',
+              value: Math.round(remaining * 10) / 10,
+              unit: 'h',
+            },
+            { label: 'Còn', value: daysLeft, unit: 'ngày' },
+            {
+              label: 'Quá hạn',
+              value: overdue,
+              tone: overdue ? 'danger' : 'muted',
+            },
+          ],
+        },
+        {
+          kind: 'line_chart',
+          unit: 'h',
+          compareLabel: 'Scope ban đầu',
+          points: [
+            {
+              label: iso(sprint.startDate),
+              value: sprint.scopeHoursInitial ?? 0,
+            },
+            { label: iso(at), value: Math.round(remaining * 10) / 10 },
+            { label: iso(sprint.endDate), value: 0 },
+          ],
+        },
+      ] as QueryBlock[],
+    };
+  }
+
+  private async activity(spec: DataQuerySpec, ctx: QueryContext) {
+    const rows = await this.prisma.activityLog.findMany({
+      where: { projectId: ctx.projectId },
+      orderBy: { createdAt: 'desc' },
+      take: spec.limit,
+      select: {
+        id: true,
+        action: true,
+        createdAt: true,
+        source: true,
+        actor: { select: { fullName: true, shortName: true } },
+        task: {
+          select: {
+            number: true,
+            title: true,
+            project: { select: { key: true } },
+          },
+        },
+      },
+    });
+    return {
+      source: {
+        endpoint: 'GET /projects/:id/activity',
+        params: { limit: spec.limit },
+        rowCount: rows.length,
+      },
+      blocks: (rows.length
+        ? [
+            {
+              kind: 'activity_list',
+              items: rows.map((r) => ({
+                title: `${r.actor?.shortName ?? r.actor?.fullName ?? 'Hệ thống'} · ${r.action}`,
+                subtitle: r.task
+                  ? `${r.task.project.key}-${r.task.number} ${r.task.title}`
+                  : undefined,
+                meta: [
+                  {
+                    icon: 'clock' as const,
+                    text: r.createdAt
+                      .toISOString()
+                      .slice(0, 16)
+                      .replace('T', ' '),
+                  },
+                ],
+                badges:
+                  r.source !== 'MANUAL'
+                    ? [{ text: r.source, tone: 'info' as const }]
+                    : undefined,
+              })),
+            },
+          ]
+        : [{ kind: 'empty', title: 'Chưa có hoạt động' }]) as QueryBlock[],
+    };
+  }
+
+  private async notifications(spec: DataQuerySpec, ctx: QueryContext) {
+    const rows = await this.prisma.notification.findMany({
+      where: { userId: ctx.userId },
+      orderBy: { createdAt: 'desc' },
+      take: spec.limit,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        body: true,
+        isRead: true,
+        createdAt: true,
+      },
+    });
+    const unread = rows.filter((r) => !r.isRead).length;
+    return {
+      source: {
+        endpoint: 'GET /notifications',
+        params: { limit: spec.limit },
+        rowCount: rows.length,
+      },
+      blocks: [
+        {
+          kind: 'stat_row',
+          items: [
+            {
+              label: 'Chưa đọc',
+              value: unread,
+              tone: unread ? 'warning' : 'muted',
+            },
+            { label: 'Gần đây', value: rows.length },
+          ],
+        },
+        rows.length
+          ? {
+              kind: 'activity_list',
+              items: rows.map((r) => ({
+                ref: { type: 'notification' as const, id: r.id },
+                title: r.title,
+                subtitle: r.body ?? undefined,
+                badges: [
+                  { text: r.type, tone: 'muted' as const },
+                  ...(r.isRead
+                    ? []
+                    : [{ text: 'mới', tone: 'warning' as const }]),
+                ],
+                meta: [
+                  {
+                    icon: 'clock' as const,
+                    text: r.createdAt
+                      .toISOString()
+                      .slice(0, 16)
+                      .replace('T', ' '),
+                  },
+                ],
+              })),
+            }
+          : { kind: 'empty', title: 'Không có thông báo' },
+      ] as QueryBlock[],
+    };
+  }
+
+  private async aiUsage(
+    spec: DataQuerySpec,
+    ctx: QueryContext,
+    workspaceId: string,
+    canManage: boolean,
+  ) {
+    // Sổ token là dữ liệu quản trị: chỉ PM/quản trị workspace được xem (khớp GET /ai-usage)
+    if (!canManage)
+      return {
+        source: {
+          endpoint: 'GET /workspaces/:id/ai-usage',
+          params: {},
+          rowCount: 0,
+        },
+        blocks: [
+          {
+            kind: 'note',
+            text: 'Sổ token AI chỉ dành cho PM hoặc quản trị workspace.',
+            tone: 'warning',
+          },
+        ] as QueryBlock[],
+      };
+    const from = new Date(Date.now() - 30 * DAY);
+    const rows = await this.prisma.aiTokenLog.groupBy({
+      by: ['purpose'],
+      where: { workspaceId, createdAt: { gte: from } },
+      _count: { _all: true },
+      _sum: { totalTokens: true, estimatedCost: true },
+    });
+    const totalCalls = rows.reduce((s, r) => s + r._count._all, 0);
+    const totalCost = rows.reduce((s, r) => s + (r._sum.estimatedCost ?? 0), 0);
+    return {
+      source: {
+        endpoint: 'GET /workspaces/:id/ai-usage',
+        params: {
+          from: iso(from),
+          groupBy: spec.filters.groupUsageBy ?? 'purpose',
+        },
+        rowCount: rows.length,
+      },
+      blocks: [
+        {
+          kind: 'stat_row',
+          items: [
+            { label: 'Lượt gọi 30 ngày', value: totalCalls },
+            {
+              label: 'Token',
+              value: rows.reduce((s, r) => s + (r._sum.totalTokens ?? 0), 0),
+            },
+            {
+              label: 'Chi phí',
+              value: Math.round(totalCost * 26263).toLocaleString('vi-VN'),
+              unit: '₫',
+              hint: `$${totalCost.toFixed(4)}`,
+            },
+          ],
+        },
+        {
+          kind: 'table',
+          columns: [
+            { key: 'purpose', label: 'Mục đích' },
+            { key: 'calls', label: 'Lượt', align: 'right' },
+            { key: 'tokens', label: 'Token', align: 'right' },
+            { key: 'cost', label: 'VND', align: 'right' },
+          ],
+          rows: rows.map((r) => ({
+            cells: {
+              purpose: r.purpose,
+              calls: r._count._all,
+              tokens: r._sum.totalTokens ?? 0,
+              cost: Math.round((r._sum.estimatedCost ?? 0) * 26263),
+            },
+          })),
+        },
+      ] as QueryBlock[],
+    };
+  }
+}

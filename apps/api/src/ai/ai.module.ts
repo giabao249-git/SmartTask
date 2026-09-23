@@ -10,6 +10,8 @@ import { ChatController } from './chat/chat.controller';
 import { ChatService } from './chat/chat.service';
 import { IdentityAdminController } from './chat/identity-admin.controller';
 import { IdentityService } from './chat/identity.service';
+import { AiQueryController } from './query/query.controller';
+import { AiQueryService } from './query/query.service';
 import { ContextBuilderService } from './context/context-builder.service';
 import { ExecutorService } from './executor/executor.service';
 import { ProposalsService } from './proposals/proposals.service';
@@ -29,6 +31,7 @@ import { ActionValidatorService } from './validator/action-validator.service';
     AiAdminController,
     ChatController,
     IdentityAdminController,
+    AiQueryController,
   ],
   providers: [
     AiConfigService,
@@ -42,6 +45,7 @@ import { ActionValidatorService } from './validator/action-validator.service';
     AiService,
     ChatService,
     IdentityService,
+    AiQueryService,
   ],
   exports: [AiConfigService, AiProviderService],
 })

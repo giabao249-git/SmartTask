@@ -22,7 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { UserAvatar } from "@/components/app/UserAvatar";
-import type { DraftPatch } from "@smarttask/shared";
+import type { DraftPatch, QueryResult } from "@smarttask/shared";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -83,6 +83,7 @@ import { DraftRail } from "./DraftRail";
 import { useTasks } from "@/features/board/hooks";
 import { ACTION_LABEL, fmtDate, makeResolver } from "./codes";
 import { ThinkingDots, TypewriterText } from "./Typing";
+import { QueryResultCard } from "./QueryBlocks";
 import {
   aiKeys,
   useApplyProposal,
@@ -623,6 +624,8 @@ export function AssistantView() {
                     resolver={resolver}
                     busy={busy}
                     typing={m.id === typingMessageId}
+                    projectId={project.id}
+                    sessionId={activeSessionId}
                     onTypingDone={() => setTypingMessageId(null)}
                     onSelectOption={(code, label) => send(label, code)}
                   />
@@ -938,6 +941,8 @@ function MessageBubble({
   resolver,
   busy,
   typing = false,
+  projectId,
+  sessionId,
   onTypingDone,
   onSelectOption,
 }: {
@@ -947,11 +952,17 @@ function MessageBubble({
   resolver: ReturnType<typeof makeResolver>;
   busy: boolean;
   typing?: boolean;
+  projectId: string;
+  sessionId?: string | null;
   onTypingDone?: () => void;
   onSelectOption: (code: string, label: string) => void;
 }) {
   const isUser = m.role === "USER";
   const action = !isUser ? parseAction(m.structuredData) : null;
+  // Kết quả tra cứu do backend đính kèm cùng action (docs 14)
+  const queryResult = !isUser
+    ? ((m.structuredData as { queryResult?: QueryResult } | null)?.queryResult ?? null)
+    : null;
   // Thẻ hành động/đề xuất chỉ hiện sau khi gõ xong để không nhảy giật
   const [revealed, setRevealed] = React.useState(!typing);
   React.useEffect(() => {
@@ -1033,6 +1044,14 @@ function MessageBubble({
             }}
           />
           {action && revealed && <ActionCard action={action} resolver={resolver} onSelectOption={onSelectOption} disabled={busy} />}
+          {revealed && queryResult && (
+            <QueryResultCard
+              result={queryResult}
+              query={action?.type === "DATA_QUERY" ? action.query : undefined}
+              projectId={projectId}
+              sessionId={sessionId}
+            />
+          )}
 
           {!isUser && revealed && (
             <div className="flex items-center gap-2 pt-1 border-t border-border/40 text-[11px]">

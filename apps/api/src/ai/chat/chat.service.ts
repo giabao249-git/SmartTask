@@ -27,6 +27,7 @@ import {
 } from '../proposals/proposals.service';
 import { AiProviderService } from '../provider/ai-provider.service';
 import { QuotaService } from '../quota/quota.service';
+import { AiQueryService } from '../query/query.service';
 import {
   ActionValidatorService,
   type DecomposeValidation,
@@ -89,6 +90,7 @@ export class ChatService {
     private readonly proposals: ProposalsService,
     private readonly quota: QuotaService,
     private readonly events: EventEmitter2,
+    private readonly query: AiQueryService,
   ) {}
 
   // ── Phiên ──────────────────────────────────────────────────
@@ -298,13 +300,46 @@ export class ChatService {
         );
         const action = hold.action ?? turn.action;
 
+        // Tra cứu (docs 14): LLM chỉ chọn ý định + bộ lọc, backend chạy truy vấn thật rồi đính khối.
+        // Lỗi truy vấn KHÔNG làm hỏng cả lượt — chỉ ghi một khối ghi chú để người dùng hỏi lại.
+        const queryResult =
+          action.type === 'DATA_QUERY'
+            ? await this.query
+                .run(action.query, {
+                  userId,
+                  projectId: dto.projectId,
+                  codes: turn.ctx.codes,
+                  sessionId: session.id,
+                })
+                .catch((e: unknown) => {
+                  const code = e instanceof AppError ? e.code : 'INTERNAL';
+                  this.logger.warn(
+                    `Tra cứu ${action.query.intent} lỗi: ${code}`,
+                  );
+                  return {
+                    intent: action.query.intent,
+                    generatedAt: new Date().toISOString(),
+                    source: { endpoint: '', params: {}, rowCount: 0 },
+                    blocks: [
+                      {
+                        kind: 'note' as const,
+                        text: `Không tra cứu được (${code}). Bạn thử hỏi lại rõ hơn giúp nhé.`,
+                        tone: 'warning' as const,
+                      },
+                    ],
+                  };
+                })
+            : null;
+
         // Ghi tin trợ lý (structured_data = action đã đổi key) rồi áp phần đã dàn (docs 05 §5)
         const assistant = await this.prisma.chatMessage.create({
           data: {
             sessionId: session.id,
             role: ChatRole.ASSISTANT,
             text: action.reply ?? '',
-            structuredData: action as unknown as Prisma.InputJsonValue,
+            structuredData: (queryResult
+              ? { ...action, queryResult }
+              : action) as unknown as Prisma.InputJsonValue,
             schemaVersion: action.schemaVersion ?? 1,
             parseFailed: !!(action as { parseFailed?: boolean }).parseFailed,
           },
