@@ -62,6 +62,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { api, describeError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type {
   AiConfigItem,
   AiModelCatalogItem,
@@ -383,8 +384,8 @@ export function AiConfigsTab({ workspaceId, canEdit }: AiConfigsTabProps) {
                                 {c.apiKeyMasked}
                               </span>
                             ) : (
-                              <span className="text-[11px] text-muted-foreground italic">
-                                Dùng khoá hệ thống (.env)
+                              <span className={cn("text-[11px] italic", c.usesSystemKey ? "text-muted-foreground" : "text-warning")}>
+                                {c.usesSystemKey ? "Dùng khoá hệ thống (.env)" : "Chưa có khoá — điền để bật"}
                               </span>
                             )}
                             <div className="text-[10px] text-muted-foreground">

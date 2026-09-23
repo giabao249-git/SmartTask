@@ -381,9 +381,17 @@ export class AiConfigService implements OnModuleInit {
     const catalog = await this.catalogOrThrow(dto.catalogId);
     const advanced = this.validateAdvanced(dto.advancedParams, catalog);
     const apiKeyEncrypted = this.encryptOrNull(dto.apiKey);
-    if (!apiKeyEncrypted && catalog.provider === AiProvider.OPENAI)
+    // Cấu hình ĐANG BẬT phải có khoá dùng được: khoá riêng của workspace hoặc khoá hệ thống trong .env.
+    // Cấu hình tạo sẵn ở trạng thái tắt thì cho phép chưa có khoá (điền sau rồi mới bật).
+    if (
+      dto.isActive !== false &&
+      !apiKeyEncrypted &&
+      !this.hasSystemKey(catalog.provider)
+    )
       throw AppError.unprocessable('AI_CONFIG_INVALID', {
-        fields: ['apiKey bắt buộc với OpenAI'],
+        fields: [
+          `Chưa có khoá cho ${catalog.provider}: điền apiKey, hoặc tạo cấu hình ở trạng thái tắt rồi điền sau`,
+        ],
       });
     const purpose = dto.purpose ?? AiPurpose.GENERAL;
     const row = await this.prisma.$transaction(async (tx) => {
@@ -419,6 +427,18 @@ export class AiConfigService implements OnModuleInit {
         ? this.validateAdvanced(dto.advancedParams, catalog)
         : undefined;
     const purpose = dto.purpose ?? current.purpose;
+    // Bật một cấu hình chưa có khoá (và máy chủ cũng không có khoá hệ thống) là chắc chắn lỗi lúc gọi
+    if (
+      dto.isActive === true &&
+      !dto.apiKey &&
+      !current.apiKeyEncrypted &&
+      !this.hasSystemKey(catalog.provider)
+    )
+      throw AppError.unprocessable('AI_CONFIG_INVALID', {
+        fields: [
+          `Điền khoá API cho ${catalog.provider} trước khi bật cấu hình`,
+        ],
+      });
     const row = await this.prisma.$transaction(async (tx) => {
       if (dto.isDefault)
         await this.clearDefault(tx, current.workspaceId!, purpose, id);
@@ -466,6 +486,19 @@ export class AiConfigService implements OnModuleInit {
       WorkspaceRole.ADMIN,
     ]);
     return row;
+  }
+
+  /** Máy chủ có sẵn khoá hệ thống cho nhà cung cấp này không (để cấu hình không cần khoá riêng). */
+  private hasSystemKey(provider: AiProvider): boolean {
+    const key =
+      provider === AiProvider.GEMINI
+        ? this.config.get('GEMINI_API_KEY', { infer: true })
+        : provider === AiProvider.DEEPSEEK
+          ? this.config.get('DEEPSEEK_API_KEY', { infer: true })
+          : provider === AiProvider.OPENAI
+            ? this.config.get('OPENAI_API_KEY', { infer: true })
+            : 'ollama-không-cần-khoá';
+    return !!key;
   }
 
   private async catalogOrThrow(id: string) {
@@ -531,6 +564,9 @@ export class AiConfigService implements OnModuleInit {
       ...rest,
       apiKeyMasked: maskSecret(apiKeyEncrypted),
       hasApiKey: !!apiKeyEncrypted,
+      // Không có khoá riêng thì có dùng được khoá hệ thống trong .env không — để UI nói đúng
+      // "Dùng khoá hệ thống" hay "Chưa có khoá, điền để bật".
+      usesSystemKey: !apiKeyEncrypted && this.hasSystemKey(r.catalog.provider),
     };
   }
 

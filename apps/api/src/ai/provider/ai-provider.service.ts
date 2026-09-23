@@ -200,6 +200,7 @@ export class AiProviderService {
     if (config.provider === AiProvider.OLLAMA) return this.callOllama(input);
     if (config.provider === AiProvider.DEEPSEEK)
       return this.callDeepSeek(input);
+    if (config.provider === AiProvider.OPENAI) return this.callOpenAi(input);
     throw new Error(
       `Nhà cung cấp ${String(config.provider)} chưa được hỗ trợ ở Phase 7`,
     );
@@ -277,35 +278,59 @@ export class AiProviderService {
     return { ...readOllama(data), cachedContentUsed: false };
   }
 
-  private async callDeepSeek(input: AiCallInput) {
+  private callDeepSeek(input: AiCallInput) {
+    return this.callOpenAiCompatible(input, {
+      providerLabel: 'DeepSeek',
+      envKey: 'DEEPSEEK_API_KEY',
+      defaultBaseUrl: 'https://api.deepseek.com',
+      defaultModel: 'deepseek-v4.1-flash',
+    });
+  }
+
+  /** OpenAI (GPT) dùng cùng giao thức /chat/completions với DeepSeek — chỉ khác khoá, base URL và tên tham số. */
+  private callOpenAi(input: AiCallInput) {
+    return this.callOpenAiCompatible(input, {
+      providerLabel: 'OpenAI',
+      envKey: 'OPENAI_API_KEY',
+      defaultBaseUrl: 'https://api.openai.com/v1',
+      defaultModel: 'gpt-6-luna',
+    });
+  }
+
+  private async callOpenAiCompatible(
+    input: AiCallInput,
+    opts: {
+      providerLabel: string;
+      envKey: 'DEEPSEEK_API_KEY' | 'OPENAI_API_KEY';
+      defaultBaseUrl: string;
+      defaultModel: string;
+    },
+  ) {
     const { config } = input;
     const apiKey =
       config.apiKey ||
-      this.config.get('DEEPSEEK_API_KEY', { infer: true }) ||
-      process.env.DEEPSEEK_API_KEY;
+      this.config.get(opts.envKey, { infer: true }) ||
+      process.env[opts.envKey];
 
     if (!apiKey)
       throw new AppError(
         'AI_PROVIDER_UNAVAILABLE',
         HttpStatus.SERVICE_UNAVAILABLE,
         {
-          reason:
-            'Chưa có khoá DeepSeek: cấu hình DEEPSEEK_API_KEY hoặc tạo cấu hình AI cho workspace',
+          reason: `Chưa có khoá ${opts.providerLabel}: đặt ${opts.envKey} hoặc điền khoá trong cấu hình AI của workspace`,
         },
       );
 
-    const baseUrl = (config.baseUrl || 'https://api.deepseek.com').replace(
-      /\/$/,
-      '',
-    );
+    const baseUrl = (config.baseUrl || opts.defaultBaseUrl).replace(/\/$/, '');
+    const maxParam = config.caps.maxOutputTokenParam || 'max_tokens';
     const body: Record<string, unknown> = {
-      model: config.model || 'deepseek-v4-flash',
+      model: config.model || opts.defaultModel,
       messages: [
         { role: 'system', content: input.system },
         { role: 'user', content: input.userText },
       ],
       temperature: input.temperature ?? config.advanced.temperature ?? 0.7,
-      max_tokens:
+      [maxParam]:
         input.maxOutputTokens ??
         config.advanced.maxOutputTokens ??
         DEFAULT_MAX_OUTPUT,

@@ -58,134 +58,7 @@ import type {
 } from "@/lib/types";
 import { toast } from "sonner";
 
-const FALLBACK_MODELS: AiModelCatalogItem[] = [
-  {
-    id: "catalog-gemini-2.5-flash",
-    provider: "GEMINI",
-    model: "gemini-2.5-flash",
-    label: "Gemini 2.5 Flash",
-    inputPrice: 0.3,
-    outputPrice: 2.5,
-    cachedInputPrice: 0.075,
-    priceEffectiveFrom: "2026-09-01",
-    contextWindow: 1048576,
-    isReasoning: true,
-    supportsTemperature: true,
-    supportsStructuredOutput: true,
-    supportsVision: true,
-    maxOutputTokenParam: "maxOutputTokens",
-    cacheMode: "GEMINI_CACHED_CONTENTS",
-    isActive: true,
-    sortOrder: 10,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "catalog-gemini-2.5-flash-lite",
-    provider: "GEMINI",
-    model: "gemini-2.5-flash-lite",
-    label: "Gemini 2.5 Flash-Lite (Siêu rẻ cho EXPLAIN/CHAT)",
-    inputPrice: 0.1,
-    outputPrice: 0.4,
-    cachedInputPrice: 0.025,
-    priceEffectiveFrom: "2026-09-01",
-    contextWindow: 1048576,
-    isReasoning: true,
-    supportsTemperature: true,
-    supportsStructuredOutput: true,
-    supportsVision: true,
-    maxOutputTokenParam: "maxOutputTokens",
-    cacheMode: "GEMINI_CACHED_CONTENTS",
-    isActive: true,
-    sortOrder: 20,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "catalog-gemini-2.0-flash",
-    provider: "GEMINI",
-    model: "gemini-2.0-flash",
-    label: "Gemini 2.0 Flash",
-    inputPrice: 0.1,
-    outputPrice: 0.4,
-    cachedInputPrice: 0.025,
-    priceEffectiveFrom: "2026-09-01",
-    contextWindow: 1048576,
-    isReasoning: false,
-    supportsTemperature: true,
-    supportsStructuredOutput: true,
-    supportsVision: true,
-    maxOutputTokenParam: "maxOutputTokens",
-    cacheMode: "GEMINI_CACHED_CONTENTS",
-    isActive: true,
-    sortOrder: 30,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "catalog-openai-gpt-4o-mini",
-    provider: "OPENAI",
-    model: "gpt-4o-mini",
-    label: "GPT-4o Mini",
-    inputPrice: 0.15,
-    outputPrice: 0.6,
-    cachedInputPrice: 0.075,
-    priceEffectiveFrom: "2026-09-01",
-    contextWindow: 128000,
-    isReasoning: false,
-    supportsTemperature: true,
-    supportsStructuredOutput: true,
-    supportsVision: true,
-    maxOutputTokenParam: "max_tokens",
-    cacheMode: "OPENAI_BREAKPOINT",
-    isActive: true,
-    sortOrder: 40,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "catalog-ollama-qwen2.5",
-    provider: "OLLAMA",
-    model: "qwen2.5:7b",
-    label: "Ollama · Qwen 2.5 7B (Chạy cục bộ On-Premises)",
-    inputPrice: 0,
-    outputPrice: 0,
-    cachedInputPrice: 0,
-    priceEffectiveFrom: "2026-09-01",
-    contextWindow: 32768,
-    isReasoning: false,
-    supportsTemperature: true,
-    supportsStructuredOutput: true,
-    supportsVision: false,
-    maxOutputTokenParam: "num_predict",
-    cacheMode: "NONE",
-    isActive: true,
-    sortOrder: 100,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "catalog-deepseek-v4-flash",
-    provider: "DEEPSEEK",
-    model: "deepseek-v4-flash",
-    label: "DeepSeek V4 Flash (Tốc độ cao, tối ưu chi phí)",
-    inputPrice: 0.14,
-    outputPrice: 0.28,
-    cachedInputPrice: 0.014,
-    priceEffectiveFrom: "2026-09-01",
-    contextWindow: 131072,
-    isReasoning: true,
-    supportsTemperature: true,
-    supportsStructuredOutput: true,
-    supportsVision: false,
-    maxOutputTokenParam: "max_tokens",
-    cacheMode: "NONE",
-    isActive: true,
-    sortOrder: 35,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+
 
 const PROVIDER_LABELS: Record<AiProvider, { label: string; badge: string }> = {
   GEMINI: { label: "Google Gemini", badge: "border-blue-500/30 text-blue-600 bg-blue-500/10" },
@@ -240,17 +113,11 @@ export function AiModelsTab({ canEdit }: { canEdit: boolean }) {
 
   const modelsQuery = useQuery({
     queryKey: ["ai-config", "models", "includeInactive"],
-    queryFn: async () => {
-      try {
-        const res = await api.get<AiModelCatalogItem[]>("/ai-config/models?includeInactive=true");
-        return res && res.length > 0 ? res : FALLBACK_MODELS;
-      } catch {
-        return FALLBACK_MODELS;
-      }
-    },
+    // Danh mục lấy thẳng từ CSDL (bảng ai_model_catalog) — không có dữ liệu mẫu trong mã nguồn
+    queryFn: () => api.get<AiModelCatalogItem[]>("/ai-config/models", { includeInactive: "true" }),
   });
 
-  const models = modelsQuery.data ?? FALLBACK_MODELS;
+  const models = React.useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
 
   // Filter models
   const filteredModels = React.useMemo(() => {

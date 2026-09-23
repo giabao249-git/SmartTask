@@ -269,6 +269,8 @@ export interface AiConfigItem {
   catalogId: string;
   apiKeyMasked: string;
   hasApiKey: boolean;
+  /** Không có khoá riêng nhưng máy chủ có khoá hệ thống cho nhà cung cấp này */
+  usesSystemKey?: boolean;
   baseUrl: string | null;
   purpose: AiPurpose;
   advancedParams: {
