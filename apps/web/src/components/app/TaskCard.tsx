@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { PriorityBadge } from "./PriorityBadge";
 import { TaskTypeBadge } from "./TaskTypeBadge";
 import { UserAvatar } from "./UserAvatar";
-import { Calendar, CheckSquare, Sparkles, Clock, Link2, Plus } from "lucide-react";
+import { Calendar, CheckSquare, Sparkles, Clock, Link2, Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TaskListItem } from "@/lib/types";
 
@@ -34,12 +34,16 @@ export const fmtDay = (iso: string | null | undefined): string => {
 export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, isDragging = false, isGhost = false, className, today }: TaskCardProps) {
   const overdue = !!task.dueDate && !task.completedAt && task.dueDate.slice(0, 10) < (today ?? new Date().toISOString().slice(0, 10));
   const isMyTask = currentUserId ? task.assignees.some((a) => a.id === currentUserId) : false;
+  // Thẻ tạm (chưa có id thật): không mở chi tiết, không nhận việc — mọi PATCH sẽ 404.
+  const pending = task.pending === true;
 
   return (
     <Card
-      onClick={() => onClick?.(task)}
+      onClick={() => !pending && onClick?.(task)}
+      aria-busy={pending}
       className={cn(
         "p-3 cursor-pointer transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.99] border-border/80 bg-card select-none relative",
+        pending && "opacity-70 pointer-events-none border-dashed",
         isMyTask && "border-l-2 border-l-primary",
         isDragging && "opacity-30 border-dashed border-primary",
         isGhost && "opacity-90 shadow-xl border-primary ring-2 ring-primary/20 rotate-1",
@@ -50,9 +54,15 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 flex-wrap">
             <Badge variant="outline" className="font-mono text-xs font-semibold px-1.5 py-0">
-              {taskKeyOf(projectKey, task)}
+              {pending ? "…" : taskKeyOf(projectKey, task)}
             </Badge>
-            <TaskTypeBadge type={task.type} size="icon" />
+            {pending ? (
+              <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0 h-4">
+                <Loader2 className="h-2.5 w-2.5 animate-spin" /> Đang lưu…
+              </Badge>
+            ) : (
+              <TaskTypeBadge type={task.type} size="icon" />
+            )}
             {isMyTask && (
               <Badge variant="default" className="text-[9px] px-1 py-0 h-4 bg-primary/20 text-primary border-primary/30 hover:bg-primary/30 font-medium">
                 Của tôi
@@ -77,7 +87,7 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
                   <UserAvatar key={a.id} name={a.shortName ?? a.fullName} avatar={a.avatarUrl ?? undefined} size="sm" className="ring-2 ring-card" />
                 ))}
               </div>
-            ) : onClaim ? (
+            ) : onClaim && !pending ? (
               <button
                 type="button"
                 onClick={(e) => {

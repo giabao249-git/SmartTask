@@ -36,6 +36,61 @@ export function useTask(id: string | null) {
   return useQuery({ queryKey: taskKeys.detail(id ?? ""), queryFn: () => api.get<TaskDetail>(`/tasks/${id}`), enabled: !!id });
 }
 
+/** Các trường vô hại khi vá thẳng vào bản sao trong cache (không phải danh sách quan hệ). */
+const OPTIMISTIC_FIELDS = [
+  "title",
+  "type",
+  "priority",
+  "isUrgent",
+  "difficulty",
+  "startDate",
+  "dueDate",
+  "estimateHours",
+  "progress",
+  "sprintId",
+] as const;
+
+/**
+ * Thẻ tạm hiện ngay khi bấm Enter, trước khi API trả về. Không có id thật nên KHÔNG được
+ * gửi PATCH — `pending` khoá mọi thao tác trên thẻ cho tới khi `onSuccess` thay bằng bản thật.
+ */
+function tempTask(id: string, projectId: string, body: Record<string, unknown>): TaskListItem {
+  const num = (v: unknown) => (typeof v === "number" ? v : null);
+  return {
+    id,
+    projectId,
+    sprintId: typeof body.sprintId === "string" ? body.sprintId : null,
+    parentId: null,
+    columnId: String(body.columnId ?? ""),
+    number: 0,
+    key: "…",
+    title: String(body.title ?? ""),
+    type: (body.type as TaskListItem["type"]) ?? "TASK",
+    priority: (body.priority as TaskListItem["priority"]) ?? "MEDIUM",
+    isUrgent: body.isUrgent === true,
+    difficulty: typeof body.difficulty === "number" ? body.difficulty : 3,
+    startDate: typeof body.startDate === "string" ? body.startDate : null,
+    dueDate: typeof body.dueDate === "string" ? body.dueDate : null,
+    estimateHours: num(body.estimateHours),
+    remainingHours: num(body.estimateHours),
+    progress: 0,
+    position: Number.MAX_SAFE_INTEGER,
+    version: 0,
+    source: "MANUAL",
+    startedAt: null,
+    completedAt: null,
+    updatedAt: new Date().toISOString(),
+    assignees: [],
+    labels: [],
+    requiredSkills: [],
+    dependsOnIds: [],
+    subtaskCount: 0,
+    commentCount: 0,
+    attachmentCount: 0,
+    pending: true,
+  };
+}
+
 /** Thay/cập nhật một task trong mọi danh sách đang cache của dự án. */
 export function useTaskCache(projectId: string) {
   const qc = useQueryClient();
@@ -88,12 +143,40 @@ export function useTaskMutations(projectId: string) {
     qc.setQueryData(taskKeys.detail(task.id), task);
     if (task.parentId) void qc.invalidateQueries({ queryKey: taskKeys.detail(task.parentId) });
   };
+  /** Tạo có cập nhật lạc quan: thẻ tạm hiện ngay, `onSuccess` thay bằng bản thật, lỗi thì gỡ ra. */
   const create = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post<TaskDetail>(`/projects/${projectId}/tasks`, body),
-    onSuccess: done,
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: taskKeys.list(projectId) });
+      const snapshot = qc.getQueriesData<TaskListResponse>({ queryKey: taskKeys.list(projectId) });
+      const tempId = `tmp-${Math.random().toString(36).slice(2)}`;
+      cache.upsert(tempTask(tempId, projectId, body));
+      return { snapshot, tempId };
+    },
+    onError: (_e, _v, ctx) => {
+      ctx?.snapshot.forEach(([key, data]) => qc.setQueryData(key, data));
+    },
+    onSuccess: (task, _v, ctx) => {
+      if (ctx?.tempId) cache.remove(ctx.tempId);
+      done(task);
+    },
   });
+  /** Sửa có cập nhật lạc quan cho các trường vô hại; 409 hoặc lỗi khác → khôi phục ảnh chụp. */
   const update = useMutation({
     mutationFn: (v: { id: string; version: number; patch: Record<string, unknown> }) => api.patch<TaskDetail>(`/tasks/${v.id}`, { version: v.version, ...v.patch }),
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: taskKeys.list(projectId) });
+      const snapshot = qc.getQueriesData<TaskListResponse>({ queryKey: taskKeys.list(projectId) });
+      const cur = qc.getQueryData<TaskDetail>(taskKeys.detail(v.id));
+      const safe = Object.fromEntries(
+        Object.entries(v.patch).filter(([k]) => (OPTIMISTIC_FIELDS as readonly string[]).includes(k)),
+      );
+      if (cur && Object.keys(safe).length) cache.upsert({ ...cur, ...safe });
+      return { snapshot };
+    },
+    onError: (_e, _v, ctx) => {
+      ctx?.snapshot.forEach(([key, data]) => qc.setQueryData(key, data));
+    },
     onSuccess: done,
   });
   const progress = useMutation({

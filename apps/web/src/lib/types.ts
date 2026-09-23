@@ -435,6 +435,8 @@ export interface TaskListItem {
   subtaskCount: number;
   commentCount: number;
   attachmentCount: number;
+  /** Chỉ phía client: thẻ tạm đang chờ API trả về — chưa có id thật nên không được sửa. */
+  pending?: boolean;
 }
 
 export interface TaskDetail extends TaskListItem {
