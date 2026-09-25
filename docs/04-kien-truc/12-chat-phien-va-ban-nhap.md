@@ -21,6 +21,7 @@ Quy tắc bất biến giữ nguyên ([05](05-ai-agent.md)): LLM suy luận (ch�
 | 9 | "Lan còn bao nhiêu giờ trống tuần này?" | `CHAT_RESPONSE` (+`dataRef`) | không |
 | 10 | "Từ giờ đừng giao Minh tuần cuối tháng" | `MEMORY_PROPOSAL` | thẻ ghi nhớ chờ xác nhận (không phải proposal task) |
 | 11 | "Giao cho Bảo" (có 2 Bảo), yêu cầu thiếu dữ liệu | `ASK_CLARIFICATION` `{question, options:[{code,label}]}` | không; lượt sau UI gửi `selectedCode` |
+| 11b | "ai có thể làm task này", "ai rảnh nhận d2" | `DATA_QUERY` intent `TASK_CANDIDATES` (`filters.task` hoặc `filters.draft`) | không — backend trả bảng ứng viên (xem [14](14-tra-cuu-hoi-dap.md)) |
 | 12 | "Duyệt đi", "ok tạo hết" | `CHAT_RESPONSE` + `suggestApply: true` | **không ghi** — UI chỉ nhấp nháy nút Duyệt; tạo thật luôn qua nút |
 
 Cố ý không có qua chat: đổi cấu hình workspace/vai trò/prompt/alias, xoá dự án/sprint, xoá task thật (chỉ đề xuất đổi trạng thái).
@@ -61,6 +62,7 @@ Trạng thái proposal suy ra từ item: còn ≥1 item DRAFT → `DRAFT`; hết
 | Mở lại phiên cũ bị mất nháp | nháp ở DB; `GET /ai/sessions/:id` trả `{session, messages, proposals}` một lần; UI không giữ nháp trong localStorage |
 | Hai tab / hai lượt chồng nhau | khoá server theo phiên: lượt mới khi lượt cũ chưa xong → `409 AI_TURN_IN_PROGRESS`; duyệt kèm `version` → lệch = `409 PROPOSAL_VERSION_CONFLICT` |
 | draftKey trùng giữa hai proposal trong phiên | server cấp key từ `next_draft_seq` khi lưu (đổi key LLM trả về theo bảng ánh xạ, ghi vào `code_map`); ngữ cảnh lượt sau liệt kê key thật nên LLM không tự bịa |
+| Model trả `targetTask: ""`, nhét `dN` vào `targetTask`, hoặc để phần sửa trong `tasks[]` thay vì `patch` | `response-parser.normalizeAction` nắn lại trước khi kiểm schema (chỉ phép biến đổi không mang tính quyết định) và ghi vào log `[AI] đã nắn đầu ra`; `UPDATE_TASK_DRAFT` không có gì để sửa → `CHAT_RESPONSE` (không phải lỗi JSON) |
 | Duyệt xong mà chat vẫn "sửa" item đã tạo | Validator: item `APPLIED` không nhận patch → LLM phải chuyển sang `UPDATE_TASK_DRAFT{targetTask}` (task thật, proposal `TASK_UPDATE` mới) |
 | Hạn mức | mỗi lượt chat = 1 lượt gọi; nháp hết hạn 7 ngày như cũ |
 

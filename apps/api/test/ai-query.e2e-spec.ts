@@ -361,6 +361,98 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
     expect(unknown.body.code).toBe('UNKNOWN_CODE');
   });
 
+  it('TASK_CANDIDATES: bảng ứng viên cho task thật và cho bản nháp trong phiên', async () => {
+    const session = await api()
+      .post('/api/v1/ai/sessions')
+      .set(auth(pm))
+      .send({ projectId, title: 'ai làm được việc này' })
+      .expect(201);
+    // Bảng mã của phiên: t1 → task chưa giao, k1 → kỹ năng; kèm một bản nháp d1 chưa ghi
+    await prisma.aiProposal.create({
+      data: {
+        projectId,
+        userId: pm.id,
+        sessionId: session.body.id,
+        kind: 'DECOMPOSE',
+        status: 'DRAFT',
+        payload: {
+          action: {
+            type: 'DECOMPOSE_PROPOSAL',
+            schemaVersion: 1,
+            reply: '',
+            assumptions: [],
+            tasks: [
+              {
+                draftKey: 'd1',
+                title: 'Dựng màn báo cáo',
+                estimateHours: 8,
+                difficulty: 3,
+                requiredSkills: [{ skill: 'k1', minLevel: 3 }],
+                subtasks: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        },
+        codeMap: {
+          users: {},
+          tasks: { t1: taskIds[2] },
+          sprints: {},
+          skills: { k1: skillId },
+        },
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    const ask = (query: Record<string, unknown>) =>
+      api()
+        .post('/api/v1/ai/query')
+        .set(auth(pm))
+        .send({ projectId, sessionId: session.body.id, query });
+
+    const real = await ask({
+      intent: 'TASK_CANDIDATES',
+      filters: { task: 't1' },
+    }).expect(200);
+    const table = real.body.blocks.find(
+      (b: { kind: string }) => b.kind === 'table',
+    );
+    expect(table.rows.length).toBeGreaterThan(0);
+    expect(Object.keys(table.rows[0].cells)).toEqual(
+      expect.arrayContaining(['member', 'match', 'effort', 'free', 'util']),
+    );
+
+    const draft = await ask({
+      intent: 'TASK_CANDIDATES',
+      filters: { draft: 'd1' },
+    }).expect(200);
+    expect(
+      draft.body.blocks.find((b: { kind: string }) => b.kind === 'note').text,
+    ).toContain('Dựng màn báo cáo');
+
+    // Mã không có trong bảng mã → báo lỗi, không đoán
+    const unknown = await ask({
+      intent: 'TASK_CANDIDATES',
+      filters: { task: 't99' },
+    }).expect(422);
+    expect(unknown.body.code).toBe('UNKNOWN_CODE');
+
+    // Thành viên thường không được xem bảng giờ trống của cả nhóm → ghi chú, KHÔNG có số
+    const member = await api()
+      .post('/api/v1/ai/query')
+      .set(auth(dev))
+      .send({
+        projectId,
+        sessionId: session.body.id,
+        query: { intent: 'TASK_CANDIDATES', filters: { task: 't1' } },
+      })
+      .expect(200);
+    expect(member.body.blocks).toHaveLength(1);
+    expect(member.body.blocks[0]).toMatchObject({
+      kind: 'note',
+      tone: 'warning',
+    });
+  });
+
   it('SPRINT_LIST / ACTIVITY_FEED / NOTIFICATION_LIST / BUS_FACTOR chạy được và đúng nguồn', async () => {
     const sprints = await runQuery(pm, { intent: 'SPRINT_LIST' }).expect(200);
     expect(sprints.body.blocks[0].rows[0].cells.name).toBe('Sprint tra cứu');

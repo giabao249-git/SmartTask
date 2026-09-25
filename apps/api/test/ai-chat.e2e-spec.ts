@@ -650,4 +650,86 @@ describe('AI chat theo phiên (e2e)', () => {
     await chat(minh, 'xin chào').expect(200);
     expect(AiMockQueue.lastPrompt!.system).toContain('cùng phòng ban');
   });
+  // Hình dạng thật lấy từ ai_token_logs ngày 25/09/2026 (Gemini structured output phẳng).
+  // Phiên riêng để không phụ thuộc trạng thái các lượt trên.
+  describe('đầu ra méo của model vẫn dùng được', () => {
+    let sid = '';
+    const say = (text: string) =>
+      api()
+        .post('/api/v1/ai/chat')
+        .set(auth(minh))
+        .send({ projectId, sessionId: sid, text });
+
+    beforeAll(async () => {
+      const s = await api()
+        .post('/api/v1/ai/sessions')
+        .set(auth(minh))
+        .send({ projectId, title: 'đầu ra méo' })
+        .expect(201);
+      sid = s.body.id;
+      AiMockQueue.push({
+        type: 'DECOMPOSE_PROPOSAL',
+        reply: 'Hai việc.',
+        tasks: [
+          { draftKey: 'd1', title: 'Thiết kế schema', estimateHours: 8 },
+          { draftKey: 'd2', title: 'API đăng nhập', estimateHours: 6 },
+        ],
+      });
+      await say('phân rã đăng nhập').expect(200);
+    });
+
+    it('targetTask rỗng + draftKey nhét nhầm + patch nằm trong tasks[] → vẫn vá đúng d2', async () => {
+      AiMockQueue.push({
+        type: 'UPDATE_TASK_DRAFT',
+        reply: 'Đã cập nhật d2.',
+        targetDraftKeys: ['d2'],
+        targetTask: 'd2',
+        tasks: [
+          {
+            draftKey: 'd2',
+            title: 'API đăng nhập',
+            estimateHours: 9,
+            difficulty: 2,
+          },
+        ],
+        warnings: [],
+      });
+      const res = await say('d2 đổi 9 giờ, độ khó 2').expect(200);
+      expect(res.body.action.type).toBe('UPDATE_TASK_DRAFT');
+      expect(res.body.validation.ok).toBe(true);
+      expect(res.body.usage.attempts).toBe(1); // không phải gọi lại model
+      expect(res.body.proposals[0].items[1]).toMatchObject({
+        draftKey: 'd2',
+        estimateHours: 9,
+        status: 'DRAFT',
+      });
+    });
+
+    it('không có gì để sửa (model trả lời câu hỏi) → CHAT_RESPONSE, nháp giữ nguyên', async () => {
+      const before = await prisma.aiProposal.findFirstOrThrow({
+        where: { sessionId: sid },
+        select: { id: true, version: true },
+      });
+      AiMockQueue.push({
+        type: 'UPDATE_TASK_DRAFT',
+        reply: 'Lan phù hợp nhất cho việc này.',
+        targetDraftKeys: ['d2'],
+        targetTask: '',
+        tasks: [],
+        warnings: [],
+      });
+      const res = await say('ai có thể làm d2?').expect(200);
+      expect(res.body.action).toMatchObject({
+        type: 'CHAT_RESPONSE',
+        reply: 'Lan phù hợp nhất cho việc này.',
+      });
+      expect(res.body.action.parseFailed).toBeUndefined();
+      expect(res.body.usage.attempts).toBe(1);
+      const after = await prisma.aiProposal.findUniqueOrThrow({
+        where: { id: before.id },
+        select: { version: true },
+      });
+      expect(after.version).toBe(before.version);
+    });
+  });
 });

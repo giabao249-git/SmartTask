@@ -786,4 +786,126 @@ export class WorkloadService {
       spread: spreadOf(members.map((m) => m.utilizationBefore)),
     };
   }
+
+  /**
+   * Ứng viên cho MỘT việc — "ai làm được việc này?" (docs 14). Nhận task thật (`taskId`) hoặc một bản nháp
+   * chưa ghi (`requiredSkills`/`estimateHours`/`difficulty`/`dueDate`). Trả về SỰ THẬT từng người: độ khớp kỹ
+   * năng, giờ hiệu dụng phải bỏ ra, giờ trống trước hạn, mức dùng tuần này. Backend KHÔNG chọn hộ và không
+   * lọc bớt ai; xếp theo (khớp kỹ năng, giờ trống) chỉ để dễ đọc — LLM và người mới là nơi quyết định.
+   */
+  async candidatesFor(
+    projectId: string,
+    spec: {
+      taskId?: string;
+      title?: string;
+      requiredSkills?: { skillId: string; minLevel: number }[];
+      estimateHours?: number | null;
+      difficulty?: number | null;
+      dueDate?: string | null;
+    },
+    opts: { today?: Date } = {},
+  ) {
+    const today = toDate(opts.today ?? new Date());
+    const table = await this.capacityTable(projectId, {
+      taskIds: spec.taskId ? [spec.taskId] : [],
+      today,
+    });
+    const real = spec.taskId
+      ? table.tasks.find((t) => t.taskId === spec.taskId)
+      : undefined;
+    if (spec.taskId && !real) return null; // task đã xong/đã xoá/không thuộc dự án
+
+    const subject = real
+      ? {
+          title: real.title,
+          key: real.key as string | null,
+          hours: real.remainingHours,
+          difficulty: real.difficulty,
+          dueDate: real.dueDate,
+          requiredSkills: real.requiredSkills,
+        }
+      : await this.draftSubject(projectId, spec);
+
+    const rows = table.members.map((m) => {
+      const per = real?.perUser.find((p) => p.userId === m.userId);
+      const levels = new Map(m.skills.map((s) => [s.skillId, s.level]));
+      const required = subject.requiredSkills.map((r) => ({
+        skillId: r.skillId,
+        name: r.name,
+        minLevel: r.minLevel,
+      }));
+      const freeBeforeDue = subject.dueDate
+        ? round2(
+            m.freeByDay
+              .filter((d) => d.date <= subject.dueDate!)
+              .reduce((s, d) => s + d.freeHours, 0),
+          )
+        : null;
+      return {
+        userId: m.userId,
+        fullName: m.fullName,
+        shortName: m.shortName,
+        role: m.role,
+        utilizationBefore: m.utilizationBefore,
+        levelBefore: m.levelBefore,
+        skills: m.skills,
+        skillMatch: per?.skillMatch ?? skillMatch(levels, required),
+        hoursEff:
+          per?.hoursEff ??
+          (subject.hours === null
+            ? null
+            : round2(
+                hoursEff(
+                  subject.hours,
+                  m.metrics.ear,
+                  subject.difficulty ?? 3,
+                  skillGapFactor(levels, required),
+                ),
+              )),
+        freeBeforeDue: per?.freeBeforeDue ?? freeBeforeDue,
+        freeTotal: round2(m.freeByDay.reduce((s, d) => s + d.freeHours, 0)),
+      };
+    });
+    rows.sort(
+      (a, b) =>
+        b.skillMatch.avg - a.skillMatch.avg ||
+        (b.freeBeforeDue ?? b.freeTotal) - (a.freeBeforeDue ?? a.freeTotal),
+    );
+    return { window: table.window, subject, rows };
+  }
+
+  /** Việc chưa ghi (bản nháp trong phiên chat): lấy tên kỹ năng từ danh mục để bảng đọc được. */
+  private async draftSubject(
+    projectId: string,
+    spec: {
+      title?: string;
+      requiredSkills?: { skillId: string; minLevel: number }[];
+      estimateHours?: number | null;
+      difficulty?: number | null;
+      dueDate?: string | null;
+    },
+  ) {
+    const ids = (spec.requiredSkills ?? []).map((r) => r.skillId);
+    const names = ids.length
+      ? await this.prisma.skill.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, name: true },
+        })
+      : [];
+    return {
+      title: spec.title ?? 'Bản nháp',
+      key: null as string | null,
+      hours:
+        spec.estimateHours === null || spec.estimateHours === undefined
+          ? null
+          : Number(spec.estimateHours),
+      difficulty: spec.difficulty ?? null,
+      dueDate: spec.dueDate ?? null,
+      requiredSkills: (spec.requiredSkills ?? []).map((r) => ({
+        skillId: r.skillId,
+        name: names.find((n) => n.id === r.skillId)?.name ?? r.skillId,
+        minLevel: r.minLevel,
+      })),
+    };
+  }
 }

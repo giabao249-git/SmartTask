@@ -520,6 +520,10 @@ export class AiService {
       });
       usage = accumulate(usage, call, attempt, ctx.prompt.chars);
       const parsed = parseStructuredAction(call.text);
+      if (parsed.repairs?.length)
+        this.logger.warn(
+          `[AI] đã nắn đầu ra (lần ${attempt}): ${parsed.repairs.join('; ')}`,
+        );
       if (parsed.parseFailed) {
         await this.markInvalid(call.logId, call.text, parsed.issues);
         this.logger.warn(

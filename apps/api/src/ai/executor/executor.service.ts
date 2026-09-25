@@ -221,6 +221,7 @@ export class ExecutorService {
     const fields = {
       ...(p.title !== undefined ? { title: p.title } : {}),
       ...(p.description !== undefined ? { description: p.description } : {}),
+      ...(p.taskType !== undefined ? { type: p.taskType } : {}),
       ...(p.priority !== undefined ? { priority: p.priority } : {}),
       ...(p.difficulty !== undefined ? { difficulty: p.difficulty } : {}),
       ...(p.estimateHours !== undefined

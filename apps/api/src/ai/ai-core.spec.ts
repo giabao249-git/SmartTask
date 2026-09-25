@@ -115,6 +115,57 @@ describe('ResponseParser (thuần, không ném lỗi)', () => {
     expect(r2.parseFailed).toBe(true);
     expect(r2.issues?.[0]).toContain('tasks');
   });
+
+  // Ba tật của structured output phẳng, bắt được từ ai_token_logs thật (25/09/2026)
+  it('targetTask rỗng → bỏ; giữ nguyên ý định sửa bản nháp', () => {
+    const r = parseStructuredAction(
+      '{"type":"UPDATE_TASK_DRAFT","reply":"ok","targetDraftKeys":["d2"],"targetTask":"","patch":{"difficulty":1}}',
+    );
+    expect(r.parseFailed).toBe(false);
+    expect(r.action).toMatchObject({
+      type: 'UPDATE_TASK_DRAFT',
+      targetDraftKeys: ['d2'],
+      patch: { difficulty: 1 },
+    });
+    expect(r.action).not.toHaveProperty('targetTask');
+    expect(r.repairs?.join()).toContain('targetTask');
+  });
+
+  it('draftKey nhét nhầm vào targetTask → dồn về targetDraftKeys', () => {
+    const r = parseStructuredAction(
+      '{"type":"UPDATE_TASK_DRAFT","reply":"ok","targetTask":"d2","patch":{"due":"2026-10-02"}}',
+    );
+    expect(r.parseFailed).toBe(false);
+    expect(r.action).toMatchObject({ targetDraftKeys: ['d2'] });
+  });
+
+  it('phần sửa nằm trong tasks[] thay vì patch → dựng lại patch', () => {
+    const r = parseStructuredAction(
+      '{"type":"UPDATE_TASK_DRAFT","reply":"ok","targetDraftKeys":["d2"],"tasks":[{"draftKey":"d2","title":"UI/UX","estimateHours":16,"difficulty":1,"suggestedAssignee":"u2"}]}',
+    );
+    expect(r.parseFailed).toBe(false);
+    expect(r.action).toMatchObject({
+      type: 'UPDATE_TASK_DRAFT',
+      targetDraftKeys: ['d2'],
+      patch: {
+        title: 'UI/UX',
+        estimateHours: 16,
+        difficulty: 1,
+        suggestedAssignee: 'u2',
+      },
+    });
+  });
+
+  it('UPDATE_TASK_DRAFT không có gì để sửa (trả lời câu hỏi) → CHAT_RESPONSE', () => {
+    const r = parseStructuredAction(
+      '{"type":"UPDATE_TASK_DRAFT","reply":"Lan phù hợp nhất","targetDraftKeys":["d2"],"tasks":[],"warnings":[]}',
+    );
+    expect(r.parseFailed).toBe(false);
+    expect(r.action).toMatchObject({
+      type: 'CHAT_RESPONSE',
+      reply: 'Lan phù hợp nhất',
+    });
+  });
 });
 
 describe('CodeBook — mã ngắn theo lượt', () => {

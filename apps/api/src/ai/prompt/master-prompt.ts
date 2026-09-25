@@ -62,11 +62,20 @@ riskLevel PHẢI trùng "Mức rủi ro (backend)" trong ngữ cảnh; không th
   "resolutionReason": "vì sao chọn key này" }. patch chỉ chứa trường cần đổi; null = xoá giá trị.
 - Sửa TASK THẬT ("dời hạn ST-12 sang 24/10", "đổi người làm t7 thành Lan") → UPDATE_TASK_DRAFT { "targetTask": "t7",
   "patch": {...}, "resolutionReason" } — chỉ là đề xuất, người duyệt mới ghi.
+  BA LỖI HAY GẶP ở UPDATE_TASK_DRAFT, tránh tuyệt đối: (a) "targetTask" CHỈ nhận mã task thật tN — mã bản nháp dN
+  phải đặt trong "targetDraftKeys"; (b) KHÔNG gửi "targetTask": "" — không dùng thì bỏ hẳn trường; (c) phần cần đổi
+  phải nằm trong "patch", KHÔNG nằm trong "tasks"/"drafts". Không có gì để đổi thì đây KHÔNG phải UPDATE_TASK_DRAFT.
 - Bỏ bản nháp ("bỏ cái thứ năm", "xoá hết nháp") → DISCARD_DRAFT { "targetDraftKeys": ["d5"] } hoặc { "all": true }.
 - Giao/giao lại nhiều task thật → ASSIGN_PROPOSAL { "assignments": [ { "task": "t3", "assignee": "u2", "start", "due",
   "reason", "alternatives": [] } ], "unassigned": [], "warnings": [] }.
 - Gỡ tải ("ai quá tải, gỡ bớt cho Minh") → REBALANCE_PROPOSAL { "moves": [ { "task": "t3", "from": "u1", "to": "u2", "reason" } ] }.
 - Hỏi về rủi ro sprint → RISK_EXPLANATION (riskLevel PHẢI trùng số backend nếu có trong ngữ cảnh).
+- AI LÀM ĐƯỢC VIỆC NÀY ("ai có thể làm task này", "ai phù hợp làm t7", "ai rảnh nhận việc d2", "giao cho ai hợp lý")
+  → DATA_QUERY { "reply": "câu dẫn NGẮN, KHÔNG có số", "query": { "intent": "TASK_CANDIDATES",
+    "filters": { "task": "t7" } } } — hỏi về BẢN NHÁP thì dùng { "draft": "d2" } thay cho "task".
+  TUYỆT ĐỐI không tự liệt kê giờ trống/kỹ năng của ai trong reply: backend trả bảng ứng viên có khớp kỹ năng,
+  giờ hiệu dụng, giờ trống trước hạn, mức dùng. Người dùng xem bảng rồi mới bảo giao — lúc đó mới ASSIGN_PROPOSAL
+  hoặc UPDATE_TASK_DRAFT.
 - TRA CỨU DỮ LIỆU ("danh sách thành viên", "task tuần này", "ai quá tải", "ai biết NestJS", "sprint còn mấy ngày",
   "hôm nay tôi làm gì", "tháng này tốn bao nhiêu tiền AI") → DATA_QUERY
   { "reply": "câu dẫn NGẮN, KHÔNG có số", "query": { "intent": ..., "sprint"?: "s2"|"__all"|"__backlog",
@@ -77,8 +86,8 @@ riskLevel PHẢI trùng "Mức rủi ro (backend)" trong ngữ cảnh; không th
   CHỈ điền filter có nghĩa cho intent đó (WHO_KNOWS_SKILL → skill/minLevel; TASK_* → assignee/status/dueRange…);
   TUYỆT ĐỐI không điền mã giả ("tN", "u0") cho field không dùng — bỏ trống.
   intent hợp lệ: TASK_LIST, TASK_AGENDA, TASK_DETAIL, TASK_STATS, TASK_BLOCKED, MEMBER_LIST, MEMBER_PROFILE,
-  WORKLOAD_WEEK, CAPACITY_FREE, WHO_KNOWS_SKILL, BUS_FACTOR, SPRINT_LIST, SPRINT_PROGRESS, ACTIVITY_FEED,
-  NOTIFICATION_LIST, AI_USAGE. Backend tự chạy truy vấn và vẽ bảng/biểu đồ — BẠN KHÔNG ĐƯỢC tự điền con số
+  WORKLOAD_WEEK, CAPACITY_FREE, WHO_KNOWS_SKILL, TASK_CANDIDATES, BUS_FACTOR, SPRINT_LIST, SPRINT_PROGRESS,
+  ACTIVITY_FEED, NOTIFICATION_LIST, AI_USAGE. Backend tự chạy truy vấn và vẽ bảng/biểu đồ — BẠN KHÔNG ĐƯỢC tự điền con số
   vào reply cho phần tra cứu (số sai là lỗi nặng); chỉ nói "đây là …", "dưới đây là …".
 - Hỏi ý kiến/giải thích không cần số mới → CHAT_RESPONSE { "reply", "dataRef"? }. "Duyệt đi", "ok tạo hết" → CHAT_RESPONSE
   { "suggestApply": true } — KHÔNG có action nào tạo task thật; người bấm Duyệt trên panel.

@@ -26,7 +26,7 @@ Người dùng ──▶ LLM ──▶ DATA_QUERY { intent, filters }   (KHÔNG 
 - **`reply` không được chứa số** cho phần tra cứu (ghi rõ trong master prompt, mục CHAT).
 - Kết quả được lưu cùng tin nhắn (`chat_messages.structured_data.queryResult`) nên mở lại phiên vẫn thấy.
 
-## 3. Mười sáu ý định
+## 3. Mười bảy ý định
 
 | Nhóm | intent | Câu hỏi ví dụ | Khối trả về |
 |---|---|---|---|
@@ -40,6 +40,7 @@ Người dùng ──▶ LLM ──▶ DATA_QUERY { intent, filters }   (KHÔNG 
 | | `WORKLOAD_WEEK` | "ai đang quá tải" | `stat_row` + `heatmap` |
 | | `CAPACITY_FREE` | "ai còn giờ trống" | `note` + `table` |
 | | `WHO_KNOWS_SKILL` | "ai biết NestJS ≥ 4" | `people_list` |
+| | `TASK_CANDIDATES` | "ai có thể làm task này", "ai rảnh nhận d2" | `note` + `table` |
 | | `BUS_FACTOR` | "kỹ năng nào chỉ 1 người biết" | `note` + `table` |
 | Tiến độ | `SPRINT_LIST` | "có mấy sprint" | `table` |
 | | `SPRINT_PROGRESS` | "sprint còn mấy ngày" | `stat_row` + `line_chart` |
@@ -65,6 +66,13 @@ Người dùng ──▶ LLM ──▶ DATA_QUERY { intent, filters }   (KHÔNG 
 }
 ```
 
+**`TASK_CANDIDATES` — "ai làm được việc này?"** dùng `filters.task` (`tN`, task thật) **hoặc** `filters.draft`
+(`dN`, bản nháp đang mở trong phiên — việc chưa ghi nên không có trong CSDL task). Backend gọi
+`WorkloadService.candidatesFor` để dựng bảng sự thật từng người: khớp kỹ năng (kèm kỹ năng còn thiếu), giờ hiệu
+dụng phải bỏ ra (EAR × độ khó × thiếu kỹ năng), giờ trống trước hạn, mức dùng tuần này. **Không lọc bớt ai và
+không chấm điểm ai**; xếp theo (khớp kỹ năng, giờ trống) chỉ để đọc cho dễ — chọn người vẫn là việc của LLM và
+người dùng. Sau khi xem bảng, người nói "giao cho X" thì mới sinh `ASSIGN_PROPOSAL` / `UPDATE_TASK_DRAFT`.
+
 **Backend trả về** (`QueryResult`): `blocks[]` + `source { endpoint, params, rowCount }` + `generatedAt` + `truncated?`.
 Khối hiện có: `stat_row`, `task_list`, `agenda`, `people_list`, `person_card`, `table`, `heatmap`, `bar_chart`, `line_chart`, `activity_list`, `note`, `empty`. Mỗi item mang `ref { type, id, key }` để bấm mở đúng việc/người.
 
@@ -79,9 +87,9 @@ Khối hiện có: `stat_row`, `task_list`, `agenda`, `people_list`, `person_car
 | Field lạ / chèn tham số | Schema `.strict()` — `rawSql` bị từ chối 400 | "chặn đầu vào lạ" |
 | Nhồi nghìn dòng vào chat | `limit` mặc định 25, trần 100, kèm `truncated { shown, total }` | "cắt theo limit, báo tổng thật" |
 | Số cũ trong lịch sử chat | Hiện "Số liệu lúc HH:mm" + nút **Làm mới** gọi `POST /ai/query` — **0 token, không tính hạn mức AI** | "chạy lại không tốn lượt AI" |
-| Chat thành đường vòng lấy dữ liệu màn hình không cho xem | `INTENT_PERMISSION` khớp từng endpoint: `CAPACITY_FREE` và `AI_USAGE` cần `canManage`; thiếu quyền → khối `note`, **không có số** | "thành viên không xem được bảng năng lực qua chat" |
+| Chat thành đường vòng lấy dữ liệu màn hình không cho xem | `INTENT_PERMISSION` khớp từng endpoint: `CAPACITY_FREE`, `TASK_CANDIDATES` và `AI_USAGE` cần `canManage`; thiếu quyền → khối `note`, **không có số** | "thành viên không xem được bảng năng lực qua chat" |
 | Hammer nút "Làm mới" làm nặng CSDL | Cửa sổ trượt 60 giây theo người dùng, trần `AI_QUERY_RATE_LIMIT_PER_MINUTE` (mặc định 30) → `429 RATE_LIMITED` | "vượt trần bị chặn 429" (đo thật: 34 lần → 29×200, 5×429) |
-| Truy vấn nặng treo lượt chat (đang giữ khoá phiên) | `WORKLOAD_WEEK`/`CAPACITY_FREE` chạy dưới trần 8 giây, quá hạn trả `note` gợi ý thu hẹp phạm vi | — |
+| Truy vấn nặng treo lượt chat (đang giữ khoá phiên) | `WORKLOAD_WEEK`/`CAPACITY_FREE`/`TASK_CANDIDATES` chạy dưới trần 8 giây, quá hạn trả `note` gợi ý thu hẹp phạm vi | — |
 | Phình bảng `chat_messages` | `trimQueryResult` cắt danh sách dài cho payload ≤ 48 KB, kèm ghi chú đã rút gọn | "kết quả quá dài bị rút gọn" |
 | Workspace bị đình chỉ / chỉ đọc | Đi qua `assertRead` nên tuân vòng đời như mọi API: `SOFT_SUSPENDED` → 403 `WORKSPACE_SUSPENDED` | "tra cứu tuân theo vòng đời" |
 

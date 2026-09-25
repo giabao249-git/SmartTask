@@ -17,6 +17,7 @@ export const QUERY_INTENTS = [
   'WORKLOAD_WEEK',
   'CAPACITY_FREE',
   'WHO_KNOWS_SKILL',
+  'TASK_CANDIDATES',
   'BUS_FACTOR',
   'SPRINT_LIST',
   'SPRINT_PROGRESS',
@@ -54,8 +55,10 @@ export const queryFiltersSchema = z.object({
   /** WHO_KNOWS_SKILL: mã kỹ năng + mức tối thiểu. */
   skill: shortCode('k').optional(),
   minLevel: z.number().int().min(1).max(5).optional(),
-  /** TASK_DETAIL / MEMBER_PROFILE: đối tượng cụ thể. */
+  /** TASK_DETAIL / MEMBER_PROFILE / TASK_CANDIDATES: đối tượng cụ thể. */
   task: shortCode('t').optional(),
+  /** TASK_CANDIDATES: hỏi về một BẢN NHÁP đang mở trong phiên thay vì task thật. */
+  draft: z.string().regex(/^d\d{1,3}$/, 'draftKey dạng d1, d2…').optional(),
   user: z.union([shortCode('u'), z.literal('me')]).optional(),
   /** AI_USAGE: gộp theo gì. */
   groupUsageBy: z.enum(['day', 'purpose', 'user']).optional(),
@@ -80,6 +83,7 @@ export const FILTERS_BY_INTENT: Record<QueryIntent, (keyof QueryFilters)[]> = {
   WORKLOAD_WEEK: [],
   CAPACITY_FREE: [],
   WHO_KNOWS_SKILL: ['skill', 'minLevel'],
+  TASK_CANDIDATES: ['task', 'draft'],
   BUS_FACTOR: ['minLevel'],
   SPRINT_LIST: [],
   SPRINT_PROGRESS: [],
@@ -99,6 +103,7 @@ const KNOWN_FILTER_KEYS: (keyof QueryFilters)[] = [
   'skill',
   'minLevel',
   'task',
+  'draft',
   'user',
   'groupUsageBy',
 ];

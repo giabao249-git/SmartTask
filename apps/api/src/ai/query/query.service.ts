@@ -8,6 +8,7 @@ import type {
   QueryBlock,
   QueryResult,
   StatItem,
+  StructuredAction,
 } from '@smarttask/shared';
 import { AppError } from '../../common/app-error';
 import { ProjectAccessService } from '../../common/access/project-access.service';
@@ -112,6 +113,8 @@ const INTENT_PERMISSION: Record<QueryIntent, 'read' | 'manage'> = {
   WORKLOAD_WEEK: 'read',
   CAPACITY_FREE: 'manage', // GET /projects/:id/capacity-table yêu cầu assertManage
   WHO_KNOWS_SKILL: 'read',
+  // Bảng ứng viên lộ giờ trống + mức dùng của từng người như bảng năng lực → cùng mức quyền
+  TASK_CANDIDATES: 'manage',
   BUS_FACTOR: 'read',
   SPRINT_LIST: 'read',
   SPRINT_PROGRESS: 'read',
@@ -121,7 +124,11 @@ const INTENT_PERMISSION: Record<QueryIntent, 'read' | 'manage'> = {
 };
 
 /** Truy vấn nặng (tính tải, bảng năng lực) — chặn thời gian để không giữ khoá phiên chat quá lâu. */
-const HEAVY_INTENTS: QueryIntent[] = ['WORKLOAD_WEEK', 'CAPACITY_FREE'];
+const HEAVY_INTENTS: QueryIntent[] = [
+  'WORKLOAD_WEEK',
+  'CAPACITY_FREE',
+  'TASK_CANDIDATES',
+];
 const HEAVY_TIMEOUT_MS = 8_000;
 
 export interface QueryContext {
@@ -262,6 +269,8 @@ export class AiQueryService {
           ...base,
           ...(await this.whoKnows(spec, ctx, acc.workspaceId)),
         };
+      case 'TASK_CANDIDATES':
+        return { ...base, ...(await this.taskCandidates(spec, ctx, at)) };
       case 'BUS_FACTOR':
         return {
           ...base,
@@ -1126,6 +1135,125 @@ export class AiQueryService {
             },
           ]) as QueryBlock[],
     };
+  }
+
+  /**
+   * "Ai làm được việc này?" — cho một task THẬT (`filters.task`) hoặc một BẢN NHÁP đang mở trong phiên
+   * (`filters.draft`). Trả bảng SỰ THẬT từng người (khớp kỹ năng, giờ hiệu dụng, giờ trống trước hạn,
+   * mức dùng) để LLM và người đọc tự cân nhắc — backend không chọn hộ, không loại ai khỏi bảng.
+   */
+  private async taskCandidates(
+    spec: DataQuerySpec,
+    ctx: QueryContext,
+    at: Date,
+  ) {
+    const code = spec.filters.task ?? spec.filters.draft;
+    if (!code)
+      throw AppError.unprocessable('VALIDATION_FAILED', {
+        field: 'task',
+        message: 'Thiếu mã task (tN) hoặc mã bản nháp (dN)',
+      });
+    const subject = spec.filters.task
+      ? { taskId: ctx.codes?.idOf('t', spec.filters.task) }
+      : await this.draftOfSession(ctx, spec.filters.draft!);
+    if (!subject || ('taskId' in subject && !subject.taskId))
+      throw AppError.unprocessable('UNKNOWN_CODE', { field: 'task', code });
+
+    const result = await this.workload.candidatesFor(ctx.projectId, subject, {
+      today: at,
+    });
+    if (!result)
+      throw AppError.unprocessable('UNKNOWN_CODE', { field: 'task', code });
+    const { subject: s, rows } = result;
+    const required = s.requiredSkills.length
+      ? s.requiredSkills.map((r) => `${r.name} ≥ ${r.minLevel}`).join(', ')
+      : 'không khai kỹ năng yêu cầu';
+    return {
+      source: {
+        endpoint: 'GET /projects/:id/capacity-table',
+        params: { task: s.key ?? code, window: result.window },
+        rowCount: rows.length,
+      },
+      blocks: [
+        {
+          kind: 'note',
+          text: `${s.key ? `${s.key} · ` : ''}${s.title} · ${s.hours === null ? 'chưa ước lượng' : `${s.hours}h còn lại`}${s.difficulty ? ` · độ khó ${s.difficulty}` : ''}${s.dueDate ? ` · hạn ${s.dueDate}` : ' · chưa có hạn'} · cần: ${required}`,
+          tone: 'muted',
+        },
+        {
+          kind: 'table',
+          columns: [
+            { key: 'member', label: 'Thành viên' },
+            { key: 'match', label: 'Khớp kỹ năng', align: 'right' },
+            { key: 'effort', label: 'Giờ hiệu dụng', align: 'right' },
+            {
+              key: 'free',
+              label: s.dueDate ? 'Trống trước hạn' : 'Giờ trống',
+              align: 'right',
+            },
+            { key: 'util', label: 'Mức dùng', align: 'right' },
+          ],
+          rows: rows.slice(0, spec.limit).map((r) => ({
+            ref: {
+              type: 'user' as const,
+              id: r.userId,
+              key: r.shortName ?? r.fullName,
+            },
+            cells: {
+              member: r.fullName,
+              match: `${Math.round(r.skillMatch.avg * 100)}%${r.skillMatch.missing.length ? ` (thiếu ${r.skillMatch.missing.join(', ')})` : ''}`,
+              effort: r.hoursEff === null ? '—' : `${r.hoursEff}h`,
+              free: `${r.freeBeforeDue ?? r.freeTotal}h`,
+              util: `${Math.round(r.utilizationBefore * 100)}%`,
+            },
+          })),
+        },
+      ] as QueryBlock[],
+    };
+  }
+
+  /** Đọc một bản nháp đang mở của PHIÊN để lấy kỹ năng/ước lượng/hạn — việc chưa ghi nên không có trong CSDL task. */
+  private async draftOfSession(ctx: QueryContext, draftKey: string) {
+    if (!ctx.sessionId) return null;
+    const rows = await this.prisma.aiProposal.findMany({
+      where: {
+        sessionId: ctx.sessionId,
+        projectId: ctx.projectId,
+        userId: ctx.userId,
+        status: 'DRAFT',
+      },
+      select: { payload: true },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+    for (const row of rows) {
+      const action = (row.payload as { action?: StructuredAction } | null)
+        ?.action;
+      if (!action) continue;
+      const list =
+        action.type === 'DECOMPOSE_PROPOSAL'
+          ? action.tasks
+          : action.type === 'CREATE_TASK_DRAFT'
+            ? action.drafts
+            : [];
+      const item = list.find((t) => t.draftKey === draftKey);
+      if (!item) continue;
+      return {
+        title: item.title,
+        estimateHours: item.estimateHours ?? null,
+        difficulty: item.difficulty ?? null,
+        dueDate:
+          ('due' in item && typeof item.due === 'string' ? item.due : null) ??
+          null,
+        requiredSkills: item.requiredSkills
+          .map((r) => ({
+            skillId: ctx.codes?.idOf('k', r.skill) ?? '',
+            minLevel: r.minLevel,
+          }))
+          .filter((r) => r.skillId),
+      };
+    }
+    return null;
   }
 
   private async busFactor(

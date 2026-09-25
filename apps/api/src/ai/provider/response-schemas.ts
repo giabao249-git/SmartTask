@@ -118,6 +118,7 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
               'WORKLOAD_WEEK',
               'CAPACITY_FREE',
               'WHO_KNOWS_SKILL',
+              'TASK_CANDIDATES',
               'BUS_FACTOR',
               'SPRINT_LIST',
               'SPRINT_PROGRESS',
@@ -155,6 +156,7 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
             skill: str('mã k'),
             minLevel: int('1–5'),
             task: str('mã t'),
+            draft: str('mã bản nháp dN — TASK_CANDIDATES hỏi về việc chưa ghi'),
             user: str('mã u hoặc "me"'),
             groupUsageBy: { type: 'string', enum: ['day', 'purpose', 'user'] },
           }),
@@ -181,11 +183,15 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
         ),
       ),
       assumptions: arr(str()),
-      targetTask: str('mã t (sửa task thật)'),
-      targetDraftKeys: arr(str('draftKey đang mở')),
+      targetTask: str(
+        'CHỈ mã task thật dạng tN khi sửa task đã có; bản nháp dN phải đặt ở targetDraftKeys. Không dùng thì BỎ HẲN trường này, không gửi chuỗi rỗng',
+      ),
+      targetDraftKeys: arr(str('draftKey đang mở, dạng dN')),
       all: { type: 'boolean', description: 'DISCARD_DRAFT: bỏ mọi nháp' },
       patch: obj({
         title: str(),
+        taskType: { type: 'string', enum: ['STORY', 'TASK', 'BUG'] },
+        subtasks: arr(obj({ title: str(), estimateHours: num() }, ['title'])),
         description: { type: 'string', nullable: true },
         estimateHours: { type: 'number', nullable: true },
         priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] },
@@ -201,6 +207,7 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
         due: { type: 'string', nullable: true, description: 'YYYY-MM-DD' },
         sprint: { type: 'string', nullable: true, description: 'mã s' },
       }),
+      // UPDATE_TASK_DRAFT BẮT BUỘC có patch; không có gì để đổi nghĩa là không phải UPDATE_TASK_DRAFT
       resolutionReason: str(),
       assignments: arr(
         obj(
