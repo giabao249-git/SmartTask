@@ -1,6 +1,6 @@
 # 07 · Nghiên cứu và đề xuất cải tiến **Sprint** và **tra cứu dữ liệu của Trợ lý AI** (DATA_QUERY)
 
-**Phiên bản:** 1.0 — **Ngày:** 28/09/2026 (Tuần 03) — **Trạng thái:** chờ duyệt, chưa viết dòng mã nào.
+**Phiên bản:** 1.1 — **Ngày:** 28/09/2026 (Tuần 03) — **Trạng thái:** đã hiện thực Phase 15–17 trên nhánh `sprint_v1` (xem cột "Đã làm" §9); còn lại: seed sprint đã đóng (gộp đợt 2), kiểm Gemini thật (chờ duyệt).
 **Phạm vi:** UC-09 (Sprint), UC-30 (burn-down & vận tốc), UC-31 (dự báo), UC-33 (Dashboard — phần sprint), UC-38 (chat theo phiên — phần tra cứu), docs [04/14](../04-kien-truc/14-tra-cuu-hoi-dap.md).
 
 > **Quan hệ với đợt 2** ([02/06](06-cai-tien-quan-ly-task-dot-2.md), 25/09, vẫn *chờ duyệt*, chưa có mục nào được code — `seed.ts` vẫn `taskCounter: 10`). Tài liệu này **không lặp lại** mục nào của đợt 2. Ba chỗ chạm nhau được ghi rõ tại chỗ: B2 của đợt 2 (thẻ số Dashboard bấm được) ↔ C4 ở đây; B4 (bảng năng lực khi giao việc) ↔ C1; D2 (seed đủ mô hình) ↔ A6. Đợt 2 dùng số phase 12–14, đợt này dùng **15–17**.
@@ -367,7 +367,7 @@ Mọi ý định mới: schema zod trong `packages/shared`, filter có trong `FI
 | ☑ | D3 | Ý định `SPRINT_VELOCITY` (filter `lastN`) | S | — | — | MVP | ✔ 28/09 `feature/UC-38-y-dinh-van-toc` — cam kết/hoàn thành N sprint đóng gần nhất (cùng nguồn thẻ Vận tốc), khối `bar_chart` nay có cột so sánh + chú thích (đường với 1 sprint chỉ là một chấm — đổi sau khi soi ảnh); `lastN` > 10 → 400. [Ảnh](../05-hien-thuc/anh/sprint-v1/d3-sprint-velocity.png) |
 | ☑ | D4 | `note` khi cắt bộ lọc; `ACTIVITY_FEED` ← user/range; `CAPACITY_FREE` ← sprint | S | — | — | MVP | ✔ 28/09 `feature/UC-38-bo-loc-tra-cuu` — `pruneQuerySpec` ghi `ignoredFilters` (chỉ bộ lọc có nghĩa; mã rác vẫn cắt im) → khối ghi chú; `ACTIVITY_FEED` lọc người + hôm nay/hôm qua/tuần này theo múi giờ người hỏi; `CAPACITY_FREE` cửa sổ = sprint khi có mã s. [Ảnh](../05-hien-thuc/anh/sprint-v1/d4-ghi-chu-bo-loc.png) |
 | ☑ | D5 | Enum ý định một nguồn cho responseSchema + prompt | S | — | — | MVP | ✔ 28/09 `feature/UC-38-y-dinh-mot-nguon` — `QUERY_INTENT_HINT` + `queryIntentGuide()` trong shared sinh phần liệt kê của prompt (kèm bộ lọc hợp lệ từng ý định); enum responseSchema lấy từ `QUERY_INTENTS`; unit test chặn lệch. |
-| ☐ | D6 | E2e `TASK_DETAIL`, `TASK_BLOCKED`, Làm mới, mã sprint, rủi ro trong chat | S | — | — | | |
+| ☑ | D6 | E2e `TASK_DETAIL`, `TASK_BLOCKED`, Làm mới, mã sprint, rủi ro trong chat | S | — | — | MVP | ✔ 28/09 — Làm mới/mã sprint/rủi ro trong chat đã có ở A3/A4; `feature/UC-38-bu-kiem-thu-tra-cuu` thêm `TASK_BLOCKED` ("chờ ST-x", hết chặn khi việc chặn xong) và `TASK_DETAIL` qua chat mock với mã `t` thật. Docs 04/14 cập nhật bảng 19 ý định. |
 | ☑ | E1 | Sprint/Dashboard ở 375 px | S | — | — | nếu kịp | ✔ 28/09 `feature/UC-09-sprint-ux-polish` — trang Sprint 375 px không tràn (cột lập kế hoạch ẩn huy hiệu/avatar); Dashboard 481 → 375 px (tiêu đề việc trong nhật ký xuống dòng thay vì `truncate` trên phần tử inline); cảnh báo dùng icon `--warning`, chữ giữ màu thường để đạt AA ở cả sáng/tối. [Ảnh tương phản](../05-hien-thuc/anh/sprint-v1/ux-tuong-phan-sang-toi.png) |
 
 ---

@@ -845,4 +845,33 @@ describe('AI chat theo phiên (e2e)', () => {
     expect(good.body.validation.ok).toBe(true);
     expect(good.body.usage.attempts).toBe(1);
   });
+
+  it('TASK_DETAIL qua chat: mã t thật trong prompt → thẻ việc đúng task', async () => {
+    let code = '';
+    AiMockQueue.push((userText) => {
+      code = /^(t\d+) \| [^\n]*API đăng nhập/m.exec(userText)?.[1] ?? '';
+      return {
+        type: 'DATA_QUERY',
+        reply: 'Đây là tình trạng việc đó.',
+        query: { intent: 'TASK_DETAIL', filters: { task: code } },
+      };
+    });
+    const res = await api()
+      .post('/api/v1/ai/chat')
+      .set(auth(pm))
+      .send({ projectId, text: 'việc API đăng nhập đang thế nào?' })
+      .expect(200);
+    expect(code).toMatch(/^t\d+$/);
+    const msg = await prisma.chatMessage.findUniqueOrThrow({
+      where: { id: res.body.message.id },
+      select: { structuredData: true },
+    });
+    const qr = (
+      msg.structuredData as {
+        queryResult: { blocks: { kind: string; item?: { title: string } }[] };
+      }
+    ).queryResult;
+    expect(qr.blocks[0].kind).toBe('person_card');
+    expect(qr.blocks[0].item!.title).toContain('API đăng nhập');
+  });
 });
