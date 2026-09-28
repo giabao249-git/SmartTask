@@ -4,17 +4,14 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Bot, Scale, RefreshCw } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/app/ErrorState";
 import { WorkloadBadge } from "@/components/app/WorkloadBadge";
 import { api, describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useProjectWorkload } from "@/lib/hooks/analytics";
-import { levelToVariant } from "@/lib/status";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CapacityTable } from "@/features/workload/WorkloadView";
 
@@ -48,55 +45,40 @@ export function RebalanceView() {
   }, [overloaded, project.activeSprint?.name]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-xs text-muted-foreground">
-          Hệ thống tính tải và bảng năng lực; Trợ lý AI đề xuất chuyển việc thành bản nháp, PM duyệt từng mục mới ghi thật.
-        </p>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs" disabled={recompute.isPending || !project.canManage} onClick={() => recompute.mutate()}>
-            <RefreshCw className="h-3.5 w-3.5" /> Tính lại tải
-          </Button>
-          <Button size="sm" className="gap-1.5 text-xs" onClick={() => router.push(`/projects/${project.id}/assistant?prompt=${encodeURIComponent(seedPrompt)}`)}>
-            <Bot className="h-3.5 w-3.5" /> Xin đề xuất từ Trợ lý AI
-          </Button>
-        </div>
+        <p className="text-xs text-muted-foreground">Hệ thống chỉ tính số; Trợ lý AI đề xuất chuyển việc thành bản nháp, PM duyệt từng mục mới ghi thật.</p>
+        {project.canManage && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs" disabled={recompute.isPending} onClick={() => recompute.mutate()}>
+              <RefreshCw className={cn("h-3.5 w-3.5", recompute.isPending && "animate-spin")} /> Tính lại tải
+            </Button>
+            <Button size="sm" className="gap-1.5 text-xs" onClick={() => router.push(`/projects/${project.id}/assistant?prompt=${encodeURIComponent(seedPrompt)}`)}>
+              <Bot className="h-3.5 w-3.5" /> Nhờ Trợ lý AI đề xuất
+            </Button>
+          </div>
+        )}
       </div>
 
+      {/* Một dòng tóm tắt thay cho khối "Tải tuần này" cũ (lặp lại bảng tải, kèm nhãn NORMAL tiếng Anh) */}
       {workload.isPending ? (
-        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-10 w-full" />
       ) : workload.isError ? (
         <ErrorState code={describeError(workload.error).code} message={describeError(workload.error).message} onRetry={() => workload.refetch()} />
+      ) : overloaded.length === 0 ? (
+        <p className="flex items-center gap-2 rounded-md border border-border/80 px-3 py-2.5 text-xs text-foreground">
+          <Scale className="h-4 w-4 shrink-0 text-success" aria-hidden /> Tuần này không ai vượt ngưỡng cao tải · chênh lệch tải trong nhóm {Math.round(workload.data.spread * 100)}%.
+        </p>
       ) : (
-        <Card className="border-border/80">
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Scale className="h-4 w-4 text-info" /> Tải tuần này
-              <Badge variant="secondary" className="text-[10px]">
-                spread {Math.round(workload.data.spread * 100)}%
-              </Badge>
-            </CardTitle>
-            <CardDescription className="text-xs">{overloaded.length === 0 ? "Không ai vượt ngưỡng cao tải — không cần cân bằng." : `${overloaded.length} người cao tải/quá tải`}</CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 flex flex-wrap gap-2">
-            {thisWeek.map((m) => (
-              <div key={m.userId} className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1 text-xs">
-                <span className="font-medium">{m.shortName ?? m.fullName}</span>
-                <WorkloadBadge percent={Math.round(m.week.utilization * 100)} />
-                <Badge variant={levelToVariant(m.week.level)} className="text-[9px] px-1 py-0">
-                  {m.week.level}
-                </Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {overloaded.length > 0 && (
-        <Alert>
-          <AlertTitle className="text-xs">Prompt mồi sẽ gửi cho Trợ lý AI</AlertTitle>
-          <AlertDescription className="text-[11px]">{seedPrompt}</AlertDescription>
-        </Alert>
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/80 px-3 py-2.5 text-xs text-foreground">
+          <Scale className="h-4 w-4 shrink-0 text-warning" aria-hidden />
+          <span className="font-medium">{overloaded.length} người cao tải tuần này:</span>
+          {overloaded.map((m) => (
+            <span key={m.userId} className="flex items-center gap-1">
+              {m.shortName ?? m.fullName} <WorkloadBadge percent={Math.round(m.week.utilization * 100)} />
+            </span>
+          ))}
+        </div>
       )}
 
       <CapacityTable projectId={project.id} sprintId={project.activeSprint?.id} canView={project.canManage} />

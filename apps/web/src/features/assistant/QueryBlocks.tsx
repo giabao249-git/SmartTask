@@ -115,7 +115,7 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
     const ref = item.ref;
     if (!ref) return;
     if (ref.type === "task") router.push(`/projects/${projectId}/work?task=${ref.id}`);
-    else if (ref.type === "user") router.push(`/projects/${projectId}/people?tab=workload`);
+    else if (ref.type === "user") router.push(`/projects/${projectId}/people?member=${ref.id}`);
     else if (ref.type === "sprint") router.push(`/projects/${projectId}/sprints?sprint=${ref.id}`);
     else if (ref.type === "notification") router.push(`/settings`);
   };
