@@ -42,8 +42,8 @@ Người dùng ──▶ LLM ──▶ DATA_QUERY { intent, filters }   (KHÔNG 
 | | `WHO_KNOWS_SKILL` | "ai biết NestJS ≥ 4" | `people_list` |
 | | `TASK_CANDIDATES` | "ai có thể làm task này", "ai rảnh nhận d2" | `note` + `table` |
 | | `BUS_FACTOR` | "kỹ năng nào chỉ 1 người biết" | `note` + `table` |
-| Tiến độ | `SPRINT_LIST` | "có mấy sprint" | `table` |
-| | `SPRINT_PROGRESS` | "sprint còn mấy ngày" | `stat_row` + `line_chart` |
+| Tiến độ | `SPRINT_LIST` | "có mấy sprint" | `table` (trạng thái tiếng Việt, xong/tổng, giờ còn lại — **cùng nguồn** `SprintsService.list`) |
+| | `SPRINT_PROGRESS` | "sprint còn bao nhiêu giờ, có kịp không" | `stat_row` (xong, còn lại, vận tốc, ngày làm việc còn, ETA, rủi ro, quá hạn) + `line_chart` (thực tế vs lý tưởng) + `note` nguyên nhân — **nguyên văn** `ForecastService` |
 | | `ACTIVITY_FEED` | "hôm qua ai sửa gì" | `activity_list` |
 | Khác | `NOTIFICATION_LIST` | "tôi có thông báo gì" | `stat_row` + `activity_list` |
 | | `AI_USAGE` | "tháng này tốn bao nhiêu tiền AI" | `stat_row` + `table` |
@@ -75,6 +75,10 @@ người dùng. Sau khi xem bảng, người nói "giao cho X" thì mới sinh `
 
 **Backend trả về** (`QueryResult`): `blocks[]` + `source { endpoint, params, rowCount }` + `generatedAt` + `truncated?`.
 Khối hiện có: `stat_row`, `task_list`, `agenda`, `people_list`, `person_card`, `table`, `heatmap`, `bar_chart`, `line_chart`, `activity_list`, `note`, `empty`. Mỗi item mang `ref { type, id, key }` để bấm mở đúng việc/người.
+
+### 4.1 Một câu hỏi, một số (bổ sung 28/09/2026)
+
+Ý định nào trùng câu hỏi với một màn hình thì **gọi đúng service của màn hình đó**, không tự đếm lại: `SPRINT_LIST` ← `SprintsService.list` (tab Sprint), `SPRINT_PROGRESS` ← `ForecastService.burndown/forecast` (Dashboard). `TASK_STATS` đếm trên **toàn bộ** tập khớp lọc — `limit` chỉ cắt danh sách hiển thị — và giờ còn lại dùng `remainingOf` như burn-down. Có ca e2e "một câu hỏi, một số" đối chiếu hai nơi, kể cả khi có việc con. `SPRINT_PROGRESS` với `sprint: "__all"`/`"__backlog"` trả `note` thay vì lặng lẽ lấy sprint đang chạy. Kiểu `line_chart.points[].value` nhận `null` (ngày thiếu số liệu, web nối qua).
 
 ## 5. Mười một rủi ro và cách chặn
 

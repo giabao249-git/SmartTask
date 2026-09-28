@@ -628,4 +628,75 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
     });
     expect(logs).toBe(0);
   });
+
+  it('một câu hỏi, một số: tra cứu sprint khớp tab Sprint và forecast, kể cả khi có việc con', async () => {
+    // Việc con làm lệch số nếu nơi nào đó tự đếm lại mà quên lọc parentId
+    const sub = await api()
+      .post(`/api/v1/tasks/${taskIds[0]}/subtasks`)
+      .set(auth(pm))
+      .send({ title: 'Việc con kiểm số', estimateHours: 5 })
+      .expect(201);
+    const stat = (
+      body: {
+        blocks: { kind: string; items?: { label: string; value: unknown }[] }[];
+      },
+      label: string,
+    ) =>
+      body.blocks
+        .find((b) => b.kind === 'stat_row')!
+        .items!.find((i) => i.label === label)?.value;
+
+    const sprints = await api()
+      .get(`/api/v1/projects/${projectId}/sprints`)
+      .set(auth(pm))
+      .expect(200);
+    const mine = sprints.body.find((x: { id: string }) => x.id === sprintId);
+    const fc = await api()
+      .get(`/api/v1/sprints/${sprintId}/forecast`)
+      .set(auth(pm))
+      .expect(200);
+
+    const list = await runQuery(pm, { intent: 'SPRINT_LIST' }).expect(200);
+    const row = list.body.blocks[0].rows.find(
+      (r: { ref: { id: string } }) => r.ref.id === sprintId,
+    );
+    expect(row.cells.tasks).toBe(`${mine.doneCount}/${mine.taskCount}`);
+    expect(row.cells.status).toBe('Đang chạy');
+
+    const sp = await runQuery(pm, { intent: 'SPRINT_PROGRESS' }).expect(200);
+    expect(stat(sp.body, 'Xong')).toBe(`${mine.doneCount}/${mine.taskCount}`);
+    expect(stat(sp.body, 'Giờ còn lại')).toBe(
+      Math.round(fc.body.remainingHours * 10) / 10,
+    );
+    expect(stat(sp.body, 'Vận tốc')).toBe(fc.body.velocity);
+    expect(stat(sp.body, 'Còn')).toBe(fc.body.workdaysLeft);
+    const chart = sp.body.blocks.find(
+      (b: { kind: string }) => b.kind === 'line_chart',
+    );
+    const labels = chart.points.map((p: { label: string }) => p.label);
+    expect(labels).toEqual([...labels].sort()); // đúng thứ tự ngày
+    for (const p of chart.points as { value: unknown; compare: unknown }[]) {
+      expect(p.value === null || typeof p.value === 'number').toBe(true); // không còn chuỗi "28"
+      expect(p.compare === null || typeof p.compare === 'number').toBe(true);
+    }
+
+    const all = await runQuery(pm, {
+      intent: 'SPRINT_PROGRESS',
+      sprint: '__all',
+    }).expect(200);
+    expect(all.body.blocks[0].kind).toBe('note'); // không lặng lẽ trả sprint đang chạy
+
+    // Thống kê không được cộng trên `limit` dòng đầu
+    const full = await runQuery(pm, { intent: 'TASK_STATS' }).expect(200);
+    const cut = await runQuery(pm, { intent: 'TASK_STATS', limit: 1 }).expect(
+      200,
+    );
+    for (const label of ['Công việc', 'Quá hạn', 'Chưa giao', 'Giờ còn lại'])
+      expect(stat(cut.body, label)).toBe(stat(full.body, label));
+
+    await api()
+      .delete(`/api/v1/tasks/${sub.body.id}`)
+      .set(auth(pm))
+      .expect(204);
+  });
 });
