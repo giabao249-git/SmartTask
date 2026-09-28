@@ -1,6 +1,6 @@
 # 08 · Hồ sơ kỹ năng **từ bằng chứng** thay cho mức tự khai
 
-**Phiên bản:** 1.0 — **Ngày:** 28/09/2026 (Tuần 03) — **Trạng thái:** đã hiện thực trên nhánh `feature/UC-35-ghi-gio-danh-gia` (gộp vào `sprint_v1`).
+**Phiên bản:** 1.0 — **Ngày:** 28/09/2026 (Tuần 03) — **Trạng thái:** đã hiện thực (các nhánh `feature/UC-35-ghi-gio-danh-gia`, `feature/UC-24-tab-nhan-su`, `feature/UC-24-gon-tab-nhan-su`, gộp vào **`sprint_v0`** — xem [tổng kết](../05-hien-thuc/sprint-v0.md)).
 **Phạm vi:** UC-23 (ma trận kỹ năng), UC-26 (giao việc), UC-28 (phân rã có gợi ý người), UC-35 (ghi giờ), UC-36 (đánh giá việc), docs [04/04 §2, §2b, §6, §7](../04-kien-truc/04-cong-thuc-tinh-toan.md).
 **Quyết định của nhóm (28/09):** AI chia việc dựa trên hồ sơ tính từ lịch sử làm việc, **không** dựa trên mức tự khai 1–5. Mức tự khai giữ lại chỉ để tham khảo.
 
@@ -62,7 +62,7 @@ Hiệu suất cá nhân (đúng hạn, rating TB, EAR, số lần mở lại) v�
 - Unit: `metrics/domain/skill-evidence.spec.ts` (9 ca), validator (cảnh báo thay lỗi), `workload.spec.ts` (trung tính khi chưa có bằng chứng).
 - E2e: `test/worklog.e2e-spec.ts` — quyền ghi giờ/đánh giá, bug gốc, và luồng đầu-cuối: tự khai 5 → "chưa có bằng chứng" → xong + PM đánh giá 4 → mức 3 → gắn bug gốc → mức 0 (còn bằng chứng, 1 phải làm lại); hiệu suất người khác không thấy.
 - Seed lịch sử (Lan PM): Minh NestJS 4 (5 việc, 1 làm lại) · Huy React 3 (4 việc, 1 làm lại) · Long Docker 4 · Lan Phân tích nghiệp vụ 3 · các mức tự khai không có việc nào → "chưa có bằng chứng".
-- Ảnh: [ghi giờ](../05-hien-thuc/anh/sprint-v1/g1-ghi-gio.png) · [đánh giá](../05-hien-thuc/anh/sprint-v1/g1-danh-gia.png) · [bug gốc](../05-hien-thuc/anh/sprint-v1/g1-bug-goc.png).
+- Ảnh: [ghi giờ](../05-hien-thuc/anh/sprint-v0/g1-ghi-gio.png) · [đánh giá](../05-hien-thuc/anh/sprint-v0/g1-danh-gia.png) · [bug gốc](../05-hien-thuc/anh/sprint-v0/g1-bug-goc.png).
 
 ## 6. Rủi ro còn lại
 
@@ -91,6 +91,6 @@ Hiệu suất cá nhân (đúng hạn, rating TB, EAR, số lần mở lại) v�
 
 **Sau:** 5 tab — **Nhóm** (mặc định: việc chờ đánh giá cho PM; thẻ từng người: tải tuần này, kỹ năng từ bằng chứng, hiệu suất nếu được xem; bấm mở hồ sơ, xem được "vì sao mức 3" tới từng việc) · **Tải theo tuần** · **Giờ trống & giao việc** (chọn khoảng; ô ứng viên nói rõ đủ/thiếu/chưa có bằng chứng) · **Kỹ năng nhóm** (ma trận theo bằng chứng, PM xác nhận ô tự khai) · **Hồ sơ của tôi**. API: `GET /projects/:id/reviews/pending`, PM dự án chung được xác nhận kỹ năng, Viewer không là ứng viên, cờ `viewer` trong hồ sơ, "chưa đủ bằng chứng" là trung tính (`isConclusive`). Không tab nào tràn ngang ở 375 px.
 
-Ảnh: [trước — ma trận tự khai](../05-hien-thuc/anh/sprint-v1/h1-truoc-ma-tran-tu-khai.png) · [trước — bảng năng lực](../05-hien-thuc/anh/sprint-v1/h1-truoc-nang-luc.png) · [sau — Nhóm](../05-hien-thuc/anh/sprint-v1/h1-sau-nhom.png) · [sau — hồ sơ bằng chứng](../05-hien-thuc/anh/sprint-v1/h1-sau-ho-so-bang-chung.png) · [sau — giờ trống & giao việc](../05-hien-thuc/anh/sprint-v1/h1-sau-gio-trong-giao-viec.png) · [sau — kỹ năng nhóm](../05-hien-thuc/anh/sprint-v1/h1-sau-ky-nang-nhom.png).
+Ảnh: [trước — ma trận tự khai](../05-hien-thuc/anh/sprint-v0/h1-truoc-ma-tran-tu-khai.png) · [trước — bảng năng lực](../05-hien-thuc/anh/sprint-v0/h1-truoc-nang-luc.png) · [sau — Nhóm](../05-hien-thuc/anh/sprint-v0/h1-sau-nhom.png) · [sau — hồ sơ bằng chứng](../05-hien-thuc/anh/sprint-v0/h1-sau-ho-so-bang-chung.png) · [sau — giờ trống & giao việc](../05-hien-thuc/anh/sprint-v0/h1-sau-gio-trong-giao-viec.png) · [sau — kỹ năng nhóm](../05-hien-thuc/anh/sprint-v0/h1-sau-ky-nang-nhom.png).
 
 **Gọn lại (28/09, góp ý của nhóm — `feature/UC-24-gon-tab-nhan-su`):** 5 tab chồng nhau ("Nhóm" đã có tải + kỹ năng; "Tải theo tuần" và "Giờ trống & giao việc" cùng nói về tải; "Hồ sơ của tôi" trùng ngăn hồ sơ) → còn **3 tab**: **Nhóm** (thẻ của bạn đứng đầu, ngăn hồ sơ của chính mình có mục sửa tự khai) · **Tải & giờ trống** (tải 4 tuần và ngay dưới là giờ trống + ứng viên, một bộ nút) · **Kỹ năng**. Link cũ `?tab=workload|balance|mine`, `/workload`, `/rebalance`, `/skills` vẫn tới đúng chỗ. **"Việc đã xong chờ đánh giá" chuyển sang Dashboard** (việc cần làm của PM, ẩn khi không có việc), không còn ở màn Nhân sự.
