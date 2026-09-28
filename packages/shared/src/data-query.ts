@@ -99,7 +99,7 @@ export const FILTERS_BY_INTENT: Record<QueryIntent, (keyof QueryFilters)[]> = {
   TASK_CANDIDATES: ['task', 'draft'],
   BUS_FACTOR: ['minLevel'],
   SPRINT_LIST: [],
-  SPRINT_PROGRESS: [],
+  SPRINT_PROGRESS: ['assignee'],
   ACTIVITY_FEED: [],
   NOTIFICATION_LIST: [],
   AI_USAGE: ['groupUsageBy'],
@@ -123,7 +123,7 @@ export const QUERY_INTENT_HINT: Record<QueryIntent, string> = {
   TASK_CANDIDATES: 'ai làm được t7 / d2',
   BUS_FACTOR: 'kỹ năng nào chỉ một người biết',
   SPRINT_LIST: 'có mấy sprint',
-  SPRINT_PROGRESS: 'sprint này còn bao nhiêu giờ, có kịp không',
+  SPRINT_PROGRESS: 'sprint này còn bao nhiêu giờ, có kịp không, ai đang gánh nhiều nhất sprint này',
   ACTIVITY_FEED: 'hôm qua ai sửa gì',
   NOTIFICATION_LIST: 'tôi có thông báo gì',
   AI_USAGE: 'tháng này tốn bao nhiêu tiền AI',
@@ -235,12 +235,14 @@ export interface StatItem {
 
 export type QueryBlock =
   | { kind: 'stat_row'; items: StatItem[] }
-  | { kind: 'task_list'; items: BlockItem[] }
+  /** `title`: tiêu đề nhỏ khi một kết quả có nhiều danh sách (vd. báo cáo sprint) */
+  | { kind: 'task_list'; items: BlockItem[]; title?: string }
   | { kind: 'agenda'; groups: { label: string; tone?: BlockBadge['tone']; items: BlockItem[] }[] }
   | { kind: 'people_list'; items: BlockItem[] }
   | { kind: 'person_card'; item: BlockItem; stats: StatItem[] }
   | {
       kind: 'table';
+      title?: string;
       columns: { key: string; label: string; align?: 'left' | 'right' | 'center' }[];
       rows: { ref?: BlockRef; cells: Record<string, string | number | null> }[];
     }

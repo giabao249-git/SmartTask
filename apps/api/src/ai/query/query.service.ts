@@ -1557,6 +1557,60 @@ export class AiQueryService {
         tone: 'muted',
         text: `Thiếu bản chụp ${bd.gaps.length} ngày làm việc — đường thực tế chỉ nối các ngày có số liệu.`,
       });
+    // Theo người (docs 02/07 D1) — cùng nguồn với trang Sprint (SprintsService.summary). Xếp theo giờ còn lại
+    // chỉ để đọc cho dễ; không có cột điểm, không có chữ "nên".
+    if (!closed) {
+      const sum = await this.sprintsSvc.summary(ctx.userId, sprint.id);
+      const only = (spec.filters.assignee ?? [])
+        .map((c) => this.userId(c, ctx))
+        .filter((x): x is string => !!x);
+      const people = sum.byAssignee.filter((p) =>
+        only.length ? only.includes(p.userId) : p.tasks > 0,
+      );
+      blocks.push({
+        kind: 'table',
+        title: `Theo người · năng lực ${sum.window.from.slice(8, 10)}/${sum.window.from.slice(5, 7)} → ${sum.window.to.slice(8, 10)}/${sum.window.to.slice(5, 7)} · xếp theo giờ còn lại`,
+        columns: [
+          { key: 'member', label: 'Người' },
+          { key: 'tasks', label: 'Việc', align: 'right' },
+          { key: 'remaining', label: 'Giờ còn lại', align: 'right' },
+          { key: 'capacity', label: 'Năng lực', align: 'right' },
+          { key: 'load', label: 'Mức', align: 'right' },
+        ],
+        rows: [
+          ...people.map((p) => ({
+            ref: {
+              type: 'user' as const,
+              id: p.userId,
+              key: p.shortName ?? p.fullName,
+            },
+            cells: {
+              member: p.shortName ?? p.fullName,
+              tasks: p.tasks,
+              remaining: `${round1(p.remainingHours)} h`,
+              capacity: `${round1(p.capacityHours)} h`,
+              load:
+                p.capacityHours > 0
+                  ? `${Math.round((p.remainingHours / p.capacityHours) * 100)}%`
+                  : '—',
+            },
+          })),
+          ...(only.length || !sum.unassigned.tasks
+            ? []
+            : [
+                {
+                  cells: {
+                    member: 'Chưa giao',
+                    tasks: sum.unassigned.tasks,
+                    remaining: `${round1(sum.unassigned.hours)} h`,
+                    capacity: '—',
+                    load: '—',
+                  },
+                },
+              ]),
+        ],
+      });
+    }
     return {
       source: {
         endpoint: 'GET /sprints/:id/forecast + /burndown',

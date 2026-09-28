@@ -732,4 +732,35 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
     expect(item!.meta[0].text).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2}$/);
     await api().delete(`/api/v1/tasks/${t.body.id}`).set(auth(pm)).expect(204);
   });
+
+  it('SPRINT_PROGRESS theo người: tổng giờ khớp forecast, lọc "của tôi", không có cột điểm', async () => {
+    const sp = await runQuery(pm, { intent: 'SPRINT_PROGRESS' }).expect(200);
+    const table = sp.body.blocks.find(
+      (b: { kind: string }) => b.kind === 'table',
+    );
+    expect(table.title).toContain('Theo người');
+    expect(table.columns.map((c: { key: string }) => c.key)).not.toContain(
+      'score',
+    );
+    const fc = await api()
+      .get(`/api/v1/sprints/${sprintId}/forecast`)
+      .set(auth(pm))
+      .expect(200);
+    const total = table.rows.reduce(
+      (x: number, r: { cells: { remaining: string } }) =>
+        x + parseFloat(r.cells.remaining),
+      0,
+    );
+    expect(total).toBeCloseTo(fc.body.remainingHours, 0);
+
+    const mine = await runQuery(dev, {
+      intent: 'SPRINT_PROGRESS',
+      filters: { assignee: ['me'] },
+    }).expect(200);
+    const rows = mine.body.blocks.find(
+      (b: { kind: string }) => b.kind === 'table',
+    ).rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ref.id).toBe(dev.id);
+  });
 });
