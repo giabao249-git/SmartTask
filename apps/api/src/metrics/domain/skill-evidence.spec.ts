@@ -56,11 +56,18 @@ describe('hồ sơ kỹ năng từ bằng chứng (docs 04 §2b)', () => {
       item({ required: 4, bugs: 1 }),
       item({ required: 2, difficulty: 2 }),
     ]);
-    // mức 4: +1 −1 = 0 < 1; mức 2: +1 −1 +1 = 1 → 2
+    // mức 4: đạt 1 = trượt 1 → chưa; mức 2: đạt 2 > trượt 1 → 2
     expect(e).toMatchObject({ level: 2, failed: 1, passed: 2 });
     expect(evidenceText(e)).toContain('1 phải làm lại');
     expect(skillEvidence('s', [item({ rating: 2 })]).level).toBe(0);
     expect(skillEvidence('s', [item({ reopened: 1 })]).level).toBe(0);
+  });
+
+  it('làm lại không xoá sạch các việc làm tốt: 2 đạt / 1 trượt vẫn giữ mức; 1 đạt / 1 trượt thì chưa', () => {
+    expect(
+      skillEvidence('s', [item(), item(), item({ reopened: 1 })]).level,
+    ).toBe(3);
+    expect(skillEvidence('s', [item(), item({ bugs: 1 })]).level).toBe(0);
   });
 
   it('nhiều người cùng làm thì chia phần ghi nhận', () => {

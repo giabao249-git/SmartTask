@@ -8,7 +8,8 @@
  *   - trọng số: có đánh giá của PM = 1, chưa đánh giá = 0,5; nhiều người làm thì chia đều
  * PM xác nhận mức trong hồ sơ kỹ năng cũng là một bằng chứng (trọng số 1) — mức TỰ KHAI thì không.
  *
- * Mức(u, s) = L lớn nhất sao cho Σ trọng số (đạt: +, trượt: −) của bằng chứng có mức thể hiện ≥ L đạt ≥ 1.
+ * Mức(u, s) = L lớn nhất mà, trong các bằng chứng có mức thể hiện ≥ L: tổng trọng số ĐẠT ≥ 1 và NHIỀU HƠN tổng
+ * trọng số TRƯỢT (việc phải làm lại là tín hiệu thật nhưng không xoá sạch các việc làm tốt).
  * Hàm thuần, không xếp hạng người — chỉ trả sự thật kèm số liệu để validator/LLM/giao diện trích dẫn.
  */
 
@@ -77,10 +78,12 @@ export function skillEvidence(
 ): SkillEvidence {
   let level = 0;
   for (let L = 5; L >= 1; L--) {
-    const score = items
-      .filter((e) => demonstrated(e) >= L)
-      .reduce((s, e) => s + (passedOf(e) ? weightOf(e) : -weightOf(e)), 0);
-    if (score >= PASS_THRESHOLD - 1e-9) {
+    const at = items.filter((e) => demonstrated(e) >= L);
+    const pass = at.filter(passedOf).reduce((s, e) => s + weightOf(e), 0);
+    const fail = at
+      .filter((e) => !passedOf(e))
+      .reduce((s, e) => s + weightOf(e), 0);
+    if (pass >= PASS_THRESHOLD - 1e-9 && pass > fail + 1e-9) {
       level = L;
       break;
     }
