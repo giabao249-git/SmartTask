@@ -175,7 +175,7 @@ export class NotificationsListener {
         body: p.movedTaskIds?.length
           ? `${p.movedTaskIds.length} việc chưa xong được chuyển đi`
           : undefined,
-        link: webLink.sprints(p.projectId),
+        link: webLink.sprint(p.projectId, p.sprintId),
         data: { sprintId: p.sprintId, projectId: p.projectId },
       });
     } catch (e) {

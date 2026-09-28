@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { BurndownView, CapacityTableView, DashboardView, ExplainView, ForecastView, SkillMatrixView, WeekLoadView, WorkloadView } from "@/lib/types";
+import type { BurndownView, CapacityTableView, DashboardView, ExplainView, ForecastView, SkillMatrixView, SprintSummaryView, WeekLoadView, WorkloadView } from "@/lib/types";
 
 /** Số liệu do backend tính (docs 04) — web chỉ hiển thị, không tính lại. */
 export function useDashboard(projectId: string) {
@@ -35,6 +35,11 @@ export function useBurndown(sprintId: string | null) {
 
 export function useForecast(sprintId: string | null) {
   return useQuery({ queryKey: ["sprints", sprintId, "forecast"], queryFn: () => api.get<ForecastView>(`/sprints/${sprintId}/forecast`), enabled: !!sprintId });
+}
+
+/** Tóm tắt sprint: cam kết, năng lực nhóm, theo người, việc bị đẩy/thêm giữa chừng (GET /sprints/:id/summary). */
+export function useSprintSummary(sprintId: string | null) {
+  return useQuery({ queryKey: ["sprints", sprintId, "summary"], queryFn: () => api.get<SprintSummaryView>(`/sprints/${sprintId}/summary`), enabled: !!sprintId });
 }
 
 export type { ExplainView };

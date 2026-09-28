@@ -375,6 +375,44 @@ export interface SprintView {
   status: "PLANNED" | "ACTIVE" | "CLOSED";
   taskCount?: number;
   totalHours?: number;
+  /** GET /projects/:id/sprints: việc gốc đã xong, giờ ước lượng / còn lại (việc gốc chưa xoá) */
+  doneCount?: number;
+  estimateHours?: number;
+  remainingHours?: number;
+  startedAt?: string | null;
+  closedAt?: string | null;
+}
+
+/** Một việc trong tóm tắt sprint (GET /sprints/:id/summary) */
+export interface SprintTaskBrief {
+  id: string;
+  key: string;
+  number: number;
+  title: string;
+  estimateHours: number;
+  remainingHours: number;
+  completedAt: string | null;
+  assigneeIds: string[];
+}
+
+/** GET /sprints/:id/summary — số backend tính; web chỉ hiển thị (docs 02/07 C1) */
+export interface SprintSummaryView {
+  sprint: { id: string; name: string; goal: string | null; status: SprintView["status"]; startDate: string; endDate: string; startedAt: string | null; closedAt: string | null };
+  window: { from: string; to: string };
+  taskCount: number;
+  doneCount: number;
+  committedHours: number;
+  scopeHours: number;
+  completedHours: number;
+  remainingHours: number;
+  capacityHours: number;
+  byAssignee: { userId: string; fullName: string; shortName: string | null; avatarUrl: string | null; tasks: number; remainingHours: number; capacityHours: number }[];
+  unassigned: { tasks: number; hours: number };
+  completed: SprintTaskBrief[];
+  open: SprintTaskBrief[];
+  carriedOut: SprintTaskBrief[];
+  carriedIn: SprintTaskBrief[];
+  addedAfterStart: SprintTaskBrief[];
 }
 
 export interface QuotaView {
