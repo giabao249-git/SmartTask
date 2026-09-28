@@ -24,6 +24,8 @@ import {
   deriveStatus,
   initialItemStatus,
   isProposalAction,
+  issuesByKey,
+  itemDetailsOf,
   itemsOf,
   kindOf,
   patchItem,
@@ -499,6 +501,12 @@ export class ProposalsService {
     const map = (row.appliedMap ?? {}) as Record<string, string>;
     const action = payload.action;
     const list = isProposalAction(action) ? itemsOf(action) : [];
+    const validation =
+      row.validationResult as unknown as ValidationResult | null;
+    const details = isProposalAction(action) ? itemDetailsOf(action) : {};
+    const issues = isProposalAction(action)
+      ? issuesByKey(action, validation)
+      : { byKey: {}, general: [] };
     return {
       id: row.id,
       projectId: row.projectId,
@@ -515,11 +523,15 @@ export class ProposalsService {
         status: items[i.draftKey] ?? 'DRAFT',
         taskId: map[i.draftKey] ?? null,
         edited: !!payload.edited?.[i.draftKey],
+        detail: details[i.draftKey] ?? {},
+        issues: issues.byKey[i.draftKey] ?? [],
       })),
+      /** Vấn đề không gắn được vào mục nào (sprint, cả đề xuất) */
+      generalIssues: issues.general,
       itemStatus: items,
       appliedMap: map,
       applied: payload.applied ?? null,
-      validation: row.validationResult as unknown as ValidationResult | null,
+      validation,
       codeMap: row.codeMap as unknown as
         (CodeMap & { drafts?: Record<string, string> }) | null,
       appliedById: row.appliedById,
