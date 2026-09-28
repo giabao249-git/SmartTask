@@ -216,6 +216,11 @@ export class ForecastService {
       eta: eta ? isoDate(eta) : null,
       riskLevel,
       sprintAgeWorkdays: age,
+      /** Ngày làm việc còn lại tính cả hôm nay — cùng lịch với ETA */
+      workdaysLeft:
+        sprint.status === 'ACTIVE'
+          ? workdaysBetween(today, sprint.endDate, cal)
+          : 0,
       causes: closed ? [] : causes,
       /** Sprint đã đóng: số lúc đóng (snapshot chụp trong transaction đóng); null nếu đóng trước khi có bản chụp này */
       final:

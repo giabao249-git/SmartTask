@@ -218,7 +218,7 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
       );
 
     case "bar_chart": {
-      const config: ChartConfig = { value: { label: block.unit ?? "giá trị", color: "var(--chart-1)" } };
+      const config: ChartConfig = { value: { label: block.unit ?? "giá trị", color: "hsl(var(--chart-1))" } };
       return (
         <ChartContainer config={config} className="h-40 w-full">
           <BarChart data={block.series} margin={{ left: -24, right: 4 }}>
@@ -234,8 +234,8 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
 
     case "line_chart": {
       const config: ChartConfig = {
-        value: { label: block.unit ?? "giá trị", color: "var(--chart-1)" },
-        compare: { label: block.compareLabel ?? "so sánh", color: "var(--chart-2)" },
+        value: { label: block.unit ?? "giá trị", color: "hsl(var(--chart-1))" },
+        compare: { label: block.compareLabel ?? "so sánh", color: "hsl(var(--chart-2))" },
       };
       return (
         <ChartContainer config={config} className="h-40 w-full">
@@ -244,7 +244,10 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
             <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} />
             <YAxis fontSize={10} tickLine={false} axisLine={false} />
             <ChartTooltip content={<ChartTooltipContent />} />
-            <Line dataKey="value" stroke="var(--color-value)" dot={false} strokeWidth={2} />
+            {block.points.some((p) => p.compare != null) && (
+              <Line dataKey="compare" stroke="var(--color-compare)" strokeDasharray="4 4" dot={false} connectNulls />
+            )}
+            <Line dataKey="value" stroke="var(--color-value)" dot={{ r: 2 }} strokeWidth={2} connectNulls />
           </LineChart>
         </ChartContainer>
       );

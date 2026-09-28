@@ -15,6 +15,12 @@ import { ProjectAccessService } from '../../common/access/project-access.service
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.schema';
 import { WorkloadService } from '../../workload/workload.service';
+import { remainingOf } from '../../workload/domain/allocation';
+import {
+  ForecastService,
+  type ForecastCause,
+} from '../../forecast/forecast.service';
+import { SprintsService } from '../../sprints/sprints.service';
 import { CodeBook } from '../context/short-codes';
 
 const DAY = 86_400_000;
@@ -38,6 +44,34 @@ const TYPE_LABEL: Record<string, string> = {
   TASK: 'Task',
   BUG: 'Bug',
 };
+
+const SPRINT_STATUS_LABEL: Record<string, string> = {
+  PLANNED: 'Kế hoạch',
+  ACTIVE: 'Đang chạy',
+  CLOSED: 'Đã đóng',
+};
+const RISK_LABEL: Record<string, string> = {
+  LOW: 'Thấp',
+  MEDIUM: 'Trung bình',
+  HIGH: 'Cao',
+  UNKNOWN: 'Chưa rõ',
+};
+const RISK_TONE: Record<string, 'success' | 'warning' | 'danger' | 'muted'> = {
+  LOW: 'success',
+  MEDIUM: 'warning',
+  HIGH: 'danger',
+  UNKNOWN: 'muted',
+};
+/** Nguyên nhân đo được của ForecastService (docs 04 §8) bằng lời — số vẫn là số backend đếm. */
+const CAUSE_LABEL: Record<ForecastCause['code'], (n: number) => string> = {
+  OVERDUE: (n) => `${n} việc quá hạn`,
+  UNASSIGNED: (n) => `${n} việc chưa giao`,
+  OVERLOADED_MEMBER: (n) => `${n} người quá tải`,
+  BLOCKED: (n) => `${n} việc bị chặn`,
+  BIG_NOT_STARTED: (n) => `${n} việc lớn (> 16 h) chưa bắt đầu`,
+  SCOPE_CREEP: (n) => `phạm vi tăng > 10 % trong ${n} ngày`,
+};
+const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** Trần kích thước kết quả lưu kèm tin nhắn — tránh phình bảng chat_messages và prompt lượt sau. */
 const MAX_RESULT_BYTES = 48_000;
@@ -153,6 +187,8 @@ export class AiQueryService {
     private readonly access: ProjectAccessService,
     private readonly workload: WorkloadService,
     private readonly config: ConfigService<Env, true>,
+    private readonly sprintsSvc: SprintsService,
+    private readonly forecast: ForecastService,
   ) {}
 
   private assertRate(userId: string): void {
@@ -279,7 +315,7 @@ export class AiQueryService {
       case 'SPRINT_LIST':
         return { ...base, ...(await this.sprints(ctx)) };
       case 'SPRINT_PROGRESS':
-        return { ...base, ...(await this.sprintProgress(spec, ctx, at)) };
+        return { ...base, ...(await this.sprintProgress(spec, ctx)) };
       case 'ACTIVITY_FEED':
         return { ...base, ...(await this.activity(spec, ctx)) };
       case 'NOTIFICATION_LIST':
@@ -539,21 +575,44 @@ export class AiQueryService {
     };
 
     if (spec.intent === 'TASK_STATS') {
+      // Thống kê phải tính trên TOÀN BỘ tập khớp lọc — `limit` chỉ dành cho danh sách hiển thị
+      const all = await this.prisma.task.findMany({
+        where,
+        select: {
+          id: true,
+          priority: true,
+          dueDate: true,
+          startDate: true,
+          createdAt: true,
+          completedAt: true,
+          progress: true,
+          remainingHours: true,
+          estimateHours: true,
+          column: { select: { name: true } },
+          _count: { select: { assignees: true } },
+        },
+      });
       const byColumn = new Map<string, number>();
       const byPriority = new Map<string, number>();
       let overdue = 0;
       let unassigned = 0;
       let hours = 0;
-      for (const r of rows) {
+      for (const r of all) {
         byColumn.set(r.column.name, (byColumn.get(r.column.name) ?? 0) + 1);
         byPriority.set(r.priority, (byPriority.get(r.priority) ?? 0) + 1);
         if (!r.completedAt && r.dueDate && r.dueDate.getTime() < today)
           overdue += 1;
-        if (r.assignees.length === 0) unassigned += 1;
-        hours += num(r.remainingHours) || num(r.estimateHours);
+        if (r._count.assignees === 0) unassigned += 1;
+        // Cùng cách tính "còn lại" với burn-down/forecast (docs 04 §1)
+        hours += remainingOf({
+          ...r,
+          estimateHours: r.estimateHours === null ? null : num(r.estimateHours),
+          remainingHours:
+            r.remainingHours === null ? null : num(r.remainingHours),
+        });
       }
       const stats: StatItem[] = [
-        { label: 'Công việc', value: total },
+        { label: 'Công việc', value: all.length },
         {
           label: 'Quá hạn',
           value: overdue,
@@ -1315,20 +1374,11 @@ export class AiQueryService {
 
   // ── Sprint & hoạt động ─────────────────────────────────────
 
+  /** Cùng nguồn với tab Sprint (`GET /projects/:id/sprints`) — không tự đếm lại. */
   private async sprints(ctx: QueryContext) {
-    const rows = await this.prisma.sprint.findMany({
-      where: { projectId: ctx.projectId },
-      orderBy: { startDate: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        startDate: true,
-        endDate: true,
-        goal: true,
-        _count: { select: { tasks: true } },
-      },
-    });
+    const rows = (await this.sprintsSvc.list(ctx.userId, ctx.projectId))
+      .slice()
+      .sort((x, y) => y.startDate.getTime() - x.startDate.getTime());
     return {
       source: {
         endpoint: 'GET /projects/:id/sprints',
@@ -1342,15 +1392,17 @@ export class AiQueryService {
             { key: 'name', label: 'Sprint' },
             { key: 'status', label: 'Trạng thái' },
             { key: 'time', label: 'Thời gian' },
-            { key: 'tasks', label: 'Việc', align: 'right' },
+            { key: 'tasks', label: 'Xong / việc', align: 'right' },
+            { key: 'hours', label: 'Giờ còn lại', align: 'right' },
           ],
           rows: rows.map((s) => ({
             ref: { type: 'sprint' as const, id: s.id, key: s.name },
             cells: {
               name: s.name,
-              status: s.status,
+              status: SPRINT_STATUS_LABEL[s.status] ?? s.status,
               time: `${iso(s.startDate)} → ${iso(s.endDate)}`,
-              tasks: s._count.tasks,
+              tasks: `${s.doneCount}/${s.taskCount}`,
+              hours: `${round1(s.remainingHours)} h`,
             },
           })),
         },
@@ -1358,24 +1410,31 @@ export class AiQueryService {
     };
   }
 
-  private async sprintProgress(
-    spec: DataQuerySpec,
-    ctx: QueryContext,
-    at: Date,
-  ) {
+  /**
+   * Tiến độ một sprint — số lấy NGUYÊN VĂN từ `ForecastService` (cùng nguồn với Dashboard) và
+   * `SprintsService.list` (cùng nguồn với tab Sprint). Không tự cộng giờ ở đây.
+   */
+  private async sprintProgress(spec: DataQuerySpec, ctx: QueryContext) {
+    const empty = (text: string) => ({
+      source: {
+        endpoint: 'GET /projects/:id/sprints',
+        params: {},
+        rowCount: 0,
+      },
+      blocks: [{ kind: 'note', text, tone: 'muted' }] as QueryBlock[],
+    });
+    if (spec.sprint === '__all')
+      return empty(
+        'Tiến độ chỉ có nghĩa cho từng sprint — hãy hỏi về một sprint cụ thể (hoặc bỏ trống để xem sprint đang chạy).',
+      );
+    if (spec.sprint === '__backlog')
+      return empty('Backlog không phải sprint nên không có tiến độ.');
     const id = this.sprintId(spec, ctx);
     const sprint = await this.prisma.sprint.findFirst({
       where: id
         ? { id, projectId: ctx.projectId }
         : { projectId: ctx.projectId, status: 'ACTIVE' },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        startDate: true,
-        endDate: true,
-        scopeHoursInitial: true,
-      },
+      select: { id: true, name: true, status: true },
     });
     if (!sprint)
       return {
@@ -1388,71 +1447,94 @@ export class AiQueryService {
           { kind: 'empty', title: 'Chưa có sprint đang chạy' },
         ] as QueryBlock[],
       };
-    const tasks = await this.prisma.task.findMany({
-      where: { sprintId: sprint.id, deletedAt: null },
-      select: {
-        completedAt: true,
-        remainingHours: true,
-        estimateHours: true,
-        dueDate: true,
+    const [bd, fc, list] = await Promise.all([
+      this.forecast.burndown(ctx.userId, sprint.id),
+      this.forecast.forecast(ctx.userId, sprint.id),
+      this.sprintsSvc.list(ctx.userId, ctx.projectId),
+    ]);
+    const row = list.find((x) => x.id === sprint.id);
+    const active = sprint.status === 'ACTIVE';
+    const closed = sprint.status === 'CLOSED';
+    const overdue = fc.causes.find((c) => c.code === 'OVERDUE')?.count ?? 0;
+    const stats: StatItem[] = [
+      {
+        label: sprint.name,
+        value: SPRINT_STATUS_LABEL[sprint.status] ?? sprint.status,
       },
-    });
-    const done = tasks.filter((t) => t.completedAt).length;
-    const remaining = tasks.reduce(
-      (sum, t) =>
-        sum +
-        (t.completedAt ? 0 : num(t.remainingHours) || num(t.estimateHours)),
-      0,
-    );
-    const daysLeft = Math.max(
-      0,
-      Math.ceil((sprint.endDate.getTime() - startOfDay(at).getTime()) / DAY),
-    );
-    const overdue = tasks.filter(
-      (t) =>
-        !t.completedAt &&
-        t.dueDate &&
-        t.dueDate.getTime() < startOfDay(at).getTime(),
-    ).length;
+      {
+        label: 'Xong',
+        value: `${row?.doneCount ?? 0}/${row?.taskCount ?? 0}`,
+        unit: 'việc',
+      },
+      closed
+        ? {
+            label: 'Còn lại lúc đóng',
+            value: fc.final ? round1(fc.final.remainingHours) : '—',
+            unit: fc.final ? 'h' : undefined,
+            hint: fc.final ? undefined : 'đóng trước khi có bản chụp cuối',
+          }
+        : { label: 'Giờ còn lại', value: round1(fc.remainingHours), unit: 'h' },
+      { label: 'Vận tốc', value: fc.velocity, unit: 'h/ngày' },
+    ];
+    if (active)
+      stats.push(
+        { label: 'Còn', value: fc.workdaysLeft, unit: 'ngày làm việc' },
+        { label: 'ETA', value: fc.eta ?? '—' },
+        {
+          label: 'Rủi ro',
+          value: RISK_LABEL[fc.riskLevel] ?? fc.riskLevel,
+          tone: RISK_TONE[fc.riskLevel],
+        },
+        {
+          label: 'Quá hạn',
+          value: overdue,
+          tone: overdue ? 'danger' : 'muted',
+        },
+      );
+    const byDate = new Map<
+      string,
+      { label: string; value: number | null; compare: number | null }
+    >();
+    for (const p of bd.ideal)
+      byDate.set(p.date, { label: p.date, value: null, compare: p.ideal });
+    for (const p of bd.actual)
+      byDate.set(p.date, {
+        label: p.date,
+        compare: byDate.get(p.date)?.compare ?? null,
+        value: p.remaining,
+      });
+    const blocks: QueryBlock[] = [
+      { kind: 'stat_row', items: stats },
+      {
+        kind: 'line_chart',
+        unit: 'h còn lại',
+        compareLabel: 'Lý tưởng',
+        points: [...byDate.values()].sort((x, y) =>
+          x.label.localeCompare(y.label),
+        ),
+      },
+    ];
+    if (fc.causes.length)
+      blocks.push({
+        kind: 'note',
+        tone: 'warning',
+        text: `Nguyên nhân đo được: ${fc.causes
+          .map((c) => CAUSE_LABEL[c.code](c.count))
+          .join(' · ')}.`,
+      });
+    if (bd.gaps.length)
+      blocks.push({
+        kind: 'note',
+        tone: 'muted',
+        text: `Thiếu bản chụp ${bd.gaps.length} ngày làm việc — đường thực tế chỉ nối các ngày có số liệu.`,
+      });
     return {
       source: {
-        endpoint: 'GET /sprints/:id/burndown',
+        endpoint: 'GET /sprints/:id/forecast + /burndown',
         params: { sprintId: sprint.id },
-        rowCount: tasks.length,
+        rowCount: row?.taskCount ?? 0,
       },
-      blocks: [
-        {
-          kind: 'stat_row',
-          items: [
-            { label: sprint.name, value: sprint.status },
-            { label: 'Xong', value: `${done}/${tasks.length}`, unit: 'việc' },
-            {
-              label: 'Giờ còn lại',
-              value: Math.round(remaining * 10) / 10,
-              unit: 'h',
-            },
-            { label: 'Còn', value: daysLeft, unit: 'ngày' },
-            {
-              label: 'Quá hạn',
-              value: overdue,
-              tone: overdue ? 'danger' : 'muted',
-            },
-          ],
-        },
-        {
-          kind: 'line_chart',
-          unit: 'h',
-          compareLabel: 'Scope ban đầu',
-          points: [
-            {
-              label: iso(sprint.startDate),
-              value: sprint.scopeHoursInitial ?? 0,
-            },
-            { label: iso(at), value: Math.round(remaining * 10) / 10 },
-            { label: iso(sprint.endDate), value: 0 },
-          ],
-        },
-      ] as QueryBlock[],
+      blocks,
     };
   }
 

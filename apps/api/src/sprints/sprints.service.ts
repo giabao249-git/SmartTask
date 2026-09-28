@@ -58,11 +58,23 @@ export class SprintsService {
       },
       _sum: { estimateHours: true, remainingHours: true },
     });
+    const done = await this.prisma.task.groupBy({
+      by: ['sprintId'],
+      where: {
+        projectId,
+        deletedAt: null,
+        parentId: null,
+        sprintId: { not: null },
+        completedAt: { not: null },
+      },
+      _count: { _all: true },
+    });
     return rows.map((s) => {
       const h = hours.find((x) => x.sprintId === s.id);
       return {
         ...s,
         taskCount: s._count.tasks,
+        doneCount: done.find((x) => x.sprintId === s.id)?._count._all ?? 0,
         estimateHours: num(h?._sum.estimateHours),
         remainingHours: num(h?._sum.remainingHours),
         _count: undefined,

@@ -350,7 +350,7 @@ Mọi ý định mới: schema zod trong `packages/shared`, filter có trong `FI
 
 | ✔ | Mã | Việc | Công sức | Lược đồ CSDL | Endpoint mới | Quyết định (MVP 06/11 · nếu kịp · để sau · bỏ) | Đã làm |
 |---|---|---|---|---|---|---|---|
-| ☐ | A1 | Tra cứu sprint gọi đúng service màn hình; `TASK_STATS` không cộng trên `limit`; e2e "một câu hỏi, một số" | M | — | — | | |
+| ☑ | A1 | Tra cứu sprint gọi đúng service màn hình; `TASK_STATS` không cộng trên `limit`; e2e "một câu hỏi, một số" | M | — | — | MVP | ✔ 28/09 `feature/UC-38-tra-cuu-mot-nguon-so` — có việc con: tab/SPRINT_LIST/SPRINT_PROGRESS cùng 2/9 · 30,6 h (trước 2 · 3 · 0/3 · 33 h); `TASK_STATS` limit 3 = limit 25. Phát hiện thêm khi đo: biểu đồ trong chat vô hình vì `var(--chart-1)` thiếu `hsl()` — đã sửa. [Ảnh](../05-hien-thuc/anh/sprint-v1/a1-sau-chat-sprint-progress.png) |
 | ☑ | A2 | Vận tốc từ `completedAt`; snapshot lúc bắt đầu/kết thúc; forecast sprint đóng | S | — | — | MVP | ✔ 28/09 `feature/UC-30-burndown-so-that` — vận tốc 10→2 h/ngày khi chỉ có snapshot hôm nay; sprint đóng giữ `final`; Dashboard báo ngày thiếu số liệu. [Ảnh](../05-hien-thuc/anh/sprint-v1/a2-sau-van-toc-tu-completedat.png) |
 | ☐ | A3 | `codeMap` lưu trong tin `DATA_QUERY`; mã `s` ổn định, có sprint đã đóng | S | — | — | | |
 | ☐ | A4 | Prompt CHAT tách "có kịp không" / "vì sao"; kiểm `RISK_EXPLANATION` trong chat | S | — | — | | |

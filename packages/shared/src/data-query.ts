@@ -37,32 +37,45 @@ export const dueRangePresetSchema = z.enum([
   'NO_DUE',
 ]);
 
-export const queryFiltersSchema = z.object({
-  /** Mã người; bỏ trống = cả nhóm. "me" = chính người đang hỏi (server tự thay). */
-  assignee: z.array(z.union([shortCode('u'), z.literal('me')])).max(20).optional(),
-  status: z.enum(['OPEN', 'DONE', 'ALL']).optional(),
-  taskType: z.array(taskTypeSchema).max(3).optional(),
-  priority: z.array(prioritySchema).max(4).optional(),
-  dueRange: z
-    .object({
-      preset: dueRangePresetSchema.optional(),
-      from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-      to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    })
-    .optional(),
-  unassignedOnly: z.boolean().optional(),
-  q: z.string().max(200).optional(),
-  /** WHO_KNOWS_SKILL: mã kỹ năng + mức tối thiểu. */
-  skill: shortCode('k').optional(),
-  minLevel: z.number().int().min(1).max(5).optional(),
-  /** TASK_DETAIL / MEMBER_PROFILE / TASK_CANDIDATES: đối tượng cụ thể. */
-  task: shortCode('t').optional(),
-  /** TASK_CANDIDATES: hỏi về một BẢN NHÁP đang mở trong phiên thay vì task thật. */
-  draft: z.string().regex(/^d\d{1,3}$/, 'draftKey dạng d1, d2…').optional(),
-  user: z.union([shortCode('u'), z.literal('me')]).optional(),
-  /** AI_USAGE: gộp theo gì. */
-  groupUsageBy: z.enum(['day', 'purpose', 'user']).optional(),
-})
+export const queryFiltersSchema = z
+  .object({
+    /** Mã người; bỏ trống = cả nhóm. "me" = chính người đang hỏi (server tự thay). */
+    assignee: z
+      .array(z.union([shortCode('u'), z.literal('me')]))
+      .max(20)
+      .optional(),
+    status: z.enum(['OPEN', 'DONE', 'ALL']).optional(),
+    taskType: z.array(taskTypeSchema).max(3).optional(),
+    priority: z.array(prioritySchema).max(4).optional(),
+    dueRange: z
+      .object({
+        preset: dueRangePresetSchema.optional(),
+        from: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        to: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+      })
+      .optional(),
+    unassignedOnly: z.boolean().optional(),
+    q: z.string().max(200).optional(),
+    /** WHO_KNOWS_SKILL: mã kỹ năng + mức tối thiểu. */
+    skill: shortCode('k').optional(),
+    minLevel: z.number().int().min(1).max(5).optional(),
+    /** TASK_DETAIL / MEMBER_PROFILE / TASK_CANDIDATES: đối tượng cụ thể. */
+    task: shortCode('t').optional(),
+    /** TASK_CANDIDATES: hỏi về một BẢN NHÁP đang mở trong phiên thay vì task thật. */
+    draft: z
+      .string()
+      .regex(/^d\d{1,3}$/, 'draftKey dạng d1, d2…')
+      .optional(),
+    user: z.union([shortCode('u'), z.literal('me')]).optional(),
+    /** AI_USAGE: gộp theo gì. */
+    groupUsageBy: z.enum(['day', 'purpose', 'user']).optional(),
+  })
   // Không nhận field lạ: LLM (hoặc người gọi API) không thể lén thêm tham số truy vấn
   .strict();
 export type QueryFilters = z.infer<typeof queryFiltersSchema>;
@@ -138,22 +151,22 @@ export function pruneQuerySpec(raw: unknown): unknown {
   return spec;
 }
 
-const rawQuerySpecSchema = z.object({
-  intent: queryIntentSchema,
-  /** Sprint áp dụng; bỏ trống = sprint đang chạy, "__all" = mọi sprint, "__backlog" = backlog. */
-  sprint: z.union([shortCode('s'), z.literal('__all'), z.literal('__backlog')]).optional(),
-  filters: queryFiltersSchema.default({}),
-  groupBy: z
-    .enum(['NONE', 'DUE_DATE', 'ASSIGNEE', 'COLUMN', 'PRIORITY'])
-    .default('NONE'),
-  sort: z
-    .object({
-      field: z.enum(['DUE_DATE', 'PRIORITY', 'REMAINING_HOURS', 'UPDATED_AT', 'NUMBER']),
-      dir: z.enum(['ASC', 'DESC']).default('ASC'),
-    })
-    .optional(),
-  limit: z.number().int().min(1).max(100).default(25),
-}).strict();
+const rawQuerySpecSchema = z
+  .object({
+    intent: queryIntentSchema,
+    /** Sprint áp dụng; bỏ trống = sprint đang chạy, "__all" = mọi sprint, "__backlog" = backlog. */
+    sprint: z.union([shortCode('s'), z.literal('__all'), z.literal('__backlog')]).optional(),
+    filters: queryFiltersSchema.default({}),
+    groupBy: z.enum(['NONE', 'DUE_DATE', 'ASSIGNEE', 'COLUMN', 'PRIORITY']).default('NONE'),
+    sort: z
+      .object({
+        field: z.enum(['DUE_DATE', 'PRIORITY', 'REMAINING_HOURS', 'UPDATED_AT', 'NUMBER']),
+        dir: z.enum(['ASC', 'DESC']).default('ASC'),
+      })
+      .optional(),
+    limit: z.number().int().min(1).max(100).default(25),
+  })
+  .strict();
 
 export const dataQuerySpecSchema = z.preprocess(pruneQuerySpec, rawQuerySpecSchema);
 export type DataQuerySpec = z.infer<typeof rawQuerySpecSchema>;
@@ -202,10 +215,20 @@ export type QueryBlock =
   | {
       kind: 'heatmap';
       columns: string[];
-      rows: { label: string; ref?: BlockRef; cells: { text: string; tone?: BlockBadge['tone'] }[] }[];
+      rows: {
+        label: string;
+        ref?: BlockRef;
+        cells: { text: string; tone?: BlockBadge['tone'] }[];
+      }[];
     }
   | { kind: 'bar_chart'; series: { label: string; value: number }[]; unit?: string }
-  | { kind: 'line_chart'; points: { label: string; value: number; compare?: number }[]; unit?: string; compareLabel?: string }
+  | {
+      kind: 'line_chart';
+      /** `null` = ngày không có số liệu (vd. thiếu snapshot) — web nối qua, không vẽ về 0 */
+      points: { label: string; value: number | null; compare?: number | null }[];
+      unit?: string;
+      compareLabel?: string;
+    }
   | { kind: 'activity_list'; items: BlockItem[] }
   | { kind: 'note'; text: string; tone?: BlockBadge['tone'] }
   | { kind: 'empty'; title: string; description?: string };
