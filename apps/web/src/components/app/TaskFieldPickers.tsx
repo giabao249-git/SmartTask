@@ -31,7 +31,7 @@ export function AssigneePicker({ value, members, disabled, onChange }: { value: 
       }}
     >
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled} className="h-8 w-full justify-start gap-1.5 text-xs font-normal">
+        <Button variant="outline" size="sm" disabled={disabled} className="h-9 w-full justify-start gap-1.5 text-sm font-normal">
           {selected.length === 0 ? (
             <span className="text-muted-foreground">Chưa giao</span>
           ) : (
@@ -76,7 +76,7 @@ function LabelPicker({ value, labels, disabled, onChange }: { value: string[]; l
       }}
     >
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled} className="h-8 w-full justify-start gap-1 text-xs font-normal overflow-hidden">
+        <Button variant="outline" size="sm" disabled={disabled} className="h-9 w-full justify-start gap-1.5 overflow-hidden text-sm font-normal">
           {selected.length === 0 ? <span className="text-muted-foreground">Không nhãn</span> : selected.map((l) => <Badge key={l.id} variant="secondary" className="text-[10px] px-1 py-0 font-normal">#{l.name}</Badge>)}
         </Button>
       </PopoverTrigger>
@@ -114,7 +114,7 @@ function SkillPicker({ value, workspaceId, disabled, onChange }: { value: { skil
       }}
     >
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled} className="h-8 w-full justify-start gap-1 text-xs font-normal overflow-hidden">
+        <Button variant="outline" size="sm" disabled={disabled} className="h-9 w-full justify-start gap-1.5 overflow-hidden text-sm font-normal">
           {value.length === 0 ? <span className="text-muted-foreground">Không yêu cầu</span> : value.map((s) => <Badge key={s.skillId} variant="outline" className="text-[10px] px-1 py-0 font-normal">{byId.get(s.skillId)?.name ?? "…"} ≥ {s.minLevel}</Badge>)}
         </Button>
       </PopoverTrigger>
