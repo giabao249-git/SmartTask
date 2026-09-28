@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SprintFormDialog } from "./SprintFormDialog";
 import { SprintPlanner } from "./SprintPlanner";
+import { StartSprintDialog } from "./StartSprintDialog";
 import { dm, hrs, toastSprintError, useInvalidateSprints } from "./shared";
 
 const ORDER: Record<SprintView["status"], number> = { ACTIVE: 0, PLANNED: 1, CLOSED: 2 };
@@ -91,7 +92,7 @@ export function SprintsView() {
               <SprintListItem key={s.id} s={s} active={s.id === selected?.id} onClick={() => select(s.id)} />
             ))}
           </nav>
-          {selected && <SprintDetail key={selected.id} sprint={selected} sprints={rows} canManage={can} onEdit={() => setEditing(selected)} />}
+          {selected && <SprintDetail key={selected.id} sprint={selected} sprints={rows} canManage={can} onEdit={() => setEditing(selected)} onOpenSprint={select} />}
         </div>
       )}
 
@@ -134,21 +135,14 @@ function SprintListItem({ s, active, onClick }: { s: SprintView; active: boolean
   );
 }
 
-function SprintDetail({ sprint, sprints, canManage, onEdit }: { sprint: SprintView; sprints: SprintView[]; canManage: boolean; onEdit: () => void }) {
+function SprintDetail({ sprint, sprints, canManage, onEdit, onOpenSprint }: { sprint: SprintView; sprints: SprintView[]; canManage: boolean; onEdit: () => void; onOpenSprint: (id: string) => void }) {
   const project = useCurrentProject();
   const summary = useSprintSummary(sprint.id);
   const invalidate = useInvalidateSprints(project.id);
   const [closing, setClosing] = React.useState(false);
   const [moveTo, setMoveTo] = React.useState("backlog");
 
-  const start = useMutation({
-    mutationFn: () => api.post<SprintView>(`/sprints/${sprint.id}/start`, {}),
-    onSuccess: (s) => {
-      invalidate();
-      toast.success(`${s.name} đã bắt đầu — phạm vi giờ đã chốt`);
-    },
-    onError: toastSprintError,
-  });
+  const [starting, setStarting] = React.useState(false);
   const close = useMutation({
     mutationFn: () =>
       api.post<SprintView & { movedTaskIds: string[] }>(`/sprints/${sprint.id}/close`, {
@@ -185,8 +179,8 @@ function SprintDetail({ sprint, sprints, canManage, onEdit }: { sprint: SprintVi
                   <Pencil className="h-4 w-4" /> Sửa
                 </Button>
                 {sprint.status === "PLANNED" && (
-                  <Button size="sm" onClick={() => start.mutate()} disabled={start.isPending} className="gap-1.5">
-                    {start.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Bắt đầu sprint
+                  <Button size="sm" onClick={() => setStarting(true)} className="gap-1.5">
+                    <Play className="h-4 w-4" /> Bắt đầu sprint…
                   </Button>
                 )}
                 {sprint.status === "ACTIVE" && (
@@ -214,6 +208,8 @@ function SprintDetail({ sprint, sprints, canManage, onEdit }: { sprint: SprintVi
       </Card>
 
       {sprint.status !== "CLOSED" ? <SprintPlanner project={project} sprint={sprint} /> : s && <ClosedLists s={s} projectId={project.id} />}
+
+      <StartSprintDialog sprint={sprint} sprints={sprints} summary={s} open={starting} onOpenChange={setStarting} onStarted={invalidate} onOpenSprint={onOpenSprint} />
 
       <Dialog open={closing} onOpenChange={setClosing}>
         <DialogContent>
