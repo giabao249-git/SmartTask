@@ -4,7 +4,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /** Người dùng tắt hiệu ứng chuyển động trong hệ điều hành → bỏ mọi animation. */
-function usePrefersReducedMotion(): boolean {
+export function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = React.useState(false);
   React.useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -85,4 +85,31 @@ export function TypewriterText({
       {typing && <span className="inline-block w-1.5 h-3.5 -mb-0.5 ml-0.5 bg-foreground/70 animate-pulse" aria-hidden="true" />}
     </p>
   );
+}
+
+/**
+ * Hiện dần N phần tử (dòng bảng, thẻ, khối): mỗi `stepMs` thêm một phần tử vào DOM. Thêm dần chứ không chỉ làm mờ
+ * bằng CSS — để chiều cao tăng dần và khung chat "bám đáy" cuộn theo (bảng mờ sẵn đủ chiều cao thì khung nhảy xuống
+ * đáy trống). `enabled` chỉ xét lúc gắn: tin cũ mở lại thì hiện ngay.
+ */
+export function useRevealCount(total: number, enabled: boolean, stepMs = 70, onDone?: () => void): number {
+  const reduced = usePrefersReducedMotion();
+  const [on] = React.useState(enabled);
+  const [n, setN] = React.useState(on ? Math.min(1, total) : total);
+  const doneRef = React.useRef(onDone);
+  doneRef.current = onDone;
+  const fired = React.useRef(false);
+  React.useEffect(() => {
+    if (!on || reduced) {
+      setN(total);
+    } else if (n < total) {
+      const t = setTimeout(() => setN((x) => Math.min(total, x + 1)), stepMs);
+      return () => clearTimeout(t);
+    }
+    if (!fired.current && (n >= total || !on || reduced)) {
+      fired.current = true;
+      doneRef.current?.();
+    }
+  }, [n, total, on, reduced, stepMs]);
+  return n;
 }

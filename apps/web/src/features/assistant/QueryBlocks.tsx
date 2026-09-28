@@ -13,6 +13,7 @@ import { api, describeError } from "@/lib/api";
 import type { BadgeVariant } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useRevealCount } from "./Typing";
 import type { BlockBadge, BlockItem, DataQuerySpec, QueryBlock, QueryResult, StatItem } from "@smarttask/shared";
 
 const TONE: Record<NonNullable<BlockBadge["tone"]>, BadgeVariant> = {
@@ -50,6 +51,7 @@ export function QueryResultCard({
   projectId,
   sessionId,
   messageId,
+  animate = false,
 }: {
   result: QueryResult;
   /** Truy vấn gốc để chạy lại — lưu cùng tin nhắn nên "Làm mới" không cần hỏi LLM. */
@@ -58,10 +60,15 @@ export function QueryResultCard({
   sessionId?: string | null;
   /** Tin nhắn chứa truy vấn — backend dùng bảng mã của đúng lượt đó để giải s2/u4 */
   messageId?: string;
+  /** Tin vừa đến: khối/dòng hiện dần từ trên xuống (kiểu Gemini); tin cũ mở lại thì hiện ngay */
+  animate?: boolean;
 }) {
   const [data, setData] = React.useState(result);
   const [busy, setBusy] = React.useState(false);
   React.useEffect(() => setData(result), [result]);
+  // Khối sau chỉ bắt đầu khi khối trước đã hiện hết dòng; "Làm mới" thì hiện ngay toàn bộ
+  const [shown, setShown] = React.useState(animate ? 1 : Number.MAX_SAFE_INTEGER);
+  const reveal = animate && data === result;
 
   const refresh = async () => {
     setBusy(true);
@@ -74,6 +81,7 @@ export function QueryResultCard({
         messageId: messageId && UUID.test(messageId) ? messageId : undefined,
         query,
       });
+      setShown(Number.MAX_SAFE_INTEGER);
       setData(fresh);
     } catch (e) {
       const { code, message } = describeError(e);
@@ -85,32 +93,44 @@ export function QueryResultCard({
 
   return (
     <div className="mt-2 pt-2 border-t border-border/40 space-y-2">
-      {data.blocks.map((b, i) => (
-        <div key={i} className="space-y-1.5">
+      {data.blocks.slice(0, shown).map((b, i) => (
+        <div key={i} className={cn("space-y-1.5", reveal && "st-reveal")}>
           {/* Một kết quả có nhiều danh sách (báo cáo sprint) thì mỗi khối cần tiêu đề */}
           {(b.kind === "task_list" || b.kind === "table") && b.title && <p className="text-xs font-semibold text-foreground">{b.title}</p>}
-          <BlockView block={b} projectId={projectId} />
+          <BlockView block={b} projectId={projectId} animate={reveal} onDone={() => setShown((x) => Math.max(x, i + 2))} />
         </div>
       ))}
 
-      <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground pt-0.5">
-        <Info className="h-3 w-3" />
-        <span>
-          Số liệu lúc {fmtTime(data.generatedAt)} · {data.source.rowCount} bản ghi
-          {data.truncated ? ` · hiện ${data.truncated.shown}/${data.truncated.total}` : ""}
-        </span>
-        {query && (
-          <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] gap-1" disabled={busy} onClick={() => void refresh()}>
-            <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} /> Làm mới
-          </Button>
-        )}
-      </div>
+      {/* Dòng nguồn số liệu hiện sau khi khối CUỐI đã hiện hết (khối cuối báo xong → shown = số khối + 1) */}
+      {shown > data.blocks.length && (
+        <div className={cn("flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground pt-0.5", reveal && "st-reveal")}>
+          <Info className="h-3 w-3" />
+          <span>
+            Số liệu lúc {fmtTime(data.generatedAt)} · {data.source.rowCount} bản ghi
+            {data.truncated ? ` · hiện ${data.truncated.shown}/${data.truncated.total}` : ""}
+          </span>
+          {query && (
+            <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] gap-1" disabled={busy} onClick={() => void refresh()}>
+              <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} /> Làm mới
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function BlockView({ block, projectId }: { block: QueryBlock; projectId: string }) {
+const PROGRESSIVE = new Set(["task_list", "people_list", "activity_list", "agenda", "table", "heatmap"]);
+
+function BlockView({ block, projectId, animate = false, onDone }: { block: QueryBlock; projectId: string; animate?: boolean; onDone?: () => void }) {
   const router = useRouter();
+  // Khối không có dòng (số, biểu đồ, ghi chú) coi như hiện xong sau một nhịp
+  React.useEffect(() => {
+    if (PROGRESSIVE.has(block.kind)) return;
+    const t = setTimeout(() => onDone?.(), animate ? 260 : 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const open = (item: BlockItem | { ref?: { type: string; id: string } }) => {
     const ref = item.ref;
     if (!ref) return;
@@ -133,32 +153,10 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
     case "task_list":
     case "people_list":
     case "activity_list":
-      return (
-        <div className="space-y-1.5">
-          {block.items.map((it, i) => (
-            <ItemRow key={i} item={it} onOpen={() => open(it)} />
-          ))}
-        </div>
-      );
+      return <ItemList items={block.items} animate={animate} onDone={onDone} onOpen={open} />;
 
     case "agenda":
-      return (
-        <div className="space-y-2.5">
-          {block.groups.map((g, i) => (
-            <div key={i} className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className={cn("text-xs font-semibold", g.tone === "danger" ? "text-destructive" : "text-foreground")}>{g.label}</span>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 tabular-nums">
-                  {g.items.length}
-                </Badge>
-              </div>
-              {g.items.map((it, j) => (
-                <ItemRow key={j} item={it} onOpen={() => open(it)} />
-              ))}
-            </div>
-          ))}
-        </div>
-      );
+      return <AgendaBlock groups={block.groups} animate={animate} onDone={onDone} onOpen={open} />;
 
     case "person_card":
       return (
@@ -175,39 +173,10 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
       );
 
     case "table":
-      return <TableBlock block={block} onOpen={open} />;
+      return <TableBlock block={block} onOpen={open} animate={animate} onDone={onDone} />;
 
     case "heatmap":
-      return (
-        <div className="overflow-x-auto rounded-md border border-border/60">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-[11px]">Thành viên</TableHead>
-                {block.columns.map((c) => (
-                  <TableHead key={c} className="text-[11px] text-center">
-                    {c}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {block.rows.map((r, i) => (
-                <TableRow key={i} className="text-xs">
-                  <TableCell className="whitespace-nowrap">{r.label}</TableCell>
-                  {r.cells.map((cell, j) => (
-                    <TableCell key={j} className="text-center">
-                      <Badge variant={TONE[cell.tone ?? "muted"]} className="text-[11px] tabular-nums px-1.5 py-0">
-                        {cell.text}
-                      </Badge>
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      );
+      return <HeatmapBlock block={block} animate={animate} onDone={onDone} />;
 
     case "bar_chart": {
       const config: ChartConfig = {
@@ -334,9 +303,11 @@ function ItemRow({ item, onOpen }: { item: BlockItem; onOpen: () => void }) {
 
 type TableQueryBlock = Extract<QueryBlock, { kind: "table" }>;
 
-function TableBlock({ block, onOpen }: { block: TableQueryBlock; onOpen: (r: TableQueryBlock["rows"][number]) => void }) {
+function TableBlock({ block, onOpen, animate, onDone }: { block: TableQueryBlock; onOpen: (r: TableQueryBlock["rows"][number]) => void; animate: boolean; onDone?: () => void }) {
   const [all, setAll] = React.useState(false);
-  const rows = all ? block.rows : block.rows.slice(0, TABLE_PREVIEW);
+  const preview = all ? block.rows : block.rows.slice(0, TABLE_PREVIEW);
+  const n = useRevealCount(preview.length, animate, 70, onDone);
+  const rows = preview.slice(0, n);
   const hidden = block.rows.length - rows.length;
   return (
     <div className="space-y-1">
@@ -353,7 +324,7 @@ function TableBlock({ block, onOpen }: { block: TableQueryBlock; onOpen: (r: Tab
           </TableHeader>
           <TableBody>
             {rows.map((r, i) => (
-              <TableRow key={i} className={cn("text-xs", r.ref && "cursor-pointer")} onClick={() => onOpen(r)}>
+              <TableRow key={i} className={cn("text-xs", r.ref && "cursor-pointer", animate && "st-reveal")} onClick={() => onOpen(r)}>
                 {block.columns.map((c) => (
                   // Số căn phải bằng tabular-nums (không dùng font mono: lệch kiểu chữ với phần còn lại của bảng)
                   <TableCell key={c.key} className={cn("py-1.5", c.align === "right" && "text-right tabular-nums whitespace-nowrap", c.align === "center" && "text-center")}>
@@ -365,12 +336,89 @@ function TableBlock({ block, onOpen }: { block: TableQueryBlock; onOpen: (r: Tab
           </TableBody>
         </Table>
       </div>
-      {block.rows.length > TABLE_PREVIEW && (
+      {block.rows.length > TABLE_PREVIEW && n >= preview.length && (
         <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] gap-1 text-muted-foreground" onClick={() => setAll((v) => !v)}>
           <ChevronDown className={cn("h-3 w-3 transition-transform", all && "rotate-180")} />
           {all ? "Thu gọn" : `Xem thêm ${hidden} dòng`}
         </Button>
       )}
+    </div>
+  );
+}
+
+type ItemsOpen = (item: BlockItem) => void;
+
+function ItemList({ items, animate, onDone, onOpen }: { items: BlockItem[]; animate: boolean; onDone?: () => void; onOpen: ItemsOpen }) {
+  const n = useRevealCount(items.length, animate, 90, onDone);
+  return (
+    <div className="space-y-1.5">
+      {items.slice(0, n).map((it, i) => (
+        <div key={i} className={cn(animate && "st-reveal")}>
+          <ItemRow item={it} onOpen={() => onOpen(it)} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type AgendaGroups = Extract<QueryBlock, { kind: "agenda" }>["groups"];
+
+function AgendaBlock({ groups, animate, onDone, onOpen }: { groups: AgendaGroups; animate: boolean; onDone?: () => void; onOpen: ItemsOpen }) {
+  // Dàn phẳng (nhãn nhóm + từng việc) để hiện dần theo đúng thứ tự đọc
+  const flat = groups.flatMap((g, gi) => [{ g, gi, item: null as BlockItem | null }, ...g.items.map((item) => ({ g, gi, item }))]);
+  const n = useRevealCount(flat.length, animate, 90, onDone);
+  return (
+    <div className="space-y-1.5">
+      {flat.slice(0, n).map((x, i) =>
+        x.item ? (
+          <div key={i} className={cn(animate && "st-reveal")}>
+            <ItemRow item={x.item} onOpen={() => onOpen(x.item!)} />
+          </div>
+        ) : (
+          <div key={i} className={cn("flex items-center gap-2", x.gi > 0 && "pt-1", animate && "st-reveal")}>
+            <span className={cn("text-xs font-semibold", x.g.tone === "danger" ? "text-destructive" : "text-foreground")}>{x.g.label}</span>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 tabular-nums">
+              {x.g.items.length}
+            </Badge>
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
+type HeatmapQueryBlock = Extract<QueryBlock, { kind: "heatmap" }>;
+
+function HeatmapBlock({ block, animate, onDone }: { block: HeatmapQueryBlock; animate: boolean; onDone?: () => void }) {
+  const n = useRevealCount(block.rows.length, animate, 80, onDone);
+  return (
+    <div className="overflow-x-auto rounded-md border border-border/60">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="text-[11px]">Thành viên</TableHead>
+            {block.columns.map((c) => (
+              <TableHead key={c} className="text-[11px] text-center">
+                {c}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {block.rows.slice(0, n).map((r, i) => (
+            <TableRow key={i} className={cn("text-xs", animate && "st-reveal")}>
+              <TableCell className="whitespace-nowrap">{r.label}</TableCell>
+              {r.cells.map((cell, j) => (
+                <TableCell key={j} className="text-center">
+                  <Badge variant={TONE[cell.tone ?? "muted"]} className="text-[11px] tabular-nums px-1.5 py-0">
+                    {cell.text}
+                  </Badge>
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }
