@@ -368,7 +368,7 @@ Mọi ý định mới: schema zod trong `packages/shared`, filter có trong `FI
 | ☐ | D4 | `note` khi cắt bộ lọc; `ACTIVITY_FEED` ← user/range; `CAPACITY_FREE` ← sprint | S | — | — | | |
 | ☐ | D5 | Enum ý định một nguồn cho responseSchema + prompt | S | — | — | | |
 | ☐ | D6 | E2e `TASK_DETAIL`, `TASK_BLOCKED`, Làm mới, mã sprint, rủi ro trong chat | S | — | — | | |
-| ☐ | E1 | Sprint/Dashboard ở 375 px | S | — | — | | |
+| ☑ | E1 | Sprint/Dashboard ở 375 px | S | — | — | nếu kịp | ✔ 28/09 `feature/UC-09-sprint-ux-polish` — trang Sprint 375 px không tràn (cột lập kế hoạch ẩn huy hiệu/avatar); Dashboard 481 → 375 px (tiêu đề việc trong nhật ký xuống dòng thay vì `truncate` trên phần tử inline); cảnh báo dùng icon `--warning`, chữ giữ màu thường để đạt AA ở cả sáng/tối. [Ảnh tương phản](../05-hien-thuc/anh/sprint-v1/ux-tuong-phan-sang-toi.png) |
 
 ---
 

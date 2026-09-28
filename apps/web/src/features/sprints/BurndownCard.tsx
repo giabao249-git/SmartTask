@@ -1,7 +1,7 @@
 "use client";
 
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import { TrendingDown } from "lucide-react";
+import { AlertTriangle, TrendingDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
@@ -68,7 +68,12 @@ export function BurndownCard({ sprintId, closed }: { sprintId: string; closed: b
           </ChartContainer>
         )}
         {bd.data && bd.data.gaps.length > 0 && <p className="text-xs text-muted-foreground">Thiếu bản chụp {bd.data.gaps.length} ngày làm việc — đường còn lại chỉ nối các ngày có số liệu.</p>}
-        {bd.data && bd.data.scopeCreepDays.length > 0 && <p className="text-xs text-warning-foreground">Phạm vi tăng quá 10 % so với lúc bắt đầu vào {bd.data.scopeCreepDays.map(dm).join(", ")}.</p>}
+        {bd.data && bd.data.scopeCreepDays.length > 0 && (
+          <p className="flex items-start gap-1.5 text-xs text-foreground">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-warning" aria-hidden />
+            Phạm vi tăng quá 10 % so với lúc bắt đầu vào {bd.data.scopeCreepDays.map(dm).join(", ")}.
+          </p>
+        )}
       </CardContent>
     </Card>
   );

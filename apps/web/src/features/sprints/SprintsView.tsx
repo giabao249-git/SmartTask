@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarRange, Flag, Pencil, Play, Plus, Square, Target, Users2 } from "lucide-react";
+import { AlertTriangle, CalendarRange, Flag, Pencil, Play, Plus, Square, Target, Users2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -341,11 +341,15 @@ function BriefList({ title, rows, projectId, empty }: { title: string; rows: Spr
   );
 }
 
+/** Ô số. Cảnh báo = icon vàng cạnh nhãn; chữ số giữ màu thường để đạt tương phản AA ở cả nền sáng lẫn tối (docs 10 §6). */
 function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "warning" }) {
   return (
     <div className="rounded-lg border border-border/70 p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={cn("text-lg font-semibold tabular-nums", tone === "warning" && "text-warning-foreground")}>{value}</div>
+      <div className="text-xs text-muted-foreground flex items-center gap-1">
+        {tone === "warning" && <AlertTriangle className="h-3.5 w-3.5 text-warning" aria-hidden />}
+        {label}
+      </div>
+      <div className="text-lg font-semibold tabular-nums">{value}</div>
       {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
     </div>
   );
