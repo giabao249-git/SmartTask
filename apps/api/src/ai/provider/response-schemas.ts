@@ -142,6 +142,10 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
             user: str('mã u hoặc "me"'),
             groupUsageBy: { type: 'string', enum: ['day', 'purpose', 'user'] },
             lastN: int('SPRINT_VELOCITY: số sprint đã đóng gần nhất, 1–10'),
+            range: {
+              type: 'string',
+              enum: ['TODAY', 'YESTERDAY', 'THIS_WEEK'],
+            },
           }),
           groupBy: {
             type: 'string',

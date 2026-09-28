@@ -73,6 +73,28 @@ const CAUSE_LABEL: Record<ForecastCause['code'], (n: number) => string> = {
   SCOPE_CREEP: (n) => `phạm vi tăng > 10 % trong ${n} ngày`,
 };
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const FILTER_LABEL: Record<string, string> = {
+  assignee: 'người thực hiện',
+  user: 'người',
+  status: 'trạng thái',
+  taskType: 'loại việc',
+  priority: 'ưu tiên',
+  dueRange: 'hạn',
+  q: 'từ khoá',
+  range: 'khoảng thời gian',
+  sprint: 'sprint',
+};
+
+/** 00:00 của ngày chứa `d` theo múi giờ `tz`, trả về mốc UTC — để "hôm nay/hôm qua" khớp giờ người hỏi. */
+function startOfLocalDay(d: Date, tz: string): Date {
+  const local = new Date(d.toLocaleString('en-US', { timeZone: tz }));
+  const offset =
+    local.getTime() -
+    new Date(d.toLocaleString('en-US', { timeZone: 'UTC' })).getTime();
+  return new Date(
+    Date.UTC(local.getFullYear(), local.getMonth(), local.getDate()) - offset,
+  );
+}
 
 /** Trần kích thước kết quả lưu kèm tin nhắn — tránh phình bảng chat_messages và prompt lượt sau. */
 const MAX_RESULT_BYTES = 48_000;
@@ -241,9 +263,19 @@ export class AiQueryService {
         ],
       };
 
-    if (HEAVY_INTENTS.includes(spec.intent))
-      return this.withTimeout(this.dispatch(spec, ctx, acc, at, base), base);
-    return this.dispatch(spec, ctx, acc, at, base);
+    const result = HEAVY_INTENTS.includes(spec.intent)
+      ? await this.withTimeout(this.dispatch(spec, ctx, acc, at, base), base)
+      : await this.dispatch(spec, ctx, acc, at, base);
+    // Bộ lọc có nghĩa bị cắt vì không thuộc ý định → nói ra, không lặng lẽ trả kết quả rộng hơn câu hỏi
+    if (spec.ignoredFilters?.length)
+      result.blocks.push({
+        kind: 'note',
+        tone: 'warning',
+        text: `Loại câu hỏi này không lọc được theo ${spec.ignoredFilters
+          .map((k) => FILTER_LABEL[k] ?? k)
+          .join(', ')} — kết quả dưới đây chưa áp dụng điều kiện đó.`,
+      });
+    return result;
   }
 
   /** Quá hạn thì trả ghi chú thay vì treo lượt chat (khoá phiên đang giữ). */
@@ -1112,7 +1144,11 @@ export class AiQueryService {
   }
 
   private async capacity(spec: DataQuerySpec, ctx: QueryContext) {
-    const table = await this.workload.capacityTable(ctx.projectId, {});
+    // Có sprint (mã s) thì cửa sổ = sprint đó; không có thì 28 ngày tới như trước
+    const sprintId = this.sprintId(spec, ctx) ?? undefined;
+    const table = await this.workload.capacityTable(ctx.projectId, {
+      sprintId,
+    });
     const rows = table.members.slice(0, spec.limit).map((m) => ({
       ref: {
         type: 'user' as const,
@@ -1851,9 +1887,37 @@ export class AiQueryService {
   }
 
   private async activity(spec: DataQuerySpec, ctx: QueryContext) {
+    const me0 = await this.prisma.user.findUnique({
+      where: { id: ctx.userId },
+      select: { timezone: true },
+    });
+    const tz = me0?.timezone || 'Asia/Ho_Chi_Minh';
+    const actorId = this.userId(spec.filters.user, ctx);
+    const today = startOfLocalDay(new Date(), tz);
+    // Thứ trong tuần theo giờ địa phương: mốc 00:00 địa phương + 12 h vẫn nằm trong cùng ngày ở mọi múi giờ ±12
+    const range =
+      spec.filters.range === 'TODAY'
+        ? { gte: today }
+        : spec.filters.range === 'YESTERDAY'
+          ? { gte: new Date(today.getTime() - DAY), lt: today }
+          : spec.filters.range === 'THIS_WEEK'
+            ? {
+                gte: new Date(
+                  today.getTime() -
+                    ((new Date(today.getTime() + 12 * 3_600_000).getUTCDay() +
+                      6) %
+                      7) *
+                      DAY,
+                ),
+              }
+            : undefined;
     const [rows, sprints, me] = await Promise.all([
       this.prisma.activityLog.findMany({
-        where: { projectId: ctx.projectId },
+        where: {
+          projectId: ctx.projectId,
+          ...(actorId ? { actorId } : {}),
+          ...(range ? { createdAt: range } : {}),
+        },
         orderBy: { createdAt: 'desc' },
         take: spec.limit,
         select: {
@@ -1876,10 +1940,7 @@ export class AiQueryService {
         where: { projectId: ctx.projectId },
         select: { id: true, name: true },
       }),
-      this.prisma.user.findUnique({
-        where: { id: ctx.userId },
-        select: { timezone: true },
-      }),
+      Promise.resolve(me0),
     ]);
     const sprintName = new Map(sprints.map((s) => [s.id, s.name]));
     // Giờ theo múi giờ người hỏi, cùng kiểu "dd/MM HH:mm" với màn Dashboard (trước đây in UTC)
@@ -1895,7 +1956,11 @@ export class AiQueryService {
     return {
       source: {
         endpoint: 'GET /projects/:id/activity',
-        params: { limit: spec.limit },
+        params: {
+          limit: spec.limit,
+          ...(actorId ? { actorId } : {}),
+          ...(spec.filters.range ? { range: spec.filters.range } : {}),
+        },
         rowCount: rows.length,
       },
       blocks: (rows.length
