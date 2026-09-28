@@ -11,7 +11,10 @@ import type { ProposalAction } from '../proposals/draft-items';
 import { PrismaService } from '../../prisma/prisma.service';
 import { addDays, isoDate, toDate } from '../../workload/domain/calendar';
 import { WorkloadService } from '../../workload/workload.service';
-import { evidenceText } from '../../metrics/domain/skill-evidence';
+import {
+  evidenceText,
+  isConclusive,
+} from '../../metrics/domain/skill-evidence';
 import { SkillEvidenceService } from '../../metrics/skill-evidence.service';
 import { mergeSettings } from '../../workspaces/workspace-settings';
 import type { CodeBook } from '../context/short-codes';
@@ -296,7 +299,8 @@ export class ActionValidatorService {
           const mine = evidenceOf.get(id);
           for (const rs of resolvedSkills) {
             const name = skillById.get(rs.skillId)?.name;
-            const e = mine?.get(rs.skillId);
+            const found = mine?.get(rs.skillId);
+            const e = found && isConclusive(found) ? found : undefined;
             if (!e)
               warnings.push(
                 issue(

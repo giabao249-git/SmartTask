@@ -6,6 +6,7 @@ import { ForecastService } from '../../forecast/forecast.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isoDate, toDate } from '../../workload/domain/calendar';
 import { WorkloadService } from '../../workload/workload.service';
+import { isConclusive } from '../../metrics/domain/skill-evidence';
 import { SkillEvidenceService } from '../../metrics/skill-evidence.service';
 import { AiConfigService } from '../ai-config/ai-config.service';
 import { PURPOSE_INSTRUCTIONS } from '../prompt/master-prompt';
@@ -221,6 +222,8 @@ export class ContextBuilderService {
             m.user.shortName,
             m.role,
             [...(evidenceOf.get(m.user.id)?.values() ?? [])]
+              // Nửa ghi nhận chưa đủ một mức = chưa biết → không đưa "mức 0" cho LLM hiểu nhầm là không biết
+              .filter((e) => isConclusive(e))
               .sort((a, b) => b.level - a.level || b.tasks - a.tasks)
               .map(
                 (e) =>

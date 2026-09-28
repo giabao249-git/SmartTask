@@ -5,6 +5,7 @@ import { MetricsService } from '../metrics/metrics.service';
 import {
   demonstrated,
   evidenceText,
+  isConclusive,
   passedOf,
   weightOf,
 } from '../metrics/domain/skill-evidence';
@@ -774,9 +775,7 @@ export class WorkloadService {
         const mine = profiles.get(u.userId) ?? [];
         // Chỉ kỹ năng CÓ bằng chứng vào phép tính khớp; tự khai chỉ đi kèm để hiển thị
         const levels = new Map(
-          mine
-            .filter((s) => s.confidence !== 'none')
-            .map((s) => [s.skillId, s.level]),
+          mine.filter((s) => isConclusive(s)).map((s) => [s.skillId, s.level]),
         );
         const metrics = await this.metrics.compute(
           u.userId,
@@ -921,7 +920,7 @@ export class WorkloadService {
       const per = real?.perUser.find((p) => p.userId === m.userId);
       const levels = new Map(
         m.skills
-          .filter((s) => s.confidence !== 'none')
+          .filter((s) => isConclusive(s))
           .map((s) => [s.skillId, s.level]),
       );
       const required = subject.requiredSkills.map((r) => ({
@@ -1002,6 +1001,18 @@ export class WorkloadService {
     const settings = mergeSettings(project.workspace.settings, {});
     const cal = { workdays: settings.workdays, holidays: settings.holidays };
     const ids = project.members.map((m) => m.user.id);
+    const viewers = new Set(
+      (
+        await this.prisma.workspaceMember.findMany({
+          where: {
+            workspaceId: project.workspaceId,
+            role: 'VIEWER',
+            userId: { in: ids },
+          },
+          select: { userId: true },
+        })
+      ).map((v) => v.userId),
+    );
     const profiles = await this.evidence.profiles(
       project.workspaceId,
       ids,
@@ -1024,6 +1035,8 @@ export class WorkloadService {
         return {
           ...m.user,
           role: m.role,
+          // VIEWER của workspace: chỉ xem, không nhận việc (không nằm trong bảng năng lực)
+          viewer: viewers.has(m.user.id),
           skills: (profiles.get(m.user.id) ?? []).map((e) => ({
             ...e,
             lastAt: e.lastAt ? isoDate(toDate(e.lastAt)) : null,
