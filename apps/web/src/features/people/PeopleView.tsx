@@ -2,24 +2,23 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Award, CalendarRange, Scale, UserRound, Users2 } from "lucide-react";
+import { Award, CalendarRange, Users2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/app/PageHeader";
 import { useCurrentProject } from "@/lib/hooks/use-project";
+import { useAuth } from "@/lib/auth";
 import { WorkloadView } from "@/features/workload/WorkloadView";
-import { RebalanceView } from "@/features/rebalance/RebalanceView";
-import { MyProfileView } from "./MyProfileView";
 import { TeamSkillsView } from "./TeamSkillsView";
 import { TeamView } from "./TeamView";
 
 const TABS = [
   { key: "team", label: "Nhóm", icon: Users2 },
-  { key: "workload", label: "Tải theo tuần", icon: CalendarRange },
-  { key: "balance", label: "Giờ trống & giao việc", icon: Scale },
-  { key: "skills", label: "Kỹ năng nhóm", icon: Award },
-  { key: "mine", label: "Hồ sơ của tôi", icon: UserRound },
+  { key: "load", label: "Tải & giờ trống", icon: CalendarRange },
+  { key: "skills", label: "Kỹ năng", icon: Award },
 ] as const;
+/** Link cũ (tab đã gộp, đường /workload, /rebalance, /skills) vẫn tới đúng chỗ */
+const ALIAS: Record<string, string> = { workload: "load", balance: "load", mine: "team" };
 type TabKey = (typeof TABS)[number]["key"];
 
 /** Màn "Nhân sự": tải theo tuần, bảng năng lực & cân bằng, kỹ năng — cùng một câu hỏi "ai làm được việc gì, còn bao nhiêu giờ". */
@@ -27,7 +26,17 @@ export function PeopleView() {
   const project = useCurrentProject();
   const router = useRouter();
   const params = useSearchParams();
-  const tab: TabKey = (TABS.find((t) => t.key === params.get("tab"))?.key ?? "team") as TabKey;
+  const me = useAuth().user?.id;
+  const raw = params.get("tab") ?? "team";
+  const tab: TabKey = (TABS.find((t) => t.key === (ALIAS[raw] ?? raw))?.key ?? "team") as TabKey;
+  // "?tab=mine" cũ = mở hồ sơ của chính mình
+  React.useEffect(() => {
+    if (raw !== "mine" || !me) return;
+    const next = new URLSearchParams(params.toString());
+    next.delete("tab");
+    next.set("member", me);
+    router.replace(`?${next.toString()}`, { scroll: false });
+  }, [raw, me, params, router]);
   const setTab = (v: string) => {
     const next = new URLSearchParams(params.toString());
     next.delete("member");
@@ -40,7 +49,7 @@ export function PeopleView() {
     <div className="space-y-4">
       <PageHeader
         title={`Nhân sự · ${project.key}`}
-        description="Ai đang làm gì, làm được gì — kỹ năng tính từ việc đã làm, không từ tự khai. Hệ thống tính số, quyết định giao việc là của bạn."
+        description="Ai đang làm gì, còn bao nhiêu giờ, làm được gì — kỹ năng tính từ việc đã làm, không từ tự khai."
         breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: TABS.find((t) => t.key === tab)?.label ?? "Nhân sự" }]}
       />
 
@@ -69,17 +78,11 @@ export function PeopleView() {
         <TabsContent value="team">
           <TeamView />
         </TabsContent>
-        <TabsContent value="workload">
+        <TabsContent value="load">
           <WorkloadView />
-        </TabsContent>
-        <TabsContent value="balance">
-          <RebalanceView />
         </TabsContent>
         <TabsContent value="skills">
           <TeamSkillsView />
-        </TabsContent>
-        <TabsContent value="mine">
-          <MyProfileView />
         </TabsContent>
       </Tabs>
     </div>

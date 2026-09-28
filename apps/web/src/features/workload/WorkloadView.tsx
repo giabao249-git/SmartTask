@@ -30,7 +30,10 @@ const fmtWeek = (iso: string) => {
   return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
-/** Tải nhân sự theo tuần (tab trong màn Nhân sự) (UC-24/25): GET /projects/:id/workload (người × tuần), chi tiết cấu thành, bảng năng lực (UC-26, không xếp hạng). */
+/**
+ * Tab "Tải & giờ trống" (UC-24/25/26/27): tải 4 tuần (người × tuần, bấm ô xem cấu thành) và ngay dưới là giờ trống +
+ * ứng viên cho việc chưa giao. Trước đây là hai tab riêng ("Tải theo tuần", "Năng lực & cân bằng") lặp lại cùng số tải.
+ */
 export function WorkloadView() {
   const project = useCurrentProject();
   const router = useRouter();
@@ -131,6 +134,8 @@ export function WorkloadView() {
           </CardContent>
         </Card>
       )}
+
+      <CapacityTable projectId={project.id} sprintId={project.activeSprint?.id} canView={project.canManage} />
 
       <Sheet open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">

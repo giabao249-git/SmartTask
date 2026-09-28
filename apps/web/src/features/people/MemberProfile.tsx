@@ -90,7 +90,7 @@ export function MemberProfile({ projectId, member, self }: { projectId: string; 
               </Badge>
             ))}
           </div>
-          <p className="text-[11px] text-muted-foreground">Không dùng để chia việc. PM có thể xác nhận mức ở tab Kỹ năng nhóm, hoặc giao một việc nhỏ để có bằng chứng.</p>
+          <p className="text-[11px] text-muted-foreground">Không dùng để chia việc. PM có thể xác nhận mức ở tab Kỹ năng, hoặc giao một việc nhỏ để có bằng chứng.</p>
         </section>
       )}
     </div>

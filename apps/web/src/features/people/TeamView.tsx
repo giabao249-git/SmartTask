@@ -1,11 +1,9 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardCheck, Eye, Users2 } from "lucide-react";
+import { ChevronDown, Eye, PencilLine, Users2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -13,12 +11,16 @@ import { ErrorState } from "@/components/app/ErrorState";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { WorkloadBadge } from "@/components/app/WorkloadBadge";
 import { describeError } from "@/lib/api";
-import { usePendingReviews, useProjectWorkload, useSkillProfiles } from "@/lib/hooks/analytics";
+import { useProjectWorkload, useSkillProfiles } from "@/lib/hooks/analytics";
+import { useAuth } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DeclaredSkillsEditor } from "@/features/skills/SkillsMatrixView";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { projectRoleLabel } from "@/lib/status";
 import type { MemberProfileView } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { dm, pct } from "./format";
+import { pct } from "./format";
 import { MemberProfile } from "./MemberProfile";
 
 /**
@@ -31,7 +33,7 @@ export function TeamView() {
   const params = useSearchParams();
   const profiles = useSkillProfiles(project.id);
   const workload = useProjectWorkload(project.id, 1);
-  const pending = usePendingReviews(project.id, project.canManage);
+  const me = useAuth().user?.id;
   const openId = params.get("member");
   const setOpen = (id: string | null) => {
     const next = new URLSearchParams(params.toString());
@@ -46,47 +48,14 @@ export function TeamView() {
 
   const weekOf = new Map((workload.data?.users ?? []).map((u) => [u.userId, u.weeks[0]]));
   const opened = profiles.data.find((m) => m.id === openId) ?? null;
+  // Thẻ của chính mình lên đầu (thay tab "Hồ sơ của tôi" riêng — trùng với ngăn hồ sơ)
+  const ordered = [...profiles.data].sort((a, b) => Number(b.id === me) - Number(a.id === me));
 
   return (
     <div className="space-y-5">
-      {project.canManage && (pending.data?.length ?? 0) > 0 && (
-        <Card className="border-border/80">
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <ClipboardCheck className="h-4 w-4 text-info" /> {pending.data!.length} việc đã xong chờ bạn đánh giá
-            </CardTitle>
-            <CardDescription className="text-xs">Đánh giá là nguồn duy nhất cho biết việc làm tốt hay phải sửa — không có nó, hồ sơ kỹ năng chỉ tính nửa phần.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <ul className="divide-y divide-border/60">
-              {pending.data!.slice(0, 6).map((t) => (
-                <li key={t.id} className="flex items-center gap-3 py-2 text-xs min-w-0">
-                  <Link href={`/projects/${project.id}/tasks/${t.key}`} className="flex-1 min-w-0 truncate hover:underline">
-                    <span className="font-mono text-muted-foreground mr-1.5">{t.key}</span>
-                    {t.title}
-                  </Link>
-                  <span className="hidden sm:flex items-center gap-1 shrink-0">
-                    {t.assignees.slice(0, 2).map((a) => (
-                      <UserAvatar key={a.id} name={a.shortName ?? a.fullName} avatar={a.avatarUrl ?? undefined} size="sm" />
-                    ))}
-                  </span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">xong {dm(t.completedAt)}</span>
-                  {t.selfAssigned && (
-                    <Badge variant="outline" className="shrink-0 text-[10px] font-normal" title="Tự chấm không tính vào hồ sơ kỹ năng">
-                      việc của bạn
-                    </Badge>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {pending.data!.length > 6 && <p className="pt-1 text-[11px] text-muted-foreground">và {pending.data!.length - 6} việc nữa</p>}
-          </CardContent>
-        </Card>
-      )}
-
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {profiles.data.map((m) => (
-          <MemberCard key={m.id} member={m} week={weekOf.get(m.id)} loadingWeek={workload.isPending} onOpen={() => setOpen(m.id)} />
+        {ordered.map((m) => (
+          <MemberCard key={m.id} member={m} self={m.id === me} week={weekOf.get(m.id)} loadingWeek={workload.isPending} onOpen={() => setOpen(m.id)} />
         ))}
       </div>
 
@@ -99,6 +68,7 @@ export function TeamView() {
                 <SheetDescription>Kỹ năng theo việc đã làm và hiệu suất</SheetDescription>
               </SheetHeader>
               <MemberProfile projectId={project.id} member={opened} />
+              {opened.id === me && <DeclaredSection workspaceId={project.workspaceId} projectId={project.id} />}
             </>
           )}
         </SheetContent>
@@ -107,7 +77,7 @@ export function TeamView() {
   );
 }
 
-function MemberCard({ member: m, week, loadingWeek, onOpen }: { member: MemberProfileView; week?: { utilization: number }; loadingWeek: boolean; onOpen: () => void }) {
+function MemberCard({ member: m, self, week, loadingWeek, onOpen }: { member: MemberProfileView; self: boolean; week?: { utilization: number }; loadingWeek: boolean; onOpen: () => void }) {
   const proven = m.skills.filter((s) => s.confidence !== "none" && s.level > 0).slice(0, 4);
   const claimedOnly = m.skills.filter((s) => s.confidence === "none").length;
   const p = m.performance;
@@ -120,7 +90,14 @@ function MemberCard({ member: m, week, loadingWeek, onOpen }: { member: MemberPr
       <div className="flex items-center gap-3">
         <UserAvatar name={m.shortName ?? m.fullName} avatar={m.avatarUrl ?? undefined} showTooltip={false} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-foreground">{m.fullName}</p>
+          <div className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
+            {m.fullName}
+            {self && (
+              <Badge variant="info" className="px-1.5 py-0 text-[10px] font-normal">
+                Bạn
+              </Badge>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">{projectRoleLabel(m.role)}</p>
         </div>
         {m.viewer ? (
@@ -153,5 +130,26 @@ function MemberCard({ member: m, week, loadingWeek, onOpen }: { member: MemberPr
         </p>
       )}
     </button>
+  );
+}
+
+/** Tự khai của chính mình — chỉ tham khảo (docs 02/08), đặt trong ngăn hồ sơ thay vì một tab riêng. */
+function DeclaredSection({ workspaceId, projectId }: { workspaceId: string; projectId: string }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="mt-5 border-t border-border/60 pt-3">
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" className="h-auto w-full items-start justify-between gap-2 whitespace-normal px-0 py-1 text-left font-normal hover:bg-transparent">
+          <span>
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <PencilLine className="h-4 w-4 text-muted-foreground" /> Sửa kỹ năng tự khai (tham khảo)
+            </span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">Không dùng để chia việc. Cho PM biết bạn làm được hoặc muốn nhận mảng nào — PM có thể xác nhận thành bằng chứng.</span>
+          </span>
+          <ChevronDown className={cn("mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2">{open && <DeclaredSkillsEditor workspaceId={workspaceId} projectId={projectId} />}</CollapsibleContent>
+    </Collapsible>
   );
 }
