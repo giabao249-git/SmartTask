@@ -21,6 +21,12 @@ export interface DecomposeContext {
   workspaceId: string;
   /** Sprint đích đã chọn trên form (null = backlog) */
   sprintId: string | null;
+  /**
+   * Chat: `sprintId` chỉ là sprint đang xem trên thanh trên cùng, không phải lựa chọn cho yêu cầu này —
+   * người dùng nói "cho sprint 2" thì `action.sprint` (đã đối chiếu mã, chưa đóng) được dùng thay.
+   * Form phân rã: người dùng đã chọn sprint trên form → khác là lỗi.
+   */
+  sprintIsDefault?: boolean;
   today?: Date;
 }
 
@@ -84,7 +90,7 @@ export class ActionValidatorService {
             `Mã sprint ${action.sprint} không có trong ngữ cảnh`,
           ),
         );
-      else if (ctx.sprintId && id !== ctx.sprintId)
+      else if (ctx.sprintId && id !== ctx.sprintId && !ctx.sprintIsDefault)
         errors.push(
           issue(
             'sprint',

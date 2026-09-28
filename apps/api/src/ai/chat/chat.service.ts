@@ -414,6 +414,7 @@ export class ChatService {
       projectId,
       workspaceId,
       sprintId: ctx.meta.sprintId,
+      sprintIsDefault: true,
     };
     if (action.type === 'UPDATE_TASK_DRAFT' && !action.targetTask) {
       const keys = [
