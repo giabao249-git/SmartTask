@@ -142,8 +142,8 @@ export function SprintFormDialog({
           </div>
           {badRange && <p className="text-sm text-destructive">Ngày kết thúc phải sau ngày bắt đầu.</p>}
           {!badRange && clash && (
-            <p className="flex items-start gap-2 text-sm text-warning-foreground bg-warning/15 rounded-md px-3 py-2">
-              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <p className="flex items-start gap-2 text-sm text-foreground bg-warning/15 rounded-md px-3 py-2">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-warning" />
               Trùng ngày với {clash.name} ({clash.startDate.slice(5, 10)} → {clash.endDate.slice(5, 10)}). Vẫn lưu được, nhưng burn-down hai sprint sẽ chồng nhau.
             </p>
           )}

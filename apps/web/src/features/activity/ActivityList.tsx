@@ -59,7 +59,7 @@ export function ActivityList({ projectId, taskId, compact = false, limit = 30 }:
             {!taskId && a.taskKey && (
               <>
                 {" "}
-                <span className="font-mono text-muted-foreground">{a.taskKey}</span> <span className="text-muted-foreground truncate">{a.task?.title}</span>
+                <span className="font-mono text-muted-foreground">{a.taskKey}</span> <span className="text-muted-foreground break-words">{a.task?.title}</span>
               </>
             )}
             {a.action.startsWith("sprint.") ? (
