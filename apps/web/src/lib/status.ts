@@ -227,3 +227,21 @@ export function typeToHint(t: TaskType | string): string {
 }
 
 export const TASK_TYPES: TaskType[] = ["STORY", "TASK", "BUG"];
+
+/** Trạng thái sprint — nhãn tiếng Việt và màu dùng chung mọi màn (tab Sprint, ô lọc, thanh hàng loạt, chat). */
+export function sprintStatusLabel(s: string): string {
+  switch (s) {
+    case "ACTIVE":
+      return "Đang chạy";
+    case "PLANNED":
+      return "Kế hoạch";
+    case "CLOSED":
+      return "Đã đóng";
+    default:
+      return s;
+  }
+}
+
+export function sprintStatusVariant(s: string): BadgeVariant {
+  return s === "ACTIVE" ? "success" : s === "PLANNED" ? "info" : "secondary";
+}

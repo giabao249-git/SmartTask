@@ -19,6 +19,7 @@ import { useSprints } from "@/lib/hooks/queries";
 import type { ProjectDetail, SprintView } from "@/lib/types";
 import { toast } from "sonner";
 import { toastApiError, useInvalidateProject } from "./shared";
+import { sprintStatusLabel, sprintStatusVariant } from "@/lib/status";
 
 type SprintRow = SprintView & { estimateHours?: number; remainingHours?: number };
 type Form = { name: string; goal: string; startDate: string; endDate: string };
@@ -28,7 +29,6 @@ const empty = (): Form => {
   const end = new Date(d.getTime() + 13 * 86_400_000);
   return { name: "", goal: "", startDate: iso(d), endDate: iso(end) };
 };
-const statusVariant = (s: SprintView["status"]) => (s === "ACTIVE" ? "success" : s === "PLANNED" ? "info" : "secondary") as "success" | "info" | "secondary";
 
 /** Sprint (UC-09): GET/POST /projects/:id/sprints, PATCH /sprints/:id, POST start/close {moveOpenTo}. */
 export function SprintsTab({ project }: { project: ProjectDetail }) {
@@ -117,8 +117,8 @@ export function SprintsTab({ project }: { project: ProjectDetail }) {
                     {s.goal && <div className="text-[10px] text-muted-foreground line-clamp-1">{s.goal}</div>}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(s.status)} className="text-[10px]">
-                      {s.status}
+                    <Badge variant={sprintStatusVariant(s.status)} className="text-[10px]">
+                      {sprintStatusLabel(s.status)}
                     </Badge>
                   </TableCell>
                   <TableCell className="font-mono text-muted-foreground">
@@ -207,7 +207,7 @@ export function SprintsTab({ project }: { project: ProjectDetail }) {
               </SelectItem>
               {targets.map((s) => (
                 <SelectItem key={s.id} value={s.id} className="text-xs">
-                  {s.name} · {s.status}
+                  {s.name} · {sprintStatusLabel(s.status)}
                 </SelectItem>
               ))}
             </SelectContent>

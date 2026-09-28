@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useSprints } from "@/lib/hooks/queries";
 import { cn } from "@/lib/utils";
-import { TASK_TYPES, typeToLabel } from "@/lib/status";
+import { TASK_TYPES, typeToLabel, sprintStatusLabel } from "@/lib/status";
 import { useWorkFilters, type GroupBy, type QuickFilter } from "./filters";
 import { SavedFilters } from "./SavedFilters";
 
@@ -76,7 +76,7 @@ export function WorkFilterBar({ counts, syncing }: { counts: { my: number; unass
           </SelectItem>
           {(sprints.data ?? []).map((s) => (
             <SelectItem key={s.id} value={s.id} className="text-xs">
-              {s.name} · {s.status}
+              {s.name} · {sprintStatusLabel(s.status)}
             </SelectItem>
           ))}
         </SelectContent>
