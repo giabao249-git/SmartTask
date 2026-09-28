@@ -362,10 +362,21 @@ export class SprintsService {
       this.prisma.activityLog.findMany({
         where: {
           projectId: s.projectId,
-          action: { in: ['sprint.closed', 'sprint.tasks_added'] },
+          OR: [
+            { action: { in: ['sprint.closed', 'sprint.tasks_added'] } },
+            // Nhật ký việc chỉ cần từ lúc sprint bắt đầu — không kéo cả lịch sử dự án
+            ...(s.startedAt
+              ? [
+                  {
+                    action: { in: ['task.updated', 'task.created'] },
+                    createdAt: { gt: s.startedAt },
+                  },
+                ]
+              : []),
+          ],
         },
         orderBy: { createdAt: 'asc' },
-        select: { action: true, diff: true, createdAt: true },
+        select: { action: true, diff: true, createdAt: true, taskId: true },
       }),
     ]);
     const brief = (t: (typeof tasks)[number]) => ({
@@ -413,8 +424,10 @@ export class SprintsService {
     // Nhật ký: việc bị đẩy đi lúc đóng, việc được chuyển vào từ sprint khác, việc thêm sau khi bắt đầu
     const diffs = logs.map((l) => ({
       action: l.action,
+      at: l.createdAt,
+      taskId: l.taskId,
       d: (l.diff ?? {}) as {
-        sprintId?: string;
+        sprintId?: string | { from?: unknown; to?: unknown };
         movedTaskIds?: string[];
         movedTo?: string | null;
         taskIds?: string[];
@@ -427,6 +440,10 @@ export class SprintsService {
     const carriedInIds = diffs
       .filter((x) => x.action === 'sprint.closed' && x.d.movedTo === sprintId)
       .flatMap((x) => x.d.movedTaskIds ?? []);
+    // Phạm vi tăng giữa chừng — CHỈ dựa vào nhật ký (so createdAt của việc với startedAt sẽ sai với dữ liệu nhập
+    // tay/seed): đưa hàng loạt sau khi bắt đầu · đổi sprint từng việc sau khi bắt đầu · tạo mới khi sprint đã chạy
+    const after = (at: Date) => !!s.startedAt && at > s.startedAt;
+    const inSprint = new Set(tasks.map((t) => t.id));
     const addedIds = new Set([
       ...diffs
         .filter(
@@ -436,10 +453,25 @@ export class SprintsService {
             x.d.afterStart,
         )
         .flatMap((x) => x.d.taskIds ?? []),
-      // Việc tạo thẳng vào sprint sau khi đã bắt đầu cũng là phạm vi tăng giữa chừng
-      ...(s.startedAt
-        ? tasks.filter((t) => t.createdAt > s.startedAt!).map((t) => t.id)
-        : []),
+      ...diffs
+        .filter(
+          (x) =>
+            x.action === 'task.updated' &&
+            typeof x.d.sprintId === 'object' &&
+            x.d.sprintId?.to === sprintId &&
+            after(x.at),
+        )
+        .map((x) => x.taskId)
+        .filter((id): id is string => !!id),
+      ...diffs
+        .filter(
+          (x) =>
+            x.action === 'task.created' &&
+            !!x.taskId &&
+            inSprint.has(x.taskId) &&
+            after(x.at),
+        )
+        .map((x) => x.taskId!),
     ]);
     const others = await this.prisma.task.findMany({
       where: {

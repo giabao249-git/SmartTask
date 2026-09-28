@@ -25,6 +25,7 @@ import { SprintPlanner } from "./SprintPlanner";
 import { StartSprintDialog } from "./StartSprintDialog";
 import { CloseSprintDialog } from "./CloseSprintDialog";
 import { VelocityCard } from "./VelocityCard";
+import { BurndownCard } from "./BurndownCard";
 import { dm, hrs, useInvalidateSprints } from "./shared";
 
 const ORDER: Record<SprintView["status"], number> = { ACTIVE: 0, PLANNED: 1, CLOSED: 2 };
@@ -193,7 +194,8 @@ function SprintDetail({ sprint, sprints, canManage, onEdit, onOpenSprint }: { sp
         </CardContent>
       </Card>
 
-      {sprint.status !== "CLOSED" ? <SprintPlanner project={project} sprint={sprint} /> : s && <ClosedLists s={s} projectId={project.id} />}
+      {sprint.status === "ACTIVE" && <BurndownCard sprintId={sprint.id} closed={false} />}
+      {sprint.status !== "CLOSED" ? <SprintPlanner project={project} sprint={sprint} /> : s && <SprintReport s={s} projectId={project.id} />}
 
       <StartSprintDialog sprint={sprint} sprints={sprints} summary={s} open={starting} onOpenChange={setStarting} onStarted={invalidate} onOpenSprint={onOpenSprint} />
 
@@ -296,11 +298,17 @@ function SummaryBlock({ s }: { s: SprintSummaryView }) {
   );
 }
 
-function ClosedLists({ s, projectId }: { s: SprintSummaryView; projectId: string }) {
+/** Báo cáo sprint đã đóng (UC-30, docs 02/07 C3 — các mục của Sprint report Jira). Nguồn: GET /sprints/:id/summary. */
+function SprintReport({ s, projectId }: { s: SprintSummaryView; projectId: string }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <BriefList title={`Đã xong (${s.completed.length})`} rows={s.completed} projectId={projectId} empty="Không việc nào xong trong sprint này." />
-      <BriefList title={`Bị chuyển đi lúc đóng (${s.carriedOut.length})`} rows={s.carriedOut} projectId={projectId} empty="Không có việc dở lúc đóng (hoặc sprint đóng trước khi có nhật ký này)." />
+    <div className="space-y-4">
+      <BurndownCard sprintId={s.sprint.id} closed />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <BriefList title={`Đã xong (${s.completed.length})`} rows={s.completed} projectId={projectId} empty="Không việc nào xong trong sprint này." />
+        <BriefList title={`Bị chuyển đi lúc đóng (${s.carriedOut.length})`} rows={s.carriedOut} projectId={projectId} empty="Không có việc dở lúc đóng (hoặc sprint đóng trước khi có nhật ký này)." />
+        <BriefList title={`Thêm sau khi bắt đầu (${s.addedAfterStart.length})`} rows={s.addedAfterStart} projectId={projectId} empty="Phạm vi không đổi sau khi bắt đầu." />
+        {s.carriedIn.length > 0 && <BriefList title={`Chuyển vào từ sprint trước (${s.carriedIn.length})`} rows={s.carriedIn} projectId={projectId} empty="" />}
+      </div>
     </div>
   );
 }

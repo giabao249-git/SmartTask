@@ -459,6 +459,27 @@ describe('Dự án, sprint, task (e2e)', () => {
     expect(sum.body.addedAfterStart.map((t: { id: string }) => t.id)).toContain(
       t1.id,
     );
+    // Thành viên đổi sprint từng việc (PATCH mang version) sau khi bắt đầu cũng là phạm vi tăng
+    const cur = await api()
+      .get(`/api/v1/tasks/${t2.id}`)
+      .set(auth(dev))
+      .expect(200);
+    await api()
+      .patch(`/api/v1/tasks/${t2.id}`)
+      .set(auth(dev))
+      .send({ version: cur.body.version, sprintId: s2.id })
+      .expect(200);
+    let ids: string[] = [];
+    for (let i = 0; i < 20 && !ids.includes(t2.id); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const r = await api()
+        .get(`/api/v1/sprints/${s2.id}/summary`)
+        .set(auth(dev))
+        .expect(200);
+      ids = r.body.addedAfterStart.map((t: { id: string }) => t.id);
+      sum = r;
+    }
+    expect(ids).toEqual(expect.arrayContaining([t1.id, t2.id]));
     const again = await api()
       .get(`/api/v1/projects/${projectId}/sprints`)
       .set(auth(pm))
