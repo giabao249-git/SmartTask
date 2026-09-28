@@ -2,32 +2,29 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
-import { CalendarRange, Flag, Loader2, Pencil, Play, Plus, Square, Target, Users2 } from "lucide-react";
+import { CalendarRange, Flag, Pencil, Play, Plus, Square, Target, Users2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { PageHeader } from "@/components/app/PageHeader";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { useBoardRealtime } from "@/features/board/hooks";
-import { api, describeError } from "@/lib/api";
+import { describeError } from "@/lib/api";
 import { useSprintSummary } from "@/lib/hooks/analytics";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useSprints } from "@/lib/hooks/queries";
 import { percentToWorkload, sprintStatusLabel, sprintStatusVariant } from "@/lib/status";
 import type { SprintSummaryView, SprintView } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import { SprintFormDialog } from "./SprintFormDialog";
 import { SprintPlanner } from "./SprintPlanner";
 import { StartSprintDialog } from "./StartSprintDialog";
-import { dm, hrs, toastSprintError, useInvalidateSprints } from "./shared";
+import { CloseSprintDialog } from "./CloseSprintDialog";
+import { dm, hrs, useInvalidateSprints } from "./shared";
 
 const ORDER: Record<SprintView["status"], number> = { ACTIVE: 0, PLANNED: 1, CLOSED: 2 };
 /** Màu thanh theo variant của lib/status (token, không hex) */
@@ -128,7 +125,7 @@ function SprintListItem({ s, active, onClick }: { s: SprintView; active: boolean
         </Badge>
       </span>
       <span className="text-xs text-muted-foreground tabular-nums">
-        {dm(s.startDate)} → {dm(s.endDate)} · {done}/{total} việc xong · còn {hrs(s.remainingHours ?? 0)}
+        {dm(s.startDate)} → {dm(s.endDate)} · {s.status === "CLOSED" ? `${done} việc xong` : `${done}/${total} việc xong · còn ${hrs(s.remainingHours ?? 0)}`}
       </span>
       <Progress value={total ? (done / total) * 100 : 0} className="h-1" />
     </Button>
@@ -140,23 +137,8 @@ function SprintDetail({ sprint, sprints, canManage, onEdit, onOpenSprint }: { sp
   const summary = useSprintSummary(sprint.id);
   const invalidate = useInvalidateSprints(project.id);
   const [closing, setClosing] = React.useState(false);
-  const [moveTo, setMoveTo] = React.useState("backlog");
 
   const [starting, setStarting] = React.useState(false);
-  const close = useMutation({
-    mutationFn: () =>
-      api.post<SprintView & { movedTaskIds: string[] }>(`/sprints/${sprint.id}/close`, {
-        moveOpenTo: moveTo,
-      }),
-    onSuccess: (r) => {
-      invalidate();
-      setClosing(false);
-      toast.success(`Đã kết thúc ${sprint.name}`, {
-        description: r.movedTaskIds.length ? `${r.movedTaskIds.length} việc chưa xong đã được chuyển đi` : "Không còn việc dở",
-      });
-    },
-    onError: toastSprintError,
-  });
 
   const s = summary.data;
   return (
@@ -185,7 +167,7 @@ function SprintDetail({ sprint, sprints, canManage, onEdit, onOpenSprint }: { sp
                 )}
                 {sprint.status === "ACTIVE" && (
                   <Button size="sm" variant="secondary" onClick={() => setClosing(true)} className="gap-1.5">
-                    <Square className="h-4 w-4" /> Kết thúc sprint
+                    <Square className="h-4 w-4" /> Kết thúc sprint…
                   </Button>
                 )}
               </div>
@@ -211,37 +193,7 @@ function SprintDetail({ sprint, sprints, canManage, onEdit, onOpenSprint }: { sp
 
       <StartSprintDialog sprint={sprint} sprints={sprints} summary={s} open={starting} onOpenChange={setStarting} onStarted={invalidate} onOpenSprint={onOpenSprint} />
 
-      <Dialog open={closing} onOpenChange={setClosing}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Kết thúc {sprint.name}?</DialogTitle>
-            <DialogDescription>{s ? `${s.open.length} việc chưa xong (${hrs(s.remainingHours)} còn lại) sẽ được chuyển đi.` : "Việc chưa xong sẽ được chuyển đi."}</DialogDescription>
-          </DialogHeader>
-          <Select value={moveTo} onValueChange={setMoveTo}>
-            <SelectTrigger aria-label="Chuyển việc dở tới">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="backlog">Backlog</SelectItem>
-              {sprints
-                .filter((x) => x.id !== sprint.id && x.status !== "CLOSED")
-                .map((x) => (
-                  <SelectItem key={x.id} value={x.id}>
-                    {x.name} · {sprintStatusLabel(x.status)}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setClosing(false)}>
-              Huỷ
-            </Button>
-            <Button onClick={() => close.mutate()} disabled={close.isPending}>
-              {close.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Kết thúc sprint
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CloseSprintDialog sprint={sprint} sprints={sprints} summary={s} members={project.members} open={closing} onOpenChange={setClosing} onClosed={invalidate} />
     </div>
   );
 }
@@ -263,7 +215,15 @@ function SummaryBlock({ s }: { s: SprintSummaryView }) {
           value={hrs(s.committedHours)}
           hint={status !== "PLANNED" && s.scopeHours > s.committedHours ? `phạm vi nay ${hrs(s.scopeHours)}` : status === "PLANNED" ? "chốt khi bắt đầu" : undefined}
         />
-        <Stat label="Chưa giao" value={`${s.unassigned.tasks} việc`} hint={s.unassigned.tasks ? hrs(s.unassigned.hours) : undefined} tone={s.unassigned.tasks ? "warning" : undefined} />
+        {status === "CLOSED" ? (
+          <Stat
+            label="Bị chuyển đi lúc đóng"
+            value={`${s.carriedOut.length} việc`}
+            hint={s.carriedOut.length ? `${hrs(s.carriedOut.reduce((x, t) => x + t.estimateHours, 0))} ước lượng` : undefined}
+          />
+        ) : (
+          <Stat label="Chưa giao" value={`${s.unassigned.tasks} việc`} hint={s.unassigned.tasks ? hrs(s.unassigned.hours) : undefined} tone={s.unassigned.tasks ? "warning" : undefined} />
+        )}
       </div>
 
       {status !== "CLOSED" && (

@@ -44,6 +44,8 @@ export interface SprintEventPayload {
   afterStart?: boolean;
   /** Đóng sprint: việc dở chuyển về đâu (id sprint đích hoặc null = backlog) */
   movedTo?: string | null;
+  /** Idempotency-Key của lần đóng — bấm lại cùng khoá thì trả kết quả cũ (docs 11 §2) */
+  idempotencyKey?: string;
   at: Date;
 }
 

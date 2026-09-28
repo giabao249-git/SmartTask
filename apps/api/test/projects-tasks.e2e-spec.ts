@@ -525,4 +525,44 @@ describe('Dự án, sprint, task (e2e)', () => {
       .send({ version: t.body.version, title: 'x' })
       .expect(403);
   });
+
+  it('đóng sprint bấm hai lần cùng Idempotency-Key → trả kết quả lần đầu; không khoá → 409', async () => {
+    const list = await api()
+      .get(`/api/v1/projects/${projectId}/sprints`)
+      .set(auth(pm))
+      .expect(200);
+    const active = list.body.find(
+      (x: { status: string }) => x.status === 'ACTIVE',
+    );
+    const key = 'close-once-7f3a';
+    const first = await api()
+      .post(`/api/v1/sprints/${active.id}/close`)
+      .set(auth(pm))
+      .set('Idempotency-Key', key)
+      .send({ moveOpenTo: 'backlog' })
+      .expect(201);
+    // Nhật ký (nơi giữ khoá) ghi bất đồng bộ — chờ cho chắc
+    let again = await api()
+      .post(`/api/v1/sprints/${active.id}/close`)
+      .set(auth(pm))
+      .set('Idempotency-Key', key)
+      .send({ moveOpenTo: 'backlog' });
+    for (let i = 0; i < 20 && again.status !== 201; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      again = await api()
+        .post(`/api/v1/sprints/${active.id}/close`)
+        .set(auth(pm))
+        .set('Idempotency-Key', key)
+        .send({ moveOpenTo: 'backlog' });
+    }
+    expect(again.status).toBe(201);
+    expect(again.body.movedTaskIds).toEqual(first.body.movedTaskIds);
+    expect(again.body.status).toBe('CLOSED');
+    const other = await api()
+      .post(`/api/v1/sprints/${active.id}/close`)
+      .set(auth(pm))
+      .send({ moveOpenTo: 'backlog' })
+      .expect(409);
+    expect(other.body.code).toBe('SPRINT_NOT_ACTIVE');
+  });
 });

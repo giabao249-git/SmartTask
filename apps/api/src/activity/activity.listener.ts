@@ -74,6 +74,7 @@ export class ActivityListener {
         sprintId: p.sprintId,
         movedTaskIds: p.movedTaskIds ?? [],
         movedTo: p.movedTo ?? null,
+        ...(p.idempotencyKey ? { idempotencyKey: p.idempotencyKey } : {}),
       },
       createdAt: p.at,
     });

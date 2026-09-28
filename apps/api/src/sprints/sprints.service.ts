@@ -183,9 +183,42 @@ export class SprintsService {
   }
 
   /** Đóng sprint: việc chưa xong về backlog hoặc sang sprint khác (PLANNED/ACTIVE cùng dự án). */
-  async close(userId: string, sprintId: string, dto: CloseSprintDto) {
+  async close(
+    userId: string,
+    sprintId: string,
+    dto: CloseSprintDto,
+    idempotencyKey?: string,
+  ) {
     const s = await this.load(sprintId);
     await this.access.assertManage(userId, s.projectId);
+    if (s.status === SprintStatus.CLOSED && idempotencyKey) {
+      // Lần bấm lặp với cùng khoá: trả đúng kết quả lần đầu (nhật ký sprint.closed giữ khoá + việc đã chuyển)
+      const logs = await this.prisma.activityLog.findMany({
+        where: { projectId: s.projectId, action: 'sprint.closed' },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { diff: true },
+      });
+      const hit = logs
+        .map(
+          (l) =>
+            (l.diff ?? {}) as {
+              sprintId?: string;
+              idempotencyKey?: string;
+              movedTaskIds?: string[];
+              movedTo?: string | null;
+            },
+        )
+        .find(
+          (d) => d.sprintId === sprintId && d.idempotencyKey === idempotencyKey,
+        );
+      if (hit)
+        return {
+          ...s,
+          movedTaskIds: hit.movedTaskIds ?? [],
+          movedTo: hit.movedTo ?? 'backlog',
+        };
+    }
     if (s.status !== SprintStatus.ACTIVE)
       throw new AppError('SPRINT_NOT_ACTIVE', HttpStatus.CONFLICT);
     let targetSprintId: string | null = null;
@@ -227,6 +260,7 @@ export class SprintsService {
       actorId: userId,
       movedTaskIds,
       movedTo: targetSprintId,
+      idempotencyKey,
       at: new Date(),
     });
     const closed = await this.prisma.sprint.findUniqueOrThrow({
