@@ -116,6 +116,114 @@ export function itemsOf(a: ProposalAction): DraftItem[] {
   }
 }
 
+/** Chi tiết để HIỂN THỊ một mục (không vào prompt): trước đây panel bản nháp chỉ có tiêu đề/giờ/người. */
+export interface DraftItemDetail {
+  description?: string;
+  taskType?: string;
+  priority?: string;
+  difficulty?: number;
+  /** Vì sao AI chọn người/ước lượng — thông tin quan trọng nhất để người duyệt quyết */
+  reason?: string;
+  subtasks?: number;
+  skills?: { code: string; minLevel: number }[];
+  /** UPDATE_TASK_DRAFT: các trường sẽ đổi */
+  patch?: Record<string, unknown>;
+}
+
+export function itemDetailsOf(
+  a: ProposalAction,
+): Record<string, DraftItemDetail> {
+  const out: Record<string, DraftItemDetail> = {};
+  const fromTask = (t: {
+    draftKey: string;
+    description?: string;
+    taskType?: string;
+    priority?: string;
+    difficulty?: number;
+    reason?: string;
+    subtasks: unknown[];
+    requiredSkills: { skill: string; minLevel: number }[];
+  }) => {
+    out[t.draftKey] = {
+      description: t.description,
+      taskType: t.taskType,
+      priority: t.priority,
+      difficulty: t.difficulty,
+      reason: t.reason,
+      subtasks: t.subtasks.length || undefined,
+      skills: t.requiredSkills.map((s) => ({
+        code: s.skill,
+        minLevel: s.minLevel,
+      })),
+    };
+  };
+  switch (a.type) {
+    case 'DECOMPOSE_PROPOSAL':
+      a.tasks.forEach(fromTask);
+      break;
+    case 'CREATE_TASK_DRAFT':
+      a.drafts.forEach(fromTask);
+      break;
+    case 'UPDATE_TASK_DRAFT':
+      out[a.draftKey ?? 'd0'] = {
+        reason: a.resolutionReason,
+        patch: a.patch,
+      };
+      break;
+    case 'ASSIGN_PROPOSAL':
+      a.assignments.forEach(
+        (x, i) => (out[x.draftKey ?? `d${i}`] = { reason: x.reason }),
+      );
+      break;
+    case 'REBALANCE_PROPOSAL':
+      a.moves.forEach(
+        (x, i) => (out[x.draftKey ?? `d${i}`] = { reason: x.reason }),
+      );
+      break;
+  }
+  return out;
+}
+
+export interface ItemIssue {
+  severity: 'error' | 'warning';
+  code: string;
+  /** Câu tiếng Việt của Validator (đã có tên người, số giờ) — không kèm đường dẫn JSON */
+  message: string;
+}
+
+/**
+ * Gắn lỗi/cảnh báo của Validator vào ĐÚNG mục: `tasks[2].suggestedAssignee` → mục thứ 3. Trước đây panel đổ mọi lỗi
+ * thành một khối chữ đỏ kèm mã máy ở đầu đề xuất, nhìn thẻ việc không biết việc nào có vấn đề.
+ */
+export function issuesByKey(
+  a: ProposalAction,
+  validation: {
+    errors?: { path: string; code: string; message: string }[];
+    warnings?: { path: string; code: string; message: string }[];
+  } | null,
+): { byKey: Record<string, ItemIssue[]>; general: ItemIssue[] } {
+  const keys = itemsOf(a).map((i) => i.draftKey);
+  const byKey: Record<string, ItemIssue[]> = {};
+  const general: ItemIssue[] = [];
+  const push = (
+    severity: ItemIssue['severity'],
+    x: { path: string; code: string; message: string },
+  ) => {
+    const m = /^(?:tasks|drafts|assignments|moves)\[(\d+)\]/.exec(x.path);
+    const key = m
+      ? keys[Number(m[1])]
+      : a.type === 'UPDATE_TASK_DRAFT'
+        ? keys[0]
+        : undefined;
+    const issue = { severity, code: x.code, message: x.message };
+    if (key) (byKey[key] ??= []).push(issue);
+    else general.push(issue);
+  };
+  for (const e of validation?.errors ?? []) push('error', e);
+  for (const w of validation?.warnings ?? []) push('warning', w);
+  return { byKey, general };
+}
+
 export function itemKeys(a: ProposalAction): string[] {
   return itemsOf(a).map((i) => i.draftKey);
 }

@@ -731,6 +731,20 @@ describe('AI chat theo phiên (e2e)', () => {
       });
       expect(after.version).toBe(before.version);
     });
+
+    it('thiếu patch mà reply nói "Đã cập nhật" → gọi lại 1 lần; vẫn thiếu → trả lời thật "chưa thay đổi gì"', async () => {
+      const lie = {
+        type: 'UPDATE_TASK_DRAFT',
+        reply: 'Đã cập nhật d2 với độ khó 4.',
+        targetDraftKeys: ['d2'],
+        warnings: [],
+      };
+      AiMockQueue.push(lie, lie);
+      const res = await say('cái thứ hai đổi 8 giờ và độ khó 4').expect(200);
+      expect(res.body.action.type).toBe('CHAT_RESPONSE');
+      expect(res.body.action.reply).toMatch(/^Mình chưa thay đổi gì/);
+      expect(res.body.usage.attempts).toBe(2);
+    });
   });
 
   it('tra cứu: "Làm mới" giải được mã của phiên chỉ có tra cứu; mã sprint không đổi khi có sprint mới hay sprint bị đóng', async () => {

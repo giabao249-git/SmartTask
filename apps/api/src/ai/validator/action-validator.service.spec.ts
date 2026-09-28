@@ -179,6 +179,24 @@ describe('ActionValidatorService.validateDecompose — 7 mã lỗi', () => {
     );
   });
 
+  it('sprint AI nêu khác sprint đang chọn: form → lỗi; chat (sprintIsDefault) → dùng sprint AI nêu', async () => {
+    const S2 = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    const book = codes();
+    book.assign('s', S2); // s2
+    const onForm = await makeService({}).validateDecompose(proposal([], 's2'), {
+      ...ctx(),
+      codes: book,
+    });
+    expect(onForm.errors.map((e) => e.path)).toContain('sprint');
+    const inChat = await makeService({}).validateDecompose(proposal([], 's2'), {
+      ...ctx(),
+      codes: book,
+      sprintIsDefault: true,
+    });
+    expect(inChat.errors.map((e) => e.path)).not.toContain('sprint');
+    expect(inChat.resolution.sprintId).toBe(S2);
+  });
+
   it('tên kỹ năng LLM sinh: khớp alias không dấu → dùng; không khớp → cảnh báo SKILL_UNKNOWN và bỏ (không lỗi)', async () => {
     const r = await makeService({}).validateDecompose(
       proposal([

@@ -35,7 +35,10 @@ export function UserAvatar({
   const computedInitials =
     initials ||
     name
-      .split(" ")
+      // "Minh (BE Dev)" → "Minh": phần trong ngoặc là chức danh, không phải tên (từng ra chữ tắt "M(")
+      .replace(/\(.*?\)/g, "")
+      .trim()
+      .split(/\s+/)
       .map((part) => part[0])
       .join("")
       .slice(0, 2)

@@ -50,6 +50,10 @@ export function normalizeAction(raw: unknown, repairs: string[]): unknown {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
   const a = { ...(raw as Record<string, unknown>) };
   dropEmptyCodes(a, repairs, '');
+  // Schema Gemini bắt buộc nêu các trường này (được null / []) — null/[] nghĩa là "không dùng"
+  for (const k of NULLABLE_ROOT)
+    if (a[k] === null || (Array.isArray(a[k]) && !(a[k] as unknown[]).length))
+      delete a[k];
 
   if (a.type === 'UPDATE_TASK_DRAFT') {
     const keys = new Set(
@@ -145,6 +149,9 @@ function dropEmptyCodes(
 }
 
 const DRAFT_KEY = /^d\d{1,3}$/;
+
+/** Trường gốc schema Gemini bắt buộc có mặt (docs 02/07 — đo 28/09) nhưng chỉ vài type dùng. */
+const NULLABLE_ROOT = ['sprint', 'targetDraftKeys', 'patch'] as const;
 
 /** Trường chỉ nhận mã ngắn hoặc ngày — không bao giờ có nghĩa khi là chuỗi rỗng. */
 const CODE_FIELDS = new Set([

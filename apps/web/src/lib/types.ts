@@ -124,6 +124,25 @@ export interface ProposalItem {
   status: DraftItemStatus;
   taskId: string | null;
   edited: boolean;
+  /** Chi tiết để hiển thị (mô tả, loại, ưu tiên, độ khó, lý do, việc con, kỹ năng kèm mức) */
+  detail?: {
+    description?: string;
+    taskType?: TaskType;
+    priority?: TaskPriority;
+    difficulty?: number;
+    reason?: string;
+    subtasks?: number;
+    skills?: { code: string; minLevel: number }[];
+    patch?: Record<string, unknown>;
+  };
+  /** Lỗi/cảnh báo của Validator gắn đúng mục này (câu tiếng Việt, đã có tên người và số giờ) */
+  issues?: ProposalIssue[];
+}
+
+export interface ProposalIssue {
+  severity: "error" | "warning";
+  code: string;
+  message: string;
 }
 
 export interface CodeMap {
@@ -150,6 +169,8 @@ export interface ProposalView {
   appliedMap: Record<string, string>;
   applied: { taskIds: string[]; tasks: { draftKey: string; taskId: string; key: string }[] } | null;
   validation: ValidationResult | null;
+  /** Vấn đề không thuộc riêng mục nào (sprint, cả đề xuất) */
+  generalIssues?: ProposalIssue[];
   codeMap: CodeMap | null;
   appliedById: string | null;
   appliedAt: string | null;

@@ -94,6 +94,7 @@ Chính sách chọn người nằm ở **WORKSPACE prompt** (admin sửa trên m
 | `GET /ai/sessions?projectId=` · `POST /ai/sessions` · `PATCH /ai/sessions/:id` (title/archive) · `DELETE /ai/sessions/:id` | tự chủ sở hữu; xoá phiên → proposal DRAFT của phiên → REJECTED, APPLIED giữ (session_id SetNull) |
 | `GET /ai/sessions/:id` | `{session, messages[], proposals[]}` — dùng khi mở lại |
 | `GET /ai/sessions/:id/proposals` | riêng cho panel/refetch |
+| *(mỗi proposal trong các phản hồi trên)* | từng item có `detail` (mô tả, loại, ưu tiên, độ khó, lý do AI, số việc con, kỹ năng `{code,minLevel}`, `patch` với đề xuất sửa task thật) và `issues[] {severity, code, message}` — lỗi/cảnh báo của validator đã gắn về đúng item theo `tasks[i]`/`drafts[i]`/`assignments[i]`/`moves[i]`; phần không thuộc item nào nằm ở `generalIssues[]` |
 | `PATCH /ai/proposals/:id/items/:draftKey` `{patch, version}` | người sửa tay trên panel (không qua LLM); ghi `ai_feedback` EDITED khi duyệt |
 | `POST /ai/proposals/:id/apply` `{draftKeys?: [], version}` | duyệt toàn bộ hoặc một phần; trả `{proposal, createdTasks[]}`; phát `ai.proposal.updated` |
 | `POST /ai/proposals/:id/reject` `{draftKeys?: []}` | huỷ toàn bộ hoặc một phần |
@@ -104,8 +105,8 @@ Realtime: `ai.proposal.updated {sessionId, proposal}` và `ai.session.updated` t
 ## 6. Giao diện (hợp đồng cho `apps/web`)
 
 - Trang `/projects/:key/assistant`: **trái** danh sách phiên (tiêu đề tự đặt từ tin đầu, ngày, số nháp mở, badge kind); **giữa** khung chat; **phải** rail "Bản nháp trong phiên" (ẩn ↔ hiện, ≥1280px mới hiện cạnh nhau; < 1280px là Sheet/tab).
-- Rail vẽ **từ `proposals` server trả**, mỗi proposal một Card: tiêu đề theo kind, danh sách item (draftKey, tiêu đề, giờ, người, hạn, badge), nút *Sửa tay* / *Bỏ* từng item, nút **Duyệt** (primary) và *Duyệt các mục đã chọn*.
+- Rail vẽ **từ `proposals` server trả**, mỗi proposal một Card. Đầu thẻ: tiêu đề theo kind, **số việc · tổng giờ**, huy hiệu **"Vào <sprint>"** (hoặc Backlog), dòng *giờ đã có + giờ đề xuất / năng lực* của sprint đích (`GET /sprints/:id/summary`) kèm % theo màu tải, và dòng "n/m việc còn lỗi". Mỗi item: draftKey, loại, ưu tiên, tiêu đề, mô tả (2 dòng), **người thực hiện (tên + avatar, chữ thường không mờ)**, giờ, độ khó, hạn, kỹ năng "Tên · mức ≥ n", phụ thuộc, số việc con, lý do AI, và **lỗi/cảnh báo của chính item đó bằng câu tiếng Việt — không in mã lỗi hay đường dẫn `tasks[0]…`**. Nút *Sửa tay* / *Bỏ* từng item; nút **Duyệt** chỉ gồm các item không lỗi ("Duyệt 2 việc không lỗi"), mọi item đều lỗi thì khoá ("Còn lỗi — chưa duyệt được") — API vẫn kiểm lại và trả 422 nếu lọt.
 - Màu theo trạng thái item/proposal, chỉ qua `lib/status.ts`: `DRAFT` viền `info` + badge "AI · chờ duyệt"; `APPLIED` viền/nền `success` (xanh lá) + mã task thật `ST-31` bấm mở Sheet; `DISCARDED` gạch ngang mờ; `EXPIRED` badge `warning`.
 - Khi AI trả `UPDATE_TASK_DRAFT` thành công, item vừa đổi nhấp sáng 1 lần (highlight) và cuộn tới; khi `ASK_CLARIFICATION`, chat hiện chip lựa chọn, bấm chip gửi `selectedCode`.
-- Không có nút "tạo" nào trong bong bóng chat — tạo thật chỉ ở rail; thẻ trong chat chỉ là bản ghi lịch sử (readonly) và có link "xem ở panel".
+- Không có nút "tạo" nào trong bong bóng chat — tạo thật chỉ ở rail. Thẻ trong chat (readonly) tóm tắt: loại đề xuất · số việc · tổng giờ · sprint; tối đa 6 dòng "dN · tiêu đề · giờ · người"; số lỗi/cảnh báo; nút **"Xem và duyệt"** mở rail (màn hẹp mở Sheet), cuộn tới các item và nhấp sáng.
 - Trạng thái: đang gọi AI (khoá ô nhập + skeleton bong bóng), 409 đang có lượt khác (toast), version conflict (Alert "bản nháp đã đổi ở tab khác — tải lại"), phiên rỗng (EmptyState gợi ý 4 câu lệnh mẫu).

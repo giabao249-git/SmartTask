@@ -12,6 +12,8 @@ import {
   kindOf,
   patchItem,
   type ProposalAction,
+  issuesByKey,
+  itemDetailsOf,
 } from './draft-items';
 
 const decompose = () =>
@@ -144,5 +146,84 @@ describe('draft-items — lọc tập con & suy trạng thái (docs 12 §2)', ()
     expect(deriveStatus({ d1: 'APPLIED', d2: 'DRAFT' })).toBe('DRAFT');
     expect(deriveStatus({ d1: 'APPLIED', d2: 'DISCARDED' })).toBe('APPLIED');
     expect(deriveStatus({ d1: 'DISCARDED', d2: 'DISCARDED' })).toBe('REJECTED');
+  });
+});
+
+describe('panel bản nháp: chi tiết và vấn đề gắn đúng mục', () => {
+  const action = {
+    type: 'DECOMPOSE_PROPOSAL' as const,
+    reply: 'r',
+    sprint: 's1',
+    assumptions: [],
+    tasks: [
+      {
+        draftKey: 'd3',
+        title: 'Đăng nhập',
+        description: 'Form email + mật khẩu',
+        estimateHours: 10,
+        taskType: 'STORY' as const,
+        priority: 'HIGH' as const,
+        difficulty: 3,
+        requiredSkills: [{ skill: 'k2', minLevel: 3 }],
+        subtasks: [{ title: 'API' }, { title: 'UI' }],
+        dependsOn: [],
+        suggestedAssignee: 'u4',
+        reason: 'Minh làm backend đăng nhập trước đó',
+      },
+      {
+        draftKey: 'd4',
+        title: 'Khoá tài khoản',
+        requiredSkills: [],
+        subtasks: [],
+        dependsOn: ['d3'],
+      },
+    ],
+  };
+  it('chi tiết: mô tả, loại, ưu tiên, độ khó, lý do, số việc con, kỹ năng kèm mức', () => {
+    expect(itemDetailsOf(action as never).d3).toEqual({
+      description: 'Form email + mật khẩu',
+      taskType: 'STORY',
+      priority: 'HIGH',
+      difficulty: 3,
+      reason: 'Minh làm backend đăng nhập trước đó',
+      subtasks: 2,
+      skills: [{ code: 'k2', minLevel: 3 }],
+    });
+  });
+  it('lỗi tasks[1].* về d4, lỗi không có chỉ số về chung, cảnh báo giữ mức cảnh báo', () => {
+    const r = issuesByKey(action as never, {
+      errors: [
+        {
+          path: 'tasks[1].suggestedAssignee',
+          code: 'ASSIGN_SKILL_GAP',
+          message: 'Minh thiếu React',
+        },
+        { path: 'sprint', code: 'NOT_FOUND', message: 'Sprint đã đóng' },
+      ],
+      warnings: [
+        {
+          path: 'tasks[0].due',
+          code: 'WARN_DUE_AFTER_SPRINT',
+          message: 'Hạn sau sprint',
+        },
+      ],
+    });
+    expect(r.byKey.d4).toEqual([
+      {
+        severity: 'error',
+        code: 'ASSIGN_SKILL_GAP',
+        message: 'Minh thiếu React',
+      },
+    ]);
+    expect(r.byKey.d3).toEqual([
+      {
+        severity: 'warning',
+        code: 'WARN_DUE_AFTER_SPRINT',
+        message: 'Hạn sau sprint',
+      },
+    ]);
+    expect(r.general).toEqual([
+      { severity: 'error', code: 'NOT_FOUND', message: 'Sprint đã đóng' },
+    ]);
   });
 });
