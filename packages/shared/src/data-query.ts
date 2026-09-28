@@ -22,6 +22,7 @@ export const QUERY_INTENTS = [
   'SPRINT_LIST',
   'SPRINT_PROGRESS',
   'SPRINT_REPORT',
+  'SPRINT_VELOCITY',
   'ACTIVITY_FEED',
   'NOTIFICATION_LIST',
   'AI_USAGE',
@@ -74,6 +75,8 @@ export const queryFiltersSchema = z
       .regex(/^d\d{1,3}$/, 'draftKey dạng d1, d2…')
       .optional(),
     user: z.union([shortCode('u'), z.literal('me')]).optional(),
+    /** SPRINT_VELOCITY: số sprint đã đóng gần nhất (mặc định 3). */
+    lastN: z.number().int().min(1).max(10).optional(),
     /** AI_USAGE: gộp theo gì. */
     groupUsageBy: z.enum(['day', 'purpose', 'user']).optional(),
   })
@@ -102,6 +105,7 @@ export const FILTERS_BY_INTENT: Record<QueryIntent, (keyof QueryFilters)[]> = {
   SPRINT_LIST: [],
   SPRINT_PROGRESS: ['assignee'],
   SPRINT_REPORT: [],
+  SPRINT_VELOCITY: ['lastN'],
   ACTIVITY_FEED: [],
   NOTIFICATION_LIST: [],
   AI_USAGE: ['groupUsageBy'],
@@ -128,6 +132,7 @@ export const QUERY_INTENT_HINT: Record<QueryIntent, string> = {
   SPRINT_PROGRESS: 'sprint này còn bao nhiêu giờ, có kịp không, ai đang gánh nhiều nhất sprint này',
   SPRINT_REPORT:
     'sprint trước làm được gì, việc nào bị đẩy sang sprint này, có thêm việc giữa chừng không',
+  SPRINT_VELOCITY: 'vận tốc 3 sprint gần nhất, mỗi sprint nhóm làm được bao nhiêu giờ',
   ACTIVITY_FEED: 'hôm qua ai sửa gì',
   NOTIFICATION_LIST: 'tôi có thông báo gì',
   AI_USAGE: 'tháng này tốn bao nhiêu tiền AI',
@@ -155,6 +160,7 @@ const KNOWN_FILTER_KEYS: (keyof QueryFilters)[] = [
   'draft',
   'user',
   'groupUsageBy',
+  'lastN',
 ];
 
 const SPRINT_INTENTS: QueryIntent[] = [
@@ -260,7 +266,13 @@ export type QueryBlock =
         cells: { text: string; tone?: BlockBadge['tone'] }[];
       }[];
     }
-  | { kind: 'bar_chart'; series: { label: string; value: number }[]; unit?: string }
+  | {
+      kind: 'bar_chart';
+      /** `compare` (tuỳ chọn): cột thứ hai cạnh cột chính, vd. cam kết cạnh hoàn thành */
+      series: { label: string; value: number; compare?: number }[];
+      unit?: string;
+      compareLabel?: string;
+    }
   | {
       kind: 'line_chart';
       /** `null` = ngày không có số liệu (vd. thiếu snapshot) — web nối qua, không vẽ về 0 */

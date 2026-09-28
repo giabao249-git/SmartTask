@@ -794,4 +794,35 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
     expect(out.items!.map((i) => i.ref.id).sort()).toEqual(rootMoved.sort());
     expect(body.blocks.some((b) => b.title?.startsWith('Đã xong'))).toBe(true);
   });
+
+  it('SPRINT_VELOCITY: cam kết/hoàn thành khớp danh sách sprint; lastN ngoài 1–10 bị từ chối', async () => {
+    const list = await api()
+      .get(`/api/v1/projects/${projectId}/sprints`)
+      .set(auth(pm))
+      .expect(200);
+    const closed = list.body.find((x: { id: string }) => x.id === sprintId);
+    expect(closed.status).toBe('CLOSED'); // đóng ở ca SPRINT_REPORT
+    const v = await runQuery(pm, {
+      intent: 'SPRINT_VELOCITY',
+      filters: { lastN: 5 },
+    }).expect(200);
+    const table = v.body.blocks.find(
+      (b: { kind: string }) => b.kind === 'table',
+    );
+    expect(table.rows).toHaveLength(1);
+    expect(table.rows[0].cells.committed).toBe(
+      `${Math.round(Number(closed.scopeHoursInitial) * 10) / 10} h`,
+    );
+    expect(table.rows[0].cells.completed).toBe(
+      `${Math.round(closed.completedHours * 10) / 10} h`,
+    );
+    const chart = v.body.blocks.find(
+      (b: { kind: string }) => b.kind === 'bar_chart',
+    );
+    expect(chart.series[0].compare).toBe(Number(closed.scopeHoursInitial));
+    await runQuery(pm, {
+      intent: 'SPRINT_VELOCITY',
+      filters: { lastN: 11 },
+    }).expect(400);
+  });
 });

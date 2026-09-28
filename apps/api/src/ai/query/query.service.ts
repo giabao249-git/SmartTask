@@ -154,6 +154,7 @@ const INTENT_PERMISSION: Record<QueryIntent, 'read' | 'manage'> = {
   SPRINT_LIST: 'read',
   SPRINT_PROGRESS: 'read',
   SPRINT_REPORT: 'read',
+  SPRINT_VELOCITY: 'read',
   ACTIVITY_FEED: 'read',
   NOTIFICATION_LIST: 'read',
   AI_USAGE: 'manage', // sổ token là dữ liệu quản trị
@@ -322,6 +323,8 @@ export class AiQueryService {
         return { ...base, ...(await this.sprintProgress(spec, ctx)) };
       case 'SPRINT_REPORT':
         return { ...base, ...(await this.sprintReport(spec, ctx)) };
+      case 'SPRINT_VELOCITY':
+        return { ...base, ...(await this.sprintVelocity(spec, ctx)) };
       case 'ACTIVITY_FEED':
         return { ...base, ...(await this.activity(spec, ctx)) };
       case 'NOTIFICATION_LIST':
@@ -1741,6 +1744,109 @@ export class AiQueryService {
         rowCount: s.taskCount,
       },
       blocks,
+    };
+  }
+
+  /**
+   * Vận tốc giữa các sprint (docs 02/07 D3 — cơ chế Velocity chart của Jira): cam kết lúc bắt đầu so với giờ
+   * hoàn thành của N sprint đã đóng gần nhất. Nguồn GET /projects/:id/sprints (cùng thẻ Vận tốc trên trang Sprint).
+   */
+  private async sprintVelocity(spec: DataQuerySpec, ctx: QueryContext) {
+    const n = spec.filters.lastN ?? 3;
+    const rows = (await this.sprintsSvc.list(ctx.userId, ctx.projectId))
+      .filter((s) => s.status === 'CLOSED')
+      .sort(
+        (a, b) => (a.closedAt?.getTime() ?? 0) - (b.closedAt?.getTime() ?? 0),
+      )
+      .slice(-n)
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        committed: round1(num(s.scopeHoursInitial)),
+        completed: round1(s.completedHours),
+      }));
+    const source = {
+      endpoint: 'GET /projects/:id/sprints',
+      params: { lastN: n },
+      rowCount: rows.length,
+    };
+    if (!rows.length)
+      return {
+        source,
+        blocks: [
+          {
+            kind: 'empty',
+            title: 'Chưa có sprint nào đã đóng',
+            description: 'Vận tốc có sau khi kết thúc sprint đầu tiên.',
+          },
+        ] as QueryBlock[],
+      };
+    const sumC = rows.reduce((x, r) => x + r.committed, 0);
+    const sumD = rows.reduce((x, r) => x + r.completed, 0);
+    return {
+      source,
+      blocks: [
+        {
+          kind: 'stat_row',
+          items: [
+            {
+              label: 'Số sprint',
+              value: rows.length,
+              hint:
+                n > rows.length
+                  ? `mới có ${rows.length}/${n} sprint đã đóng`
+                  : undefined,
+            },
+            {
+              label: 'Hoàn thành TB',
+              value: round1(sumD / rows.length),
+              unit: 'h/sprint',
+            },
+            {
+              label: 'Cam kết TB',
+              value: round1(sumC / rows.length),
+              unit: 'h/sprint',
+            },
+            {
+              label: 'Hoàn thành / cam kết',
+              value: sumC > 0 ? Math.round((sumD / sumC) * 100) : '—',
+              unit: sumC > 0 ? '%' : undefined,
+            },
+          ],
+        },
+        {
+          // Cột đôi cam kết | hoàn thành — giống thẻ Vận tốc trên trang Sprint (đường với 1 sprint chỉ là một chấm)
+          kind: 'bar_chart',
+          unit: 'Hoàn thành (h)',
+          compareLabel: 'Cam kết (h)',
+          series: rows.map((r) => ({
+            label: r.name,
+            value: r.completed,
+            compare: r.committed,
+          })),
+        },
+        {
+          kind: 'table',
+          columns: [
+            { key: 'name', label: 'Sprint' },
+            { key: 'committed', label: 'Cam kết', align: 'right' },
+            { key: 'completed', label: 'Hoàn thành', align: 'right' },
+            { key: 'ratio', label: 'Tỉ lệ', align: 'right' },
+          ],
+          rows: rows.map((r) => ({
+            ref: { type: 'sprint' as const, id: r.id, key: r.name },
+            cells: {
+              name: r.name,
+              committed: `${r.committed} h`,
+              completed: `${r.completed} h`,
+              ratio:
+                r.committed > 0
+                  ? `${Math.round((r.completed / r.committed) * 100)}%`
+                  : '—',
+            },
+          })),
+        },
+      ] as QueryBlock[],
     };
   }
 
