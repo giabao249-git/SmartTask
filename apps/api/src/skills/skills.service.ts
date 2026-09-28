@@ -255,7 +255,10 @@ export class SkillsService {
     return this.mySkills(userId, workspaceId);
   }
 
-  /** OWNER/ADMIN xác nhận mức (Phase 3 mở rộng cho PM cùng dự án). */
+  /**
+   * Xác nhận mức kỹ năng: OWNER/ADMIN workspace, hoặc PM của một dự án (chưa lưu trữ) mà người được xác nhận là
+   * thành viên — PM là người thấy người đó làm việc. Xác nhận là một bằng chứng trong hồ sơ kỹ năng (docs 02/08).
+   */
   async verify(
     verifierId: string,
     targetUserId: string,
@@ -267,10 +270,25 @@ export class SkillsService {
       select: { workspaceId: true },
     });
     if (!skill) throw AppError.notFound();
-    await this.access.assertRole(verifierId, skill.workspaceId, [
-      'OWNER',
-      'ADMIN',
-    ]);
+    const role = await this.access.assertRole(
+      verifierId,
+      skill.workspaceId,
+      [],
+    );
+    if (role !== 'OWNER' && role !== 'ADMIN') {
+      const shared = await this.prisma.project.count({
+        where: {
+          workspaceId: skill.workspaceId,
+          status: { not: 'ARCHIVED' },
+          members: { some: { userId: verifierId, role: 'PM' } },
+          AND: { members: { some: { userId: targetUserId } } },
+        },
+      });
+      if (!shared)
+        throw AppError.forbidden({
+          required: 'OWNER/ADMIN hoặc PM của dự án có người này',
+        });
+    }
     await this.access.assertRole(targetUserId, skill.workspaceId, []);
     const row = await this.prisma.userSkill.upsert({
       where: { userId_skillId: { userId: targetUserId, skillId } },

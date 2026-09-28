@@ -387,4 +387,108 @@ describe('Ghi giờ, đánh giá việc, bug → việc gốc (e2e)', () => {
       }),
     ]);
   });
+
+  it('tab Nhân sự: PM dự án xác nhận được kỹ năng thành viên; Viewer không là ứng viên; danh sách chờ đánh giá', async () => {
+    const skills = await api()
+      .get(`/api/v1/workspaces/${wsId}/skills`)
+      .set(auth(pm))
+      .expect(200);
+    const react =
+      skills.body.find((s: { name: string }) => s.name === 'React') ??
+      skills.body[1];
+    // `other` là MEMBER của workspace nhưng làm PM một dự án có `dev` → được xác nhận kỹ năng của dev
+    const p = await api()
+      .post(`/api/v1/workspaces/${wsId}/projects`)
+      .set(auth(pm))
+      .send({ key: 'WV', name: 'Dự án do Khác quản lý', pmUserId: other.id })
+      .expect(201);
+    await api()
+      .put(`/api/v1/projects/${p.body.id}/members`)
+      .set(auth(pm))
+      .send({
+        members: [
+          { userId: other.id, role: 'PM' },
+          { userId: dev.id, role: 'MEMBER' },
+        ],
+      })
+      .expect(200);
+    await api()
+      .patch(`/api/v1/users/${dev.id}/skills/${react.id}/verify`)
+      .set(auth(other))
+      .send({ level: 3 })
+      .expect(200);
+    // dev không là PM dự án nào có `other` → không được xác nhận
+    await api()
+      .patch(`/api/v1/users/${other.id}/skills/${react.id}/verify`)
+      .set(auth(dev))
+      .send({ level: 3 })
+      .expect(403);
+
+    // Viewer của workspace còn trong dự án nhưng không nằm trong bảng năng lực
+    const viewer: U = { email: uniqueEmail('wl-viewer'), token: '', id: '' };
+    await register(viewer, 'Người Xem');
+    const inv = await api()
+      .post(`/api/v1/workspaces/${wsId}/invitations`)
+      .set(auth(pm))
+      .send({ email: viewer.email, role: 'MEMBER' })
+      .expect(201);
+    await api()
+      .post(`/api/v1/invitations/${inv.body.token}/accept`)
+      .set(auth(viewer))
+      .expect(201);
+    await api()
+      .put(`/api/v1/projects/${projectId}/members`)
+      .set(auth(pm))
+      .send({
+        members: [
+          { userId: pm.id, role: 'PM' },
+          { userId: dev.id, role: 'MEMBER' },
+          { userId: other.id, role: 'MEMBER' },
+          { userId: viewer.id, role: 'MEMBER' },
+        ],
+      })
+      .expect(200);
+    // Hạ xuống VIEWER sau khi đã vào dự án (như Mai trong seed): vẫn là thành viên dự án nhưng không nhận việc
+    await api()
+      .patch(`/api/v1/workspaces/${wsId}/members/${viewer.id}`)
+      .set(auth(pm))
+      .send({ role: 'VIEWER' })
+      .expect(200);
+    const cap = await api()
+      .get(`/api/v1/projects/${projectId}/capacity-table`)
+      .set(auth(pm))
+      .expect(200);
+    const ids = cap.body.members.map((m: { userId: string }) => m.userId);
+    expect(ids).toContain(dev.id);
+    expect(ids).not.toContain(viewer.id);
+
+    // Việc đã xong chưa đánh giá: có "Tính năng đăng nhập"? — đã đánh giá ở ca trước nên KHÔNG có; thêm một việc xong mới
+    const t = await api()
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set(auth(pm))
+      .send({
+        title: 'Việc xong chờ chấm',
+        columnId: doneColumnId,
+        assigneeIds: [dev.id],
+      })
+      .expect(201);
+    const pending = await api()
+      .get(`/api/v1/projects/${projectId}/reviews/pending`)
+      .set(auth(pm))
+      .expect(200);
+    expect(pending.body.map((x: { id: string }) => x.id)).toContain(t.body.id);
+    expect(pending.body.map((x: { id: string }) => x.id)).not.toContain(
+      featureId,
+    );
+    expect(
+      pending.body.find((x: { id: string }) => x.id === t.body.id),
+    ).toMatchObject({
+      selfAssigned: false,
+      assignees: [expect.objectContaining({ id: dev.id })],
+    });
+    await api()
+      .get(`/api/v1/projects/${projectId}/reviews/pending`)
+      .set(auth(dev))
+      .expect(403);
+  });
 });

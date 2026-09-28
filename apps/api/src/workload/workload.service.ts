@@ -686,7 +686,22 @@ export class WorkloadService {
         members: { select: { userId: true, role: true } },
       },
     });
-    const memberIds = project.members.map((m) => m.userId);
+    // Người chỉ xem (VIEWER của workspace) không nhận việc → không phải ứng viên (cùng quy tắc với tóm tắt sprint)
+    const viewers = new Set(
+      (
+        await this.prisma.workspaceMember.findMany({
+          where: {
+            workspaceId: project.workspaceId,
+            role: 'VIEWER',
+            userId: { in: project.members.map((m) => m.userId) },
+          },
+          select: { userId: true },
+        })
+      ).map((v) => v.userId),
+    );
+    const memberIds = project.members
+      .map((m) => m.userId)
+      .filter((id) => !viewers.has(id));
     const sprint = opts.sprintId
       ? await this.prisma.sprint.findFirst({
           where: { id: opts.sprintId, projectId },
