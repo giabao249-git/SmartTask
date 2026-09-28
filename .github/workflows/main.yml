@@ -13,9 +13,11 @@ jobs:
       - name: Validate branch name format
         run: |
           BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          REGEX="^(sprint/.+|feature/.+|chore/.+|bugfix/.+|release/.+|hotfix/.+)$"
-          
+          # sprint_vN: nhánh tích hợp một sprint (sprint_v0, sprint_v1, …) — xem docs/00-quy-che/quy-tac-git.md
+          REGEX="^(sprint_v[0-9]+|sprint/.+|feature/.+|chore/.+|bugfix/.+|release/.+|hotfix/.+)$"
+
           if [[ ! "$BRANCH_NAME" =~ $REGEX ]]; then
-            echo "::error::Tên branch '$BRANCH_NAME' không hợp lệ."
+            echo "::error::Tên branch '$BRANCH_NAME' không hợp lệ. Dùng một trong: sprint_vN (vd. sprint_v0), sprint/…, feature/…, chore/…, bugfix/…, release/…, hotfix/…"
             exit 1
           fi
+          echo "Tên branch hợp lệ: $BRANCH_NAME"
