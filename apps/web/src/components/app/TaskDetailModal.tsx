@@ -21,7 +21,8 @@ import { UserAvatar } from "@/components/app/UserAvatar";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
 import { describeError } from "@/lib/api";
 import type { ProjectDetail, TaskDetail, TaskListItem, TaskPriority, TaskType } from "@/lib/types";
-import { TASK_TYPES, typeToHint, typeToLabel } from "@/lib/status";
+import { TASK_TYPES, sprintStatusLabel, typeToHint, typeToLabel } from "@/lib/status";
+import { useSprints } from "@/lib/hooks/queries";
 import { TaskTypeBadge } from "./TaskTypeBadge";
 import { AssigneePicker, LabelPicker, SkillPicker } from "./TaskFieldPickers";
 import { cn } from "@/lib/utils";
@@ -114,6 +115,7 @@ export function TaskDetailBody({
   onOpenFullPage?: () => void;
 }) {
   const m = useTaskMutations(project.id);
+  const sprints = useSprints(project.id);
   const [title, setTitle] = React.useState(task.title);
   const [description, setDescription] = React.useState(task.description ?? "");
   React.useEffect(() => {
@@ -346,12 +348,15 @@ export function TaskDetailBody({
                   <SelectItem value="__backlog" className="text-xs">
                     Backlog
                   </SelectItem>
-                  {project.activeSprint && (
-                    <SelectItem value={project.activeSprint.id} className="text-xs">
-                      {project.activeSprint.name} (đang chạy)
-                    </SelectItem>
-                  )}
-                  {task.sprint && task.sprint.id !== project.activeSprint?.id && (
+                  {/* Mọi sprint chưa đóng — trước đây chỉ có sprint đang chạy nên không lên kế hoạch được cho sprint sau */}
+                  {(sprints.data ?? [])
+                    .filter((s) => s.status !== "CLOSED")
+                    .map((s) => (
+                      <SelectItem key={s.id} value={s.id} className="text-xs">
+                        {s.name} · {sprintStatusLabel(s.status)}
+                      </SelectItem>
+                    ))}
+                  {task.sprint && !(sprints.data ?? []).some((s) => s.id === task.sprint?.id && s.status !== "CLOSED") && (
                     <SelectItem value={task.sprint.id} className="text-xs">
                       {task.sprint.name}
                     </SelectItem>
