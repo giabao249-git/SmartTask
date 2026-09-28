@@ -1,6 +1,6 @@
 # 14. Tra cứu dữ liệu trong hội thoại (DATA_QUERY)
 
-> Trạng thái: **đã hiện thực** 23/09/2026 — API `POST /ai/query`, action `DATA_QUERY`, 16 ý định, bộ khối hiển thị trong Trợ lý AI.
+> Trạng thái: **đã hiện thực** 23/09/2026 — API `POST /ai/query`, action `DATA_QUERY`, bộ khối hiển thị trong Trợ lý AI. Mở rộng 28/09/2026 (đề xuất [02/07](../02-phan-tich/07-cai-tien-sprint-va-intent.md) Phase 15–17): một nguồn số với màn hình, ý định sprint mới, ghi chú khi cắt bộ lọc.
 > Liên quan: docs 05 (kiến trúc AI), docs 12 (chat theo phiên), quy tắc nền "LLM suy luận, backend tính/kiểm/ghi".
 
 ## 1. Vấn đề
@@ -26,7 +26,9 @@ Người dùng ──▶ LLM ──▶ DATA_QUERY { intent, filters }   (KHÔNG 
 - **`reply` không được chứa số** cho phần tra cứu (ghi rõ trong master prompt, mục CHAT).
 - Kết quả được lưu cùng tin nhắn (`chat_messages.structured_data.queryResult`) nên mở lại phiên vẫn thấy.
 
-## 3. Mười bảy ý định
+## 3. Mười chín ý định
+
+> Danh sách, câu mẫu và bộ lọc hợp lệ của từng ý định có **một nguồn** trong `packages/shared/src/data-query.ts` (`QUERY_INTENTS`, `QUERY_INTENT_HINT`, `FILTERS_BY_INTENT`); enum của `responseSchema` và đoạn liệt kê trong master prompt (`queryIntentGuide()`) sinh từ đó — unit test `ai/query/intents.spec.ts` chặn lệch.
 
 | Nhóm | intent | Câu hỏi ví dụ | Khối trả về |
 |---|---|---|---|
@@ -38,13 +40,15 @@ Người dùng ──▶ LLM ──▶ DATA_QUERY { intent, filters }   (KHÔNG 
 | Con người | `MEMBER_LIST` | "danh sách thành viên" | `people_list` |
 | | `MEMBER_PROFILE` | "Huy đang làm gì" | `person_card` + `task_list` |
 | | `WORKLOAD_WEEK` | "ai đang quá tải" | `stat_row` + `heatmap` |
-| | `CAPACITY_FREE` | "ai còn giờ trống" | `note` + `table` |
+| | `CAPACITY_FREE` | "ai còn giờ trống (trong sprint này)" — có mã `s` thì cửa sổ = sprint | `note` + `table` |
 | | `WHO_KNOWS_SKILL` | "ai biết NestJS ≥ 4" | `people_list` |
 | | `TASK_CANDIDATES` | "ai có thể làm task này", "ai rảnh nhận d2" | `note` + `table` |
 | | `BUS_FACTOR` | "kỹ năng nào chỉ 1 người biết" | `note` + `table` |
 | Tiến độ | `SPRINT_LIST` | "có mấy sprint" | `table` (trạng thái tiếng Việt, xong/tổng, giờ còn lại — **cùng nguồn** `SprintsService.list`) |
-| | `SPRINT_PROGRESS` | "sprint còn bao nhiêu giờ, có kịp không" | `stat_row` (xong, còn lại, vận tốc, ngày làm việc còn, ETA, rủi ro, quá hạn) + `line_chart` (thực tế vs lý tưởng) + `note` nguyên nhân — **nguyên văn** `ForecastService` |
-| | `ACTIVITY_FEED` | "hôm qua ai sửa gì" | `activity_list` — nhãn dùng chung với màn hình (`packages/shared/activity.ts`), giờ theo múi giờ người hỏi, dòng sprint có tên + số việc |
+| | `SPRINT_PROGRESS` | "sprint còn bao nhiêu giờ, có kịp không, ai gánh nhiều nhất sprint này" (lọc `assignee`) | `stat_row` (xong, còn lại, vận tốc, ngày làm việc còn, ETA, rủi ro, quá hạn) + `line_chart` (thực tế vs lý tưởng) + `note` nguyên nhân + `table` theo người (giờ còn lại / năng lực, cùng nguồn trang Sprint) — **nguyên văn** `ForecastService`, `SprintsService.summary` |
+| | `SPRINT_REPORT` | "sprint trước làm được gì, việc nào bị đẩy" (mặc định sprint đóng gần nhất) | `stat_row` + các `task_list` có tiêu đề: đã xong · bị chuyển đi lúc đóng · thêm sau khi bắt đầu · chuyển vào từ sprint trước |
+| | `SPRINT_VELOCITY` | "vận tốc 3 sprint gần nhất" (lọc `lastN` 1–10) | `stat_row` + `bar_chart` cột đôi cam kết/hoàn thành + `table` |
+| | `ACTIVITY_FEED` | "hôm qua ai sửa gì" (lọc `user`, `range` TODAY/YESTERDAY/THIS_WEEK theo múi giờ người hỏi) | `activity_list` — nhãn dùng chung với màn hình (`packages/shared/activity.ts`), giờ theo múi giờ người hỏi, dòng sprint có tên + số việc |
 | Khác | `NOTIFICATION_LIST` | "tôi có thông báo gì" | `stat_row` + `activity_list` |
 | | `AI_USAGE` | "tháng này tốn bao nhiêu tiền AI" | `stat_row` + `table` |
 
@@ -75,6 +79,10 @@ người dùng. Sau khi xem bảng, người nói "giao cho X" thì mới sinh `
 
 **Backend trả về** (`QueryResult`): `blocks[]` + `source { endpoint, params, rowCount }` + `generatedAt` + `truncated?`.
 Khối hiện có: `stat_row`, `task_list`, `agenda`, `people_list`, `person_card`, `table`, `heatmap`, `bar_chart`, `line_chart`, `activity_list`, `note`, `empty`. Mỗi item mang `ref { type, id, key }` để bấm mở đúng việc/người.
+
+### 4.2 Không bỏ bộ lọc lặng lẽ (28/09/2026)
+
+`pruneQuerySpec` vẫn cắt bộ lọc không thuộc ý định (LLM hay điền `tN`, `u0` cho field không dùng — cắt im). Nhưng nếu phần bị cắt là bộ lọc **có nghĩa** với người hỏi (`assignee`, `user`, `status`, `taskType`, `priority`, `dueRange`, `q`, `range`, `sprint`), spec được gắn `ignoredFilters` và kết quả có thêm khối `note` "Loại câu hỏi này không lọc được theo … — kết quả dưới đây chưa áp dụng điều kiện đó". Khối `table`/`task_list` có `title` tuỳ chọn; `bar_chart` có cột `compare` + `compareLabel`.
 
 ### 4.1 Một câu hỏi, một số (bổ sung 28/09/2026)
 
@@ -109,7 +117,7 @@ Ngoài ra, lượt tra cứu lỗi **không làm hỏng cả lượt chat**: `Ch
 | Endpoint chạy lại | `apps/api/src/ai/query/query.controller.ts` (`POST /ai/query`) |
 | Dạy LLM | `apps/api/src/ai/prompt/master-prompt.ts` (mục CHAT) + `provider/response-schemas.ts` (enum `type` phải có `DATA_QUERY`, nếu không Gemini bị `responseSchema` chặn) |
 | Vẽ khối | `apps/web/src/features/assistant/QueryBlocks.tsx` |
-| Kiểm thử | `apps/api/test/ai-query.e2e-spec.ts` (17 ca) |
+| Kiểm thử | `apps/api/test/ai-query.e2e-spec.ts` (tra cứu, gồm bộ "một câu hỏi, một số", SPRINT_REPORT/VELOCITY, bộ lọc, TASK_BLOCKED) · `ai-chat.e2e-spec.ts` (Làm mới + mã sprint ổn định, RISK_EXPLANATION bị kiểm, TASK_DETAIL qua chat) · `ai/query/intents.spec.ts` (một nguồn) |
 
 ## 7. Chưa làm
 

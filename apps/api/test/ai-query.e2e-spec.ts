@@ -859,4 +859,46 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
     }).expect(200);
     expect(yesterday.body.blocks[0].kind).toBe('empty'); // mọi hoạt động của bộ test đều tạo hôm nay
   });
+
+  it('TASK_BLOCKED: việc chờ việc chưa xong hiện kèm "chờ ST-x"; xong việc chặn thì hết bị chặn', async () => {
+    const mk = async (title: string) =>
+      (
+        await api()
+          .post(`/api/v1/projects/${projectId}/tasks`)
+          .set(auth(pm))
+          .send({ title, estimateHours: 2 })
+          .expect(201)
+      ).body as { id: string; number: number; version: number };
+    const a = await mk('Chặn thử A');
+    const b = await mk('Chặn thử B');
+    await api()
+      .put(`/api/v1/tasks/${b.id}/dependencies`)
+      .set(auth(pm))
+      .send({ version: b.version, dependsOnIds: [a.id] })
+      .expect(200);
+    const blocked = await runQuery(pm, {
+      intent: 'TASK_BLOCKED',
+      sprint: '__all',
+      filters: { q: 'Chặn thử' },
+    }).expect(200);
+    const items = blocked.body.blocks[0].items as {
+      ref: { id: string };
+      meta: { text: string }[];
+    }[];
+    expect(items.map((i) => i.ref.id)).toEqual([b.id]);
+    expect(items[0].meta.map((m) => m.text)).toContain(`chờ TC-${a.number}`);
+
+    await prisma.task.update({
+      where: { id: a.id },
+      data: { completedAt: new Date() },
+    });
+    const free = await runQuery(pm, {
+      intent: 'TASK_BLOCKED',
+      sprint: '__all',
+      filters: { q: 'Chặn thử' },
+    }).expect(200);
+    expect(free.body.blocks[0].kind).toBe('empty');
+    for (const t of [a, b])
+      await api().delete(`/api/v1/tasks/${t.id}`).set(auth(pm)).expect(204);
+  });
 });
