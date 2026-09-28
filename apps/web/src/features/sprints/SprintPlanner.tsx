@@ -238,9 +238,9 @@ function Column({
                 return (
                   <li key={t.id} className={cn("flex items-center gap-3 px-4 py-2.5 text-sm min-w-0", picked.has(t.id) && "bg-primary/5", done && "text-muted-foreground")}>
                     {canEdit && <Checkbox aria-label={`Chọn ${key}`} checked={picked.has(t.id)} disabled={done} onCheckedChange={() => toggle(t.id)} />}
-                    <Link href={`/projects/${projectId}/tasks/${key}`} className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline shrink-0">
-                      {key}
-                    </Link>
+                    <Button asChild variant="link" size="sm" className="h-auto p-0 font-mono text-xs text-muted-foreground shrink-0">
+                      <Link href={`/projects/${projectId}/tasks/${key}`}>{key}</Link>
+                    </Button>
                     <span className="hidden sm:inline-flex shrink-0">
                       <TaskTypeBadge type={t.type} size="icon" />
                     </span>

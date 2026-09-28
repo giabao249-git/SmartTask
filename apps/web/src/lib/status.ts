@@ -245,3 +245,23 @@ export function sprintStatusLabel(s: string): string {
 export function sprintStatusVariant(s: string): BadgeVariant {
   return s === "ACTIVE" ? "success" : s === "PLANNED" ? "info" : "secondary";
 }
+
+/** Nguyên nhân rủi ro do ForecastService đo (docs 04 §8) — câu tiếng Việt thay cho mã máy "OVERDUE ×7". */
+export function causeLabel(code: string, n: number): string {
+  switch (code) {
+    case "OVERDUE":
+      return `${n} việc quá hạn`;
+    case "UNASSIGNED":
+      return `${n} việc chưa giao`;
+    case "OVERLOADED_MEMBER":
+      return `${n} người quá tải`;
+    case "BLOCKED":
+      return `${n} việc bị chặn`;
+    case "BIG_NOT_STARTED":
+      return `${n} việc lớn chưa bắt đầu`;
+    case "SCOPE_CREEP":
+      return `phạm vi tăng ${n} ngày`;
+    default:
+      return `${code} ×${n}`;
+  }
+}
