@@ -12,21 +12,8 @@ import { UserAvatar } from "@/components/app/UserAvatar";
 import { api, describeError } from "@/lib/api";
 import type { ActivityItem, Paged } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-const ACTION_LABEL: Record<string, string> = {
-  "task.created": "tạo việc",
-  "task.updated": "cập nhật",
-  "task.moved": "chuyển cột",
-  "task.deleted": "xoá việc",
-  "task.assigned": "giao việc",
-  "comment.created": "bình luận",
-  "sprint.started": "bắt đầu sprint",
-  "sprint.closed": "kết thúc sprint",
-  "project.member.removed": "gỡ thành viên",
-};
-const FIELD_LABEL: Record<string, string> = {
-  title: "tiêu đề", columnId: "cột", priority: "ưu tiên", dueDate: "hạn", startDate: "bắt đầu", estimateHours: "giờ ước", remainingHours: "giờ còn", progress: "tiến độ", assignees: "người", sprintId: "sprint", difficulty: "độ khó", description: "mô tả", isUrgent: "cờ khẩn", position: "vị trí",
-};
+import { ACTIVITY_ACTION_LABEL, ACTIVITY_FIELD_LABEL, sprintActivityDetail } from "@smarttask/shared";
+import { useSprints } from "@/lib/hooks/queries";
 
 const fmtTime = (iso: string) => {
   const d = new Date(iso);
@@ -40,8 +27,8 @@ const fmtTime = (iso: string) => {
 /** Diff `{field: {from, to}}` hoặc `{field: value}` → chuỗi ngắn; không diễn giải id (cột/sprint) — chỉ nêu trường. */
 function diffSummary(diff: ActivityItem["diff"]): string {
   if (!diff) return "";
-  const keys = Object.keys(diff).filter((k) => k in FIELD_LABEL);
-  return keys.map((k) => FIELD_LABEL[k]).join(", ");
+  const keys = Object.keys(diff).filter((k) => k in ACTIVITY_FIELD_LABEL);
+  return keys.map((k) => ACTIVITY_FIELD_LABEL[k]).join(", ");
 }
 
 export function useActivity(projectId: string, taskId?: string, limit = 30) {
@@ -54,6 +41,11 @@ export function useActivity(projectId: string, taskId?: string, limit = 30) {
 /** Dòng hoạt động (UC-16): GET /projects/:id/activity?taskId= — dùng trong modal chi tiết task và Dashboard. */
 export function ActivityList({ projectId, taskId, compact = false, limit = 30 }: { projectId: string; taskId?: string; compact?: boolean; limit?: number }) {
   const q = useActivity(projectId, taskId, limit);
+  const sprints = useSprints(projectId);
+  const sprintName = (diff: ActivityItem["diff"]) => {
+    const id = (diff as { sprintId?: unknown } | null)?.sprintId;
+    return typeof id === "string" ? sprints.data?.find((s) => s.id === id)?.name : undefined;
+  };
   if (q.isPending) return <Skeleton className={compact ? "h-32 w-full" : "h-56 w-full"} />;
   if (q.isError) return <ErrorState code={describeError(q.error).code} message={describeError(q.error).message} onRetry={() => q.refetch()} />;
   if (q.data.items.length === 0) return <EmptyState icon={History} title="Chưa có hoạt động" description="Tạo, chuyển cột, giao việc, bình luận… sẽ ghi ở đây." />;
@@ -63,14 +55,19 @@ export function ActivityList({ projectId, taskId, compact = false, limit = 30 }:
         <li key={a.id} className="flex items-start gap-2 text-xs">
           <UserAvatar name={a.actor?.fullName ?? "Hệ thống"} avatar={a.actor?.avatarUrl ?? undefined} size="sm" />
           <div className="min-w-0 flex-1">
-            <span className="font-medium">{a.actor?.shortName ?? a.actor?.fullName ?? "Hệ thống"}</span> <span>{ACTION_LABEL[a.action] ?? a.action}</span>
+            <span className="font-medium">{a.actor?.shortName ?? a.actor?.fullName ?? "Hệ thống"}</span> <span>{ACTIVITY_ACTION_LABEL[a.action] ?? a.action}</span>
             {!taskId && a.taskKey && (
               <>
                 {" "}
                 <span className="font-mono text-muted-foreground">{a.taskKey}</span> <span className="text-muted-foreground truncate">{a.task?.title}</span>
               </>
             )}
-            {diffSummary(a.diff) && <span className="text-muted-foreground"> · {diffSummary(a.diff)}</span>}
+            {a.action.startsWith("sprint.") ? (
+              // Dòng sprint: tên sprint + số việc (diff JSON), thay vì chỉ ghi "· sprint"
+              <span className="text-muted-foreground"> · {sprintActivityDetail(a.action, a.diff, sprintName(a.diff))}</span>
+            ) : (
+              diffSummary(a.diff) && <span className="text-muted-foreground"> · {diffSummary(a.diff)}</span>
+            )}
             {a.source !== "MANUAL" && (
               <Badge variant={a.source === "AI" ? "info" : "outline"} className="ml-1 text-[9px] px-1 py-0">
                 {a.source}

@@ -47,6 +47,23 @@ export class ActivityListener {
     });
   }
 
+  /** Đưa việc vào sprint hàng loạt — trước đây không để lại dấu vết nên không biết việc nào thêm giữa sprint. */
+  @OnEvent(SPRINT_EVENTS.updated, { async: true })
+  onSprintTasksAdded(p: SprintEventPayload) {
+    if (!p.movedTaskIds?.length) return; // sửa tên/ngày sprint thì không ghi dòng này
+    return this.write({
+      projectId: p.projectId,
+      actorId: p.actorId,
+      action: 'sprint.tasks_added',
+      diff: {
+        sprintId: p.sprintId,
+        taskIds: p.movedTaskIds,
+        afterStart: !!p.afterStart,
+      },
+      createdAt: p.at,
+    });
+  }
+
   @OnEvent(SPRINT_EVENTS.closed, { async: true })
   onSprintClosed(p: SprintEventPayload) {
     return this.write({
