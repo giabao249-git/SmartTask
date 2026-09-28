@@ -171,6 +171,8 @@ export interface QueryContext {
   /** Bảng mã của phiên chat; thiếu thì nạp lại từ phiên (nút "Làm mới" gọi sau nhiều ngày). */
   codes?: CodeBook | null;
   sessionId?: string;
+  /** Tin nhắn chứa truy vấn gốc — bảng mã của đúng lượt đó được ưu tiên */
+  messageId?: string;
 }
 
 /**
@@ -329,17 +331,43 @@ export class AiQueryService {
   }
 
   /**
-   * Nút "Làm mới" chạy lại truy vấn cũ: mã ngắn trong truy vấn chỉ có nghĩa theo bảng mã của phiên,
-   * nên nạp lại `code_map` mới nhất của phiên đó (phiên của người khác → không nạp).
+   * Nút "Làm mới" chạy lại truy vấn cũ: mã ngắn trong truy vấn chỉ có nghĩa theo bảng mã của lượt đã
+   * sinh ra nó. Thứ tự: bảng mã lưu trong chính tin nhắn đó → tin tra cứu mới nhất của phiên → proposal
+   * mới nhất (phiên có phân rã/nháp). Chỉ phiên của chính người hỏi.
    */
   private async codesOfSession(ctx: QueryContext): Promise<CodeBook | null> {
     if (!ctx.sessionId) return null;
-    const row = await this.prisma.aiProposal.findFirst({
-      where: { sessionId: ctx.sessionId, session: { userId: ctx.userId } },
-      orderBy: { createdAt: 'desc' },
-      select: { codeMap: true },
-    });
-    return row?.codeMap ? CodeBook.from(row.codeMap as never) : null;
+    const own = { sessionId: ctx.sessionId, session: { userId: ctx.userId } };
+    const mapOf = (sd: unknown) =>
+      sd && typeof sd === 'object' && 'codeMap' in sd
+        ? ((sd as { codeMap?: unknown }).codeMap ?? null)
+        : null;
+    if (ctx.messageId) {
+      const msg = await this.prisma.chatMessage.findFirst({
+        where: { id: ctx.messageId, ...own },
+        select: { structuredData: true },
+      });
+      const map = mapOf(msg?.structuredData);
+      if (map) return CodeBook.from(map as never);
+    }
+    const [msgs, proposal] = await Promise.all([
+      this.prisma.chatMessage.findMany({
+        where: { ...own, role: 'ASSISTANT' },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { structuredData: true, createdAt: true },
+      }),
+      this.prisma.aiProposal.findFirst({
+        where: own,
+        orderBy: { createdAt: 'desc' },
+        select: { codeMap: true, createdAt: true },
+      }),
+    ]);
+    const msg = msgs.find((m) => mapOf(m.structuredData));
+    const fromMsg = msg ? mapOf(msg.structuredData) : null;
+    if (fromMsg && (!proposal?.codeMap || msg!.createdAt >= proposal.createdAt))
+      return CodeBook.from(fromMsg as never);
+    return proposal?.codeMap ? CodeBook.from(proposal.codeMap as never) : null;
   }
 
   // ── Giải mã tham chiếu ─────────────────────────────────────

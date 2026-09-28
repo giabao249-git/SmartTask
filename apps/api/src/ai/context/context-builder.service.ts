@@ -112,11 +112,10 @@ export class ContextBuilderService {
             },
           },
         },
+        // Mọi sprint, theo thứ tự TẠO: mã s1, s2… của một sprint không bao giờ đổi (đóng sprint hay thêm
+        // sprint có ngày bắt đầu sớm hơn cũng không làm mã cũ trỏ sang sprint khác)
         sprints: {
-          where: {
-            status: { in: [SprintStatus.PLANNED, SprintStatus.ACTIVE] },
-          },
-          orderBy: [{ startDate: 'asc' }, { createdAt: 'asc' }],
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           select: {
             id: true,
             name: true,
@@ -124,6 +123,7 @@ export class ContextBuilderService {
             status: true,
             startDate: true,
             endDate: true,
+            closedAt: true,
           },
         },
       },
@@ -156,9 +156,25 @@ export class ContextBuilderService {
     const requesterName =
       requester?.user.shortName ?? requester?.user.fullName ?? 'PM';
 
+    // Sprint đích (form / thanh chọn trên giao diện) chỉ nhận sprint chưa đóng như trước
     const sprint = input.sprintId
-      ? (project.sprints.find((s) => s.id === input.sprintId) ?? null)
+      ? (project.sprints.find(
+          (s) => s.id === input.sprintId && s.status !== SprintStatus.CLOSED,
+        ) ?? null)
       : null;
+    // Bảng trong prompt: sprint đang mở + 3 sprint đóng gần nhất — đủ để hỏi "sprint trước", không phình prompt
+    const closedShown = new Set(
+      project.sprints
+        .filter((s) => s.status === SprintStatus.CLOSED)
+        .sort(
+          (a, b) => (b.closedAt?.getTime() ?? 0) - (a.closedAt?.getTime() ?? 0),
+        )
+        .slice(0, 3)
+        .map((s) => s.id),
+    );
+    const shownSprints = project.sprints
+      .filter((s) => s.status !== SprintStatus.CLOSED || closedShown.has(s.id))
+      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
     if (input.sprintId && !sprint)
       throw AppError.notFound({ sprintId: input.sprintId });
     const sprintCode = sprint ? codes.codeOf('s', sprint.id)! : null;
@@ -231,7 +247,7 @@ export class ContextBuilderService {
             : '',
           bang(
             ['mã', 'sprint', 'trạng thái', 'từ', 'đến', 'mục tiêu'],
-            project.sprints.map((s) => [
+            shownSprints.map((s) => [
               codes.codeOf('s', s.id),
               s.name,
               s.status,

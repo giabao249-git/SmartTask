@@ -26,6 +26,8 @@ const TONE: Record<NonNullable<BlockBadge["tone"]>, BadgeVariant> = {
 };
 const ICON = { clock: Clock, user: User, calendar: CalendarDays, flag: Flag, link: Link2 } as const;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const fmtTime = (iso: string) => {
   const d = new Date(iso);
   const p = (n: number) => String(n).padStart(2, "0");
@@ -41,12 +43,15 @@ export function QueryResultCard({
   query,
   projectId,
   sessionId,
+  messageId,
 }: {
   result: QueryResult;
   /** Truy vấn gốc để chạy lại — lưu cùng tin nhắn nên "Làm mới" không cần hỏi LLM. */
   query?: DataQuerySpec;
   projectId: string;
   sessionId?: string | null;
+  /** Tin nhắn chứa truy vấn — backend dùng bảng mã của đúng lượt đó để giải s2/u4 */
+  messageId?: string;
 }) {
   const [data, setData] = React.useState(result);
   const [busy, setBusy] = React.useState(false);
@@ -59,6 +64,8 @@ export function QueryResultCard({
       const fresh = await api.post<QueryResult>("/ai/query", {
         projectId,
         sessionId: sessionId ?? undefined,
+        // Tin tạm (chưa có id thật từ server) thì không gửi — backend tự lấy bảng mã mới nhất của phiên
+        messageId: messageId && UUID.test(messageId) ? messageId : undefined,
         query,
       });
       setData(fresh);

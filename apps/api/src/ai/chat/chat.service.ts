@@ -337,8 +337,14 @@ export class ChatService {
             sessionId: session.id,
             role: ChatRole.ASSISTANT,
             text: action.reply ?? '',
+            // Tra cứu không tạo proposal, nên bảng mã phải đi cùng tin nhắn — nếu không "Làm mới"
+            // về sau không giải được s2/u4 trong truy vấn đã lưu (docs 14 §5)
             structuredData: (queryResult
-              ? { ...action, queryResult: trimQueryResult(queryResult) }
+              ? {
+                  ...action,
+                  queryResult: trimQueryResult(queryResult),
+                  codeMap: turn.ctx.codes.toJSON(),
+                }
               : action) as unknown as Prisma.InputJsonValue,
             schemaVersion: action.schemaVersion ?? 1,
             parseFailed: !!(action as { parseFailed?: boolean }).parseFailed,

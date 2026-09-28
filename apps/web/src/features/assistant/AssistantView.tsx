@@ -1050,6 +1050,7 @@ function MessageBubble({
               query={action?.type === "DATA_QUERY" ? action.query : undefined}
               projectId={projectId}
               sessionId={sessionId}
+              messageId={m.id}
             />
           )}
 
