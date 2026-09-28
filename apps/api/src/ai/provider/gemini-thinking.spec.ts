@@ -1,3 +1,4 @@
+import { RESPONSE_SCHEMAS, toGeminiSchema } from './response-schemas';
 import { geminiBody, thinkingBudgetFor } from './gemini';
 
 /**
@@ -27,5 +28,25 @@ describe('ngân sách suy nghĩ của Gemini', () => {
       thinkingBudget: 1024,
     });
     expect(body.generationConfig.maxOutputTokens).toBe(4096);
+  });
+});
+
+describe('toGeminiSchema — dữ liệu quyết định sinh trước reply', () => {
+  it('propertyOrdering: sprint/targetDraftKeys/patch sinh trước reply, reply không đứng cuối', () => {
+    const g = toGeminiSchema(RESPONSE_SCHEMAS.CHAT);
+    const order = g.propertyOrdering as string[];
+    expect(order.slice(0, 6)).toEqual([
+      'type',
+      'sprint',
+      'targetDraftKeys',
+      'targetTask',
+      'patch',
+      'reply',
+    ]);
+    expect(order.at(-1)).not.toBe('reply');
+    expect(
+      (g.properties as Record<string, { description?: string }>).patch
+        .description,
+    ).toMatch(/BẮT BUỘC/);
   });
 });

@@ -544,8 +544,34 @@ export class AiService {
         ];
         continue;
       }
-      const validation = await validate(parsed.action, ctx);
-      last = { action: parsed.action, validation, ctx, logId: call.logId };
+      // CHAT_RESPONSE không ghi gì — reply mà nói "đã cập nhật/đã giao" là sai sự thật (đo với Gemini 28/09:
+      // "cái thứ hai đổi 8 giờ" → UPDATE thiếu patch bị nắn thành CHAT_RESPONSE "Đã cập nhật…"). Gọi lại một lần kèm lỗi.
+      const noPatch = parsed.repairs?.some((r) => r.startsWith(NO_PATCH));
+      const falseClaim = claimsChange(parsed.action);
+      if (attempt === 1 && falseClaim) {
+        last = {
+          action: parsed.action,
+          validation: null,
+          ctx,
+          logId: call.logId,
+        };
+        previousErrors = [
+          {
+            path: noPatch ? 'patch' : 'reply',
+            code: 'AI_RESPONSE_INVALID',
+            message: noPatch
+              ? 'UPDATE_TASK_DRAFT thiếu "patch". Người dùng muốn sửa thì gửi lại UPDATE_TASK_DRAFT với patch chứa đúng trường cần đổi (ví dụ {"estimateHours":8,"difficulty":4}); chỉ trả lời thì dùng CHAT_RESPONSE và không nói "đã cập nhật".'
+              : 'CHAT_RESPONSE không thay đổi gì nhưng reply nói đã làm. Muốn sửa/giao/tạo thì trả đúng type đề xuất (UPDATE_TASK_DRAFT/ASSIGN_PROPOSAL/CREATE_TASK_DRAFT); chỉ trả lời thì không nói "đã …".',
+          },
+        ];
+        continue;
+      }
+      const action =
+        noPatch && falseClaim
+          ? { ...parsed.action, reply: HONEST_NO_PATCH }
+          : parsed.action;
+      const validation = await validate(action, ctx);
+      last = { action, validation, ctx, logId: call.logId };
       if (!validation || validation.ok) break;
       previousErrors = validation.errors;
     }
@@ -601,4 +627,16 @@ function accumulate(
     attempts,
     promptChars,
   };
+}
+
+const NO_PATCH = 'UPDATE_TASK_DRAFT không có patch';
+const HONEST_NO_PATCH =
+  'Mình chưa thay đổi gì — chưa xác định được cần sửa trường nào. Bạn nói rõ giúp, ví dụ “d2 đổi 8 giờ, độ khó 4”.';
+
+/** CHAT_RESPONSE mà reply khẳng định đã ghi/đề xuất — không thể đúng vì loại này không ghi gì. */
+export function claimsChange(action: StructuredAction): boolean {
+  if (action.type !== 'CHAT_RESPONSE' || action.suggestApply) return false;
+  return /(^|[\s,.;:])đã\s+(cập nhật|điều chỉnh|thay đổi|đổi|sửa|giao|chuyển|tạo|thêm|xo[áa]|bỏ|đề xuất)/i.test(
+    action.reply ?? '',
+  );
 }
