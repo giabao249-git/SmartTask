@@ -387,4 +387,56 @@ describe('Tải nhân sự & dự báo (e2e)', () => {
       ]),
     );
   });
+
+  it('vận tốc có ngay cả khi thiếu snapshot; đóng sprint giữ số cuối thay vì báo "còn 0 h"', async () => {
+    // Giả lập sprint đã chạy từ thứ Hai tuần trước và cron 00:05 chưa từng chạy: chỉ còn snapshot lúc bắt đầu
+    await prisma.sprint.update({
+      where: { id: sprintId },
+      data: { startedAt: plus(monday, -7) },
+    });
+    const six = await prisma.task.findFirstOrThrow({
+      where: { sprintId, estimateHours: 6, parentId: null },
+    });
+    await prisma.task.update({
+      where: { id: six.id },
+      data: {
+        completedAt: new Date(plus(monday, 0).getTime() + 10 * 3_600_000),
+      },
+    });
+    const bd = await api()
+      .get(`/api/v1/sprints/${sprintId}/burndown`)
+      .set(auth(minh))
+      .expect(200);
+    // ≥ 6 ngày làm việc từ thứ Hai tuần trước → cửa sổ 5 ngày, có ngày thứ Hai tuần này: 6 h / 5
+    expect(bd.body.velocity).toBe(1.2);
+    expect(bd.body.gaps.length).toBeGreaterThan(0); // nói rõ ngày thiếu snapshot
+    const before = await api()
+      .get(`/api/v1/sprints/${sprintId}/forecast`)
+      .set(auth(minh))
+      .expect(200);
+    expect(before.body.velocity).toBe(1.2);
+    expect(before.body.eta).not.toBeNull();
+
+    await api()
+      .post(`/api/v1/sprints/${sprintId}/close`)
+      .set(auth(admin))
+      .send({ moveOpenTo: 'backlog' })
+      .expect(201);
+    const after = await api()
+      .get(`/api/v1/sprints/${sprintId}/forecast`)
+      .set(auth(minh))
+      .expect(200);
+    expect(after.body.status).toBe('CLOSED');
+    expect(after.body.riskLevel).toBe('UNKNOWN');
+    expect(after.body.eta).toBeNull();
+    expect(after.body.final.remainingHours).toBe(before.body.remainingHours);
+    const closedBd = await api()
+      .get(`/api/v1/sprints/${sprintId}/burndown`)
+      .set(auth(minh))
+      .expect(200);
+    expect(closedBd.body.actual.length).toBeGreaterThan(0);
+    expect(closedBd.body.actual.at(-1).remaining).toBe(
+      before.body.remainingHours,
+    );
+  });
 });

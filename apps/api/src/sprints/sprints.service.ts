@@ -7,6 +7,7 @@ import {
   SPRINT_EVENTS,
   type SprintEventPayload,
 } from '../common/events/task.events';
+import { ForecastService } from '../forecast/forecast.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   AddSprintTasksDto,
@@ -37,6 +38,7 @@ export class SprintsService {
     private readonly prisma: PrismaService,
     private readonly access: ProjectAccessService,
     private readonly events: EventEmitter2,
+    private readonly forecast: ForecastService,
   ) {}
 
   async list(userId: string, projectId: string) {
@@ -145,6 +147,8 @@ export class SprintsService {
         },
         select: SPRINT_SELECT,
       });
+      // Điểm đầu của đường thực tế — không chờ cron 00:05 mới có
+      await this.forecast.snapshotSprint(sprintId);
       this.emit(SPRINT_EVENTS.started, {
         projectId: s.projectId,
         sprintId,
@@ -182,6 +186,8 @@ export class SprintsService {
       targetSprintId = target.id;
     }
     const movedTaskIds = await this.prisma.$transaction(async (tx) => {
+      // Chụp số cuối TRƯỚC khi chuyển việc dở — sau bước này sprint không còn giữ chúng nữa
+      await this.forecast.snapshotSprint(sprintId, new Date(), tx);
       const open = await tx.task.findMany({
         where: { sprintId, deletedAt: null, completedAt: null },
         select: { id: true },

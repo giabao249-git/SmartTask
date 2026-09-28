@@ -14,10 +14,12 @@ import {
 } from '../workload/domain/calendar';
 import { mergeSettings } from '../workspaces/workspace-settings';
 import {
+  dailyCompleted,
   etaOf,
   idealLine,
   riskOf,
   scopeCreepDays,
+  snapshotGaps,
   velocityOf,
   type RiskLevel,
   type Snapshot,
@@ -52,10 +54,17 @@ export class ForecastService {
     private readonly events: EventEmitter2,
   ) {}
 
-  /** Snapshot một sprint tại ngày `date` (idempotent theo ngày). */
-  async snapshotSprint(sprintId: string, date = new Date()): Promise<Snapshot> {
+  /**
+   * Snapshot một sprint tại ngày `date` (idempotent theo ngày). Nhận `db` là transaction để lúc đóng
+   * sprint chụp được số cuối TRƯỚC khi việc dở bị chuyển đi.
+   */
+  async snapshotSprint(
+    sprintId: string,
+    date = new Date(),
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<Snapshot> {
     const d = toDate(date);
-    const tasks = await this.prisma.task.findMany({
+    const tasks = await db.task.findMany({
       where: { sprintId, deletedAt: null, parentId: null },
       select: {
         estimateHours: true,
@@ -89,7 +98,7 @@ export class ForecastService {
         (t) => t.completedAt && toDate(t.completedAt).getTime() === d.getTime(),
       )
       .reduce((s, t) => s + (t.estimateHours ? Number(t.estimateHours) : 0), 0);
-    const row = await this.prisma.burndownSnapshot.upsert({
+    const row = await db.burndownSnapshot.upsert({
       where: { sprintId_date: { sprintId, date: d } },
       create: {
         sprintId,
@@ -127,6 +136,7 @@ export class ForecastService {
     const scope0 = sprint.scopeHoursInitial
       ? Number(sprint.scopeHoursInitial)
       : (snapshots[0]?.scopeHours ?? 0);
+    const span = this.spanOf(sprint);
     return {
       sprintId,
       status: sprint.status,
@@ -140,8 +150,10 @@ export class ForecastService {
         remaining: s.remainingHours,
         completed: s.completedHours,
       })),
-      velocity: velocityOf(snapshots, cal),
+      velocity: await this.velocity(sprintId, span, cal),
       scopeCreepDays: scopeCreepDays(snapshots, scope0),
+      /** Ngày làm việc không có snapshot (cron không chạy, sprint đóng trước khi có bản chụp…) */
+      gaps: span ? snapshotGaps(snapshots, span.from, span.to, cal) : [],
     };
   }
 
@@ -159,18 +171,23 @@ export class ForecastService {
       stored,
       sprint.status === 'ACTIVE' ? await this.liveSnapshot(sprintId) : null,
     );
-    const remaining = snapshots[snapshots.length - 1]?.remainingHours ?? 0;
-    const velocity = velocityOf(snapshots, cal);
-    const eta = etaOf(remaining, velocity, today, cal);
+    const last = snapshots[snapshots.length - 1];
+    const remaining = last?.remainingHours ?? 0;
+    const velocity = await this.velocity(sprintId, this.spanOf(sprint), cal);
+    const closed = sprint.status === 'CLOSED';
+    // Sprint đã đóng không còn gì để dự báo: không ETA, không mức rủi ro — số cuối nằm ở `final`
+    const eta = closed ? null : etaOf(remaining, velocity, today, cal);
     const age = sprint.startedAt
-      ? workdaysBetween(sprint.startedAt, today, cal)
+      ? workdaysBetween(
+          sprint.startedAt,
+          closed && sprint.closedAt ? sprint.closedAt : today,
+          cal,
+        )
       : 0;
-    const riskLevel =
-      sprint.status !== 'ACTIVE'
-        ? remaining <= 0
-          ? 'LOW'
-          : 'UNKNOWN'
-        : riskOf(eta, sprint.endDate, velocity, age);
+    const riskLevel: RiskLevel =
+      sprint.status === 'ACTIVE'
+        ? riskOf(eta, sprint.endDate, velocity, age)
+        : 'UNKNOWN';
     const causes = await this.causes(
       sprint.projectId,
       sprintId,
@@ -199,7 +216,17 @@ export class ForecastService {
       eta: eta ? isoDate(eta) : null,
       riskLevel,
       sprintAgeWorkdays: age,
-      causes,
+      causes: closed ? [] : causes,
+      /** Sprint đã đóng: số lúc đóng (snapshot chụp trong transaction đóng); null nếu đóng trước khi có bản chụp này */
+      final:
+        closed && last
+          ? {
+              date: isoDate(last.date),
+              scopeHours: last.scopeHours,
+              remainingHours: last.remainingHours,
+              closedAt: sprint.closedAt?.toISOString() ?? null,
+            }
+          : null,
     };
   }
 
@@ -349,6 +376,53 @@ export class ForecastService {
     };
   }
 
+  /** Khoảng tính vận tốc: từ lúc bắt đầu tới hôm nay (đang chạy) hoặc tới lúc đóng. */
+  private spanOf(sprint: {
+    status: string;
+    startDate: Date;
+    startedAt: Date | null;
+    closedAt: Date | null;
+  }): { from: Date; to: Date } | null {
+    if (sprint.status === 'PLANNED') return null;
+    const from = toDate(sprint.startedAt ?? sprint.startDate);
+    const to = toDate(
+      sprint.status === 'CLOSED' && sprint.closedAt
+        ? sprint.closedAt
+        : new Date(),
+    );
+    return to.getTime() < from.getTime() ? null : { from, to };
+  }
+
+  /** Vận tốc (docs 04 §8) suy từ `completedAt` của việc gốc trong sprint — không phụ thuộc cron snapshot. */
+  private async velocity(
+    sprintId: string,
+    span: { from: Date; to: Date } | null,
+    cal: { workdays: number[]; holidays: string[] },
+  ): Promise<number> {
+    if (!span) return 0;
+    const done = await this.prisma.task.findMany({
+      where: {
+        sprintId,
+        deletedAt: null,
+        parentId: null,
+        completedAt: { gte: span.from, lt: addDays(span.to, 1) },
+      },
+      select: { estimateHours: true, completedAt: true },
+    });
+    return velocityOf(
+      dailyCompleted(
+        done.map((t) => ({
+          estimateHours:
+            t.estimateHours === null ? null : Number(t.estimateHours),
+          completedAt: t.completedAt,
+        })),
+        span.from,
+        span.to,
+      ),
+      cal,
+    );
+  }
+
   private async loadSprint(userId: string, sprintId: string) {
     const s = await this.prisma.sprint.findUnique({
       where: { id: sprintId },
@@ -359,6 +433,7 @@ export class ForecastService {
         startDate: true,
         endDate: true,
         startedAt: true,
+        closedAt: true,
         scopeHoursInitial: true,
         project: { select: { workspaceId: true } },
       },
