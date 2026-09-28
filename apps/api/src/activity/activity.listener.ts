@@ -70,7 +70,11 @@ export class ActivityListener {
       projectId: p.projectId,
       actorId: p.actorId,
       action: 'sprint.closed',
-      diff: { sprintId: p.sprintId, movedTaskIds: p.movedTaskIds ?? [] },
+      diff: {
+        sprintId: p.sprintId,
+        movedTaskIds: p.movedTaskIds ?? [],
+        movedTo: p.movedTo ?? null,
+      },
       createdAt: p.at,
     });
   }

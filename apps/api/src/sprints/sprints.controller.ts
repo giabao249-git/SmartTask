@@ -52,6 +52,18 @@ export class SprintsController {
     return this.sprints.get(user.id, id);
   }
 
+  @Get('sprints/:id/summary')
+  @ApiOperation({
+    summary:
+      'Tóm tắt sprint: cam kết/hoàn thành/còn lại, năng lực nhóm trong cửa sổ, theo người, việc bị đẩy đi / chuyển vào / thêm sau khi bắt đầu (UC-09, UC-30)',
+  })
+  summary(
+    @CurrentUser() user: JwtUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.sprints.summary(user.id, id);
+  }
+
   @Patch('sprints/:id')
   @ApiOperation({ summary: 'Sửa sprint chưa đóng' })
   update(

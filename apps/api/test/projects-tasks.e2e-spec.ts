@@ -424,6 +424,65 @@ describe('Dự án, sprint, task (e2e)', () => {
       .expect(201);
   });
 
+  it('tóm tắt sprint: việc bị đẩy đi lúc đóng, thêm sau khi bắt đầu, giờ theo người cộng đúng, năng lực nhóm', async () => {
+    const list = await api()
+      .get(`/api/v1/projects/${projectId}/sprints`)
+      .set(auth(pm))
+      .expect(200);
+    const s2 = list.body.find((x: { name: string }) => x.name === 'Sprint 2');
+    // Sprint 1 đã đóng ở ca trước: hai việc gốc bị đẩy về backlog
+    const closed = await api()
+      .get(`/api/v1/sprints/${sprintId}/summary`)
+      .set(auth(viewer))
+      .expect(200);
+    expect(closed.body.sprint.status).toBe('CLOSED');
+    expect(closed.body.carriedOut.map((t: { id: string }) => t.id)).toEqual(
+      expect.arrayContaining([t1.id, t2.id]),
+    );
+    // Sprint 2 đang chạy: đưa t1 vào giữa chừng → "thêm sau khi bắt đầu"
+    await api()
+      .post(`/api/v1/sprints/${s2.id}/tasks`)
+      .set(auth(pm))
+      .send({ taskIds: [t1.id] })
+      .expect(201);
+    let sum = await api()
+      .get(`/api/v1/sprints/${s2.id}/summary`)
+      .set(auth(dev))
+      .expect(200);
+    for (let i = 0; i < 20 && !sum.body.addedAfterStart.length; i++) {
+      await new Promise((r) => setTimeout(r, 100)); // nhật ký ghi bất đồng bộ
+      sum = await api()
+        .get(`/api/v1/sprints/${s2.id}/summary`)
+        .set(auth(dev))
+        .expect(200);
+    }
+    expect(sum.body.addedAfterStart.map((t: { id: string }) => t.id)).toContain(
+      t1.id,
+    );
+    const again = await api()
+      .get(`/api/v1/projects/${projectId}/sprints`)
+      .set(auth(pm))
+      .expect(200);
+    expect(sum.body.taskCount).toBe(
+      again.body.find((x: { id: string }) => x.id === s2.id).taskCount,
+    );
+    const people = sum.body.byAssignee as {
+      remainingHours: number;
+      capacityHours: number;
+    }[];
+    const byPeople = people.reduce((x, p) => x + p.remainingHours, 0);
+    expect(byPeople + sum.body.unassigned.hours).toBeCloseTo(
+      sum.body.remainingHours,
+      1,
+    );
+    expect(sum.body.capacityHours).toBeCloseTo(
+      people.reduce((x, p) => x + p.capacityHours, 0),
+      1,
+    );
+    expect(sum.body.capacityHours).toBeGreaterThan(0);
+    expect(Object.keys(sum.body)).not.toContain('bestUserId'); // không xếp hạng
+  });
+
   it('việc của tôi, tìm kiếm ⌘K, by-key, dashboard, gỡ thành viên mất assignee', async () => {
     const mine = await api().get('/api/v1/me/tasks').set(auth(dev)).expect(200);
     expect(mine.body.map((t: { id: string }) => t.id)).toEqual(

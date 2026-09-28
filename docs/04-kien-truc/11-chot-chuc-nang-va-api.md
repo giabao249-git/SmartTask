@@ -141,6 +141,7 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 | `POST /sprints/:id/start` | pj:PM | — | `sprint` (409 `SPRINT_ALREADY_ACTIVE`) | M | 09 |
 | `POST /sprints/:id/close` | pj:PM | `{ moveOpenTo: "backlog" \| sprintId }` | `sprint` + `{ movedTaskIds }` | M | 09 |
 | `POST /sprints/:id/tasks` | pj:PM | `{ taskIds[] }` (kéo từ backlog) | `task[]` | M | 09 |
+| `GET /sprints/:id/summary` | pj:MEMBER | — | `{ sprint, window, taskCount, doneCount, committedHours, scopeHours, completedHours, remainingHours, capacityHours, byAssignee[{ userId, tasks, remainingHours, capacityHours }], unassigned, completed[], open[], carriedOut[], carriedIn[], addedAfterStart[] }` — số backend tính, không xếp hạng (thêm 28/09, đề xuất 02/07 C1) | M | 09, 30 |
 | `GET /sprints/:id/burndown` | pj:MEMBER | — | `{ ideal[], actual[], velocity, scopeCreepDays[] }` | M | 30 |
 | `GET /sprints/:id/forecast` | pj:MEMBER | — | `{ eta, riskLevel, remainingHours, velocity, causes[] }` (backend tính) | M | 31 |
 | `POST /sprints/:id/forecast/explain` | pj:PM | — | `{ action: RISK_EXPLANATION, cachedUntil }` | M | 31 |

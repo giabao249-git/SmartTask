@@ -42,6 +42,8 @@ export interface SprintEventPayload {
   movedTaskIds?: string[];
   /** Việc đưa vào sprint đang chạy (scope tăng giữa chừng — mục "thêm sau khi bắt đầu" của báo cáo sprint) */
   afterStart?: boolean;
+  /** Đóng sprint: việc dở chuyển về đâu (id sprint đích hoặc null = backlog) */
+  movedTo?: string | null;
   at: Date;
 }
 

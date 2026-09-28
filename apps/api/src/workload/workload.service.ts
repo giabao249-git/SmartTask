@@ -24,6 +24,7 @@ import {
 } from './domain/calendar';
 import {
   busyHoursOnDay,
+  capacityInRange,
   focusBlocksOnDay,
   freeHoursOnDay,
   hoursPerDay,
@@ -496,6 +497,76 @@ export class WorkloadService {
   }
 
   /** Giờ trống theo ngày (docs 04 §5) — đầu vào cho LLM/Validator. */
+  /**
+   * Năng lực hiệu dụng của từng người trong [from, to] (docs 04 §3) — dùng cho thanh "cam kết / năng lực"
+   * khi lập kế hoạch sprint. Cùng dữ liệu họp/nghỉ/admin với màn Nhân sự; KHÔNG trừ việc đã nhận.
+   */
+  async rangeCapacity(
+    workspaceId: string,
+    userIds: string[],
+    from: Date,
+    to: Date,
+  ): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (!userIds.length || to.getTime() < from.getTime()) return out;
+    const ws = await this.prisma.workspace.findUniqueOrThrow({
+      where: { id: workspaceId },
+      select: { settings: true },
+    });
+    const settings = mergeSettings(ws.settings, {});
+    const cal = { workdays: settings.workdays, holidays: settings.holidays };
+    const [users, events, offs] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, weeklyCapacityHours: true },
+      }),
+      this.prisma.calendarEvent.findMany({
+        where: {
+          userId: { in: userIds },
+          isBusy: true,
+          startAt: { lte: addDays(to, 1) },
+          endAt: { gte: from },
+        },
+        select: { userId: true, startAt: true, endAt: true },
+      }),
+      this.prisma.userTimeOff.findMany({
+        where: {
+          userId: { in: userIds },
+          fromDate: { lte: to },
+          toDate: { gte: from },
+        },
+        select: {
+          userId: true,
+          fromDate: true,
+          toDate: true,
+          kind: true,
+          hoursPerDay: true,
+        },
+      }),
+    ]);
+    for (const u of users)
+      out.set(
+        u.id,
+        capacityInRange(
+          from,
+          to,
+          u.weeklyCapacityHours ?? settings.defaultCapacityHours,
+          events.filter((e) => e.userId === u.id),
+          offs
+            .filter((o) => o.userId === u.id)
+            .map((o) => ({
+              ...o,
+              hoursPerDay:
+                o.hoursPerDay === null ? null : Number(o.hoursPerDay),
+            })),
+          cal,
+          settings.workHours,
+          settings.adminOverhead,
+        ),
+      );
+    return out;
+  }
+
   async freeByDay(
     workspaceId: string,
     userId: string,

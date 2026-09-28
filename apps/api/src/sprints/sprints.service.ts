@@ -8,6 +8,9 @@ import {
   type SprintEventPayload,
 } from '../common/events/task.events';
 import { ForecastService } from '../forecast/forecast.service';
+import { remainingOf } from '../workload/domain/allocation';
+import { toDate } from '../workload/domain/calendar';
+import { WorkloadService } from '../workload/workload.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   AddSprintTasksDto,
@@ -39,6 +42,7 @@ export class SprintsService {
     private readonly access: ProjectAccessService,
     private readonly events: EventEmitter2,
     private readonly forecast: ForecastService,
+    private readonly workload: WorkloadService,
   ) {}
 
   async list(userId: string, projectId: string) {
@@ -222,6 +226,7 @@ export class SprintsService {
       sprintId,
       actorId: userId,
       movedTaskIds,
+      movedTo: targetSprintId,
       at: new Date(),
     });
     const closed = await this.prisma.sprint.findUniqueOrThrow({
@@ -280,6 +285,183 @@ export class SprintsService {
     });
   }
 
+  /**
+   * Tóm tắt một sprint — nguồn chung cho khung lập kế hoạch, hộp thoại bắt đầu/kết thúc, báo cáo sprint
+   * và tra cứu của Trợ lý (docs 02/07 C1). Chỉ số backend tính; không xếp hạng, không gợi ý.
+   */
+  async summary(userId: string, sprintId: string) {
+    const s = await this.load(sprintId);
+    const acc = await this.access.assertRead(userId, s.projectId);
+    const today = toDate(new Date());
+    const [tasks, members, logs] = await Promise.all([
+      this.prisma.task.findMany({
+        where: { sprintId, deletedAt: null, parentId: null },
+        orderBy: { number: 'asc' },
+        select: TASK_BRIEF,
+      }),
+      this.prisma.projectMember.findMany({
+        where: { projectId: s.projectId },
+        select: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              shortName: true,
+              avatarUrl: true,
+            },
+          },
+        },
+      }),
+      this.prisma.activityLog.findMany({
+        where: {
+          projectId: s.projectId,
+          action: { in: ['sprint.closed', 'sprint.tasks_added'] },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { action: true, diff: true, createdAt: true },
+      }),
+    ]);
+    const brief = (t: (typeof tasks)[number]) => ({
+      id: t.id,
+      key: `${t.project.key}-${t.number}`,
+      number: t.number,
+      title: t.title,
+      estimateHours: num(t.estimateHours),
+      remainingHours: round2(hoursLeft(t)),
+      completedAt: t.completedAt,
+      assigneeIds: t.assignees.map((a) => a.userId),
+    });
+    const done = tasks.filter((t) => t.completedAt);
+    const open = tasks.filter((t) => !t.completedAt);
+    const scopeHours = tasks.reduce((x, t) => x + num(t.estimateHours), 0);
+    // Cửa sổ năng lực: sprint chưa đóng tính từ hôm nay (hoặc ngày bắt đầu nếu chưa tới) tới ngày kết thúc
+    const start = toDate(s.startDate);
+    const end = toDate(s.endDate);
+    const from =
+      s.status === SprintStatus.CLOSED ? start : start > today ? start : today;
+    const cap = await this.workload.rangeCapacity(
+      acc.workspaceId,
+      members.map((m) => m.user.id),
+      from,
+      end,
+    );
+    // Việc có n người thực hiện: mỗi người nhận 1/n giờ còn lại (cùng cách chia với tính tải, docs 04 §1)
+    const byUser = new Map<string, { tasks: number; hours: number }>();
+    let unassignedTasks = 0;
+    let unassignedHours = 0;
+    for (const t of open) {
+      const h = hoursLeft(t);
+      if (!t.assignees.length) {
+        unassignedTasks += 1;
+        unassignedHours += h;
+        continue;
+      }
+      for (const a of t.assignees) {
+        const cur = byUser.get(a.userId) ?? { tasks: 0, hours: 0 };
+        cur.tasks += 1;
+        cur.hours += h / t.assignees.length;
+        byUser.set(a.userId, cur);
+      }
+    }
+    // Nhật ký: việc bị đẩy đi lúc đóng, việc được chuyển vào từ sprint khác, việc thêm sau khi bắt đầu
+    const diffs = logs.map((l) => ({
+      action: l.action,
+      d: (l.diff ?? {}) as {
+        sprintId?: string;
+        movedTaskIds?: string[];
+        movedTo?: string | null;
+        taskIds?: string[];
+        afterStart?: boolean;
+      },
+    }));
+    const carriedOutIds = diffs
+      .filter((x) => x.action === 'sprint.closed' && x.d.sprintId === sprintId)
+      .flatMap((x) => x.d.movedTaskIds ?? []);
+    const carriedInIds = diffs
+      .filter((x) => x.action === 'sprint.closed' && x.d.movedTo === sprintId)
+      .flatMap((x) => x.d.movedTaskIds ?? []);
+    const addedIds = new Set([
+      ...diffs
+        .filter(
+          (x) =>
+            x.action === 'sprint.tasks_added' &&
+            x.d.sprintId === sprintId &&
+            x.d.afterStart,
+        )
+        .flatMap((x) => x.d.taskIds ?? []),
+      // Việc tạo thẳng vào sprint sau khi đã bắt đầu cũng là phạm vi tăng giữa chừng
+      ...(s.startedAt
+        ? tasks.filter((t) => t.createdAt > s.startedAt!).map((t) => t.id)
+        : []),
+    ]);
+    const others = await this.prisma.task.findMany({
+      where: {
+        id: {
+          in: [...new Set([...carriedOutIds, ...carriedInIds, ...addedIds])],
+        },
+        deletedAt: null,
+        parentId: null,
+      },
+      select: TASK_BRIEF,
+    });
+    const pick = (ids: Iterable<string>) => {
+      const set = new Set(ids);
+      return others.filter((t) => set.has(t.id)).map(brief);
+    };
+    const capacityHours = [...cap.values()].reduce((x, h) => x + h, 0);
+    return {
+      sprint: {
+        id: s.id,
+        name: s.name,
+        goal: s.goal,
+        status: s.status,
+        startDate: s.startDate,
+        endDate: s.endDate,
+        startedAt: s.startedAt,
+        closedAt: s.closedAt,
+      },
+      window: {
+        from: from.toISOString().slice(0, 10),
+        to: end.toISOString().slice(0, 10),
+      },
+      taskCount: tasks.length,
+      doneCount: done.length,
+      /** Cam kết: chưa bắt đầu = tổng ước lượng hiện tại; đã bắt đầu = phạm vi chốt lúc bắt đầu */
+      committedHours: round2(
+        s.status === SprintStatus.PLANNED
+          ? scopeHours
+          : s.scopeHoursInitial
+            ? num(s.scopeHoursInitial)
+            : scopeHours,
+      ),
+      scopeHours: round2(scopeHours),
+      completedHours: round2(
+        done.reduce((x, t) => x + num(t.estimateHours), 0),
+      ),
+      remainingHours: round2(open.reduce((x, t) => x + hoursLeft(t), 0)),
+      /** Năng lực hiệu dụng cả nhóm trong cửa sổ — chưa trừ việc ở dự án khác */
+      capacityHours: round2(capacityHours),
+      byAssignee: members
+        .map((m) => ({
+          userId: m.user.id,
+          fullName: m.user.fullName,
+          shortName: m.user.shortName,
+          avatarUrl: m.user.avatarUrl,
+          tasks: byUser.get(m.user.id)?.tasks ?? 0,
+          remainingHours: round2(byUser.get(m.user.id)?.hours ?? 0),
+          capacityHours: cap.get(m.user.id) ?? 0,
+        }))
+        // Xếp theo giờ còn lại chỉ để đọc cho dễ — không phải thứ hạng
+        .sort((x, y) => y.remainingHours - x.remainingHours),
+      unassigned: { tasks: unassignedTasks, hours: round2(unassignedHours) },
+      completed: done.map(brief),
+      open: open.map(brief),
+      carriedOut: pick(carriedOutIds),
+      carriedIn: pick(carriedInIds),
+      addedAfterStart: pick(addedIds),
+    };
+  }
+
   private async load(sprintId: string) {
     const s = await this.prisma.sprint.findUnique({
       where: { id: sprintId },
@@ -303,4 +485,39 @@ export class SprintsService {
 
 function num(d: Prisma.Decimal | null | undefined): number {
   return d ? Number(d) : 0;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const TASK_BRIEF = {
+  id: true,
+  number: true,
+  title: true,
+  estimateHours: true,
+  remainingHours: true,
+  progress: true,
+  completedAt: true,
+  createdAt: true,
+  startDate: true,
+  dueDate: true,
+  project: { select: { key: true } },
+  assignees: { select: { userId: true } },
+} as const;
+
+/** Giờ còn lại — cùng công thức với burn-down/forecast (docs 04 §1). */
+function hoursLeft(t: {
+  id: string;
+  estimateHours: Prisma.Decimal | null;
+  remainingHours: Prisma.Decimal | null;
+  progress: number;
+  completedAt: Date | null;
+  createdAt: Date;
+  startDate: Date | null;
+  dueDate: Date | null;
+}): number {
+  return remainingOf({
+    ...t,
+    estimateHours: t.estimateHours === null ? null : Number(t.estimateHours),
+    remainingHours: t.remainingHours === null ? null : Number(t.remainingHours),
+  });
 }
