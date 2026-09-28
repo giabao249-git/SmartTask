@@ -115,6 +115,16 @@ export function skillEvidence(
   };
 }
 
+/**
+ * Bằng chứng có KẾT LUẬN: đạt được một mức, hoặc có việc phải làm lại. Chỉ có nửa ghi nhận (làm chung/chưa
+ * đánh giá) mà chưa đủ một mức thì vẫn là "chưa biết" — không được coi là thiếu kỹ năng.
+ */
+export function isConclusive(
+  e: Pick<SkillEvidence, 'level' | 'failed'>,
+): boolean {
+  return e.level > 0 || e.failed > 0;
+}
+
 /** Gom theo (người, kỹ năng). */
 export function buildProfiles(
   items: EvidenceItem[],

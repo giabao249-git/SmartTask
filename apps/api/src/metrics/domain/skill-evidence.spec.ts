@@ -1,5 +1,6 @@
 import {
   buildProfiles,
+  isConclusive,
   demonstrated,
   evidenceText,
   skillEvidence,
@@ -85,6 +86,14 @@ describe('hồ sơ kỹ năng từ bằng chứng (docs 04 §2b)', () => {
     const many = skillEvidence('s', [item(), item(), item(), item()]);
     expect(many.confidence).toBe('high');
     expect(skillEvidence('s', [item(), item()]).confidence).toBe('medium');
+  });
+
+  it('nửa ghi nhận chưa đủ một mức là "chưa biết", không phải thiếu; có việc làm lại mới là kết luận', () => {
+    expect(isConclusive(skillEvidence('s', [item({ share: 0.5 })]))).toBe(
+      false,
+    );
+    expect(isConclusive(skillEvidence('s', [item({ bugs: 1 })]))).toBe(true);
+    expect(isConclusive(skillEvidence('s', [item()]))).toBe(true);
   });
 
   it('gom theo người và kỹ năng', () => {

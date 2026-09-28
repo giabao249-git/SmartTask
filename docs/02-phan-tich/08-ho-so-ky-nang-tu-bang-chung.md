@@ -72,3 +72,23 @@ Hiệu suất cá nhân (đúng hạn, rating TB, EAR, số lần mở lại) v�
 | Trễ hạn do ước lượng sai chứ không do người làm | Đúng hạn không vào mức kỹ năng, chỉ ở phần hiệu suất (PM xem) |
 | Bug do đặc tả | Liên kết bug → việc gốc do người gắn tay, không tự suy |
 | Dữ liệu ít | Mọi mức đi kèm số việc, độ tin cậy, lần gần nhất; cửa sổ 26 tuần |
+
+## 7. Tab Nhân sự làm lại theo hồ sơ bằng chứng (28/09, nhánh `feature/UC-24-tab-nhan-su`)
+
+**Đo trước** (Chrome headless, PM `lan@`, thành viên `huy@`, 1600 px và 375 px, dữ liệu seed + lịch sử):
+
+| Vấn đề | Loại |
+|---|---|
+| "Ma trận kỹ năng", cảnh báo bus factor, "Kỹ năng của tôi" (lưới 30 kỹ năng × 0–5) đều chạy trên **tự khai** — ngược quyết định ở §1 | Logic |
+| Bảng năng lực tính "28/09 + 1 ngày" vì Sprint 1 kết thúc hôm nay → giờ trống gần như 0, không chọn được sprint kế | Logic |
+| Viewer của workspace (Mai) nằm trong bảng ứng viên nhận việc | Logic |
+| Giao diện ghi "PM bấm ô để xác nhận" nhưng API chỉ cho OWNER/ADMIN | Logic |
+| Người chỉ có **nửa** ghi nhận (làm chung) bị coi là "NestJS mức 0 < 3" và bị phạt hệ số tải | Logic |
+| Nhãn `NORMAL`, `MEMBER`, "Spread", "U trước", "EAR (n=7)"; số mono "14.47h"; ngày ISO | Hiển thị |
+| Khối "Tải tuần này" lặp lại bảng tải kèm hai nhãn cho cùng một mức | Hiển thị |
+| Thành viên thấy khung trống "Chỉ PM xem" cao ~220 px + nút gọi AI không dùng được | Hiển thị |
+| 375 px: bảng vỡ, tên việc 10 dòng | Hiển thị |
+
+**Sau:** 5 tab — **Nhóm** (mặc định: việc chờ đánh giá cho PM; thẻ từng người: tải tuần này, kỹ năng từ bằng chứng, hiệu suất nếu được xem; bấm mở hồ sơ, xem được "vì sao mức 3" tới từng việc) · **Tải theo tuần** · **Giờ trống & giao việc** (chọn khoảng; ô ứng viên nói rõ đủ/thiếu/chưa có bằng chứng) · **Kỹ năng nhóm** (ma trận theo bằng chứng, PM xác nhận ô tự khai) · **Hồ sơ của tôi**. API: `GET /projects/:id/reviews/pending`, PM dự án chung được xác nhận kỹ năng, Viewer không là ứng viên, cờ `viewer` trong hồ sơ, "chưa đủ bằng chứng" là trung tính (`isConclusive`). Không tab nào tràn ngang ở 375 px.
+
+Ảnh: [trước — ma trận tự khai](../05-hien-thuc/anh/sprint-v1/h1-truoc-ma-tran-tu-khai.png) · [trước — bảng năng lực](../05-hien-thuc/anh/sprint-v1/h1-truoc-nang-luc.png) · [sau — Nhóm](../05-hien-thuc/anh/sprint-v1/h1-sau-nhom.png) · [sau — hồ sơ bằng chứng](../05-hien-thuc/anh/sprint-v1/h1-sau-ho-so-bang-chung.png) · [sau — giờ trống & giao việc](../05-hien-thuc/anh/sprint-v1/h1-sau-gio-trong-giao-viec.png) · [sau — kỹ năng nhóm](../05-hien-thuc/anh/sprint-v1/h1-sau-ky-nang-nhom.png).

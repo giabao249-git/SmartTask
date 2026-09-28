@@ -2,20 +2,23 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Award, BadgeCheck, Scale, Users2 } from "lucide-react";
+import { Award, CalendarRange, Scale, UserRound, Users2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/app/PageHeader";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { WorkloadView } from "@/features/workload/WorkloadView";
 import { RebalanceView } from "@/features/rebalance/RebalanceView";
-import { SkillsMatrixView } from "@/features/skills/SkillsMatrixView";
+import { MyProfileView } from "./MyProfileView";
+import { TeamSkillsView } from "./TeamSkillsView";
+import { TeamView } from "./TeamView";
 
 const TABS = [
-  { key: "workload", label: "Tải theo tuần", icon: Users2 },
-  { key: "balance", label: "Năng lực & cân bằng", icon: Scale },
-  { key: "skills", label: "Ma trận kỹ năng", icon: Award },
-  { key: "mine", label: "Kỹ năng của tôi", icon: BadgeCheck },
+  { key: "team", label: "Nhóm", icon: Users2 },
+  { key: "workload", label: "Tải theo tuần", icon: CalendarRange },
+  { key: "balance", label: "Giờ trống & giao việc", icon: Scale },
+  { key: "skills", label: "Kỹ năng nhóm", icon: Award },
+  { key: "mine", label: "Hồ sơ của tôi", icon: UserRound },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
 
@@ -24,10 +27,11 @@ export function PeopleView() {
   const project = useCurrentProject();
   const router = useRouter();
   const params = useSearchParams();
-  const tab: TabKey = (TABS.find((t) => t.key === params.get("tab"))?.key ?? "workload") as TabKey;
+  const tab: TabKey = (TABS.find((t) => t.key === params.get("tab"))?.key ?? "team") as TabKey;
   const setTab = (v: string) => {
     const next = new URLSearchParams(params.toString());
-    if (v === "workload") next.delete("tab");
+    next.delete("member");
+    if (v === "team") next.delete("tab");
     else next.set("tab", v);
     router.replace(`?${next.toString()}`, { scroll: false });
   };
@@ -36,12 +40,8 @@ export function PeopleView() {
     <div className="space-y-4">
       <PageHeader
         title={`Nhân sự · ${project.key}`}
-        description="Tải theo tuần, giờ trống và kỹ năng của nhóm — số liệu backend tính, quyết định giao việc vẫn là của bạn."
-        breadcrumbs={[
-          { label: "Workspace", href: "/workspaces" },
-          { label: project.name, href: `/projects/${project.id}/dashboard` },
-          { label: TABS.find((t) => t.key === tab)?.label ?? "Nhân sự" },
-        ]}
+        description="Ai đang làm gì, làm được gì — kỹ năng tính từ việc đã làm, không từ tự khai. Hệ thống tính số, quyết định giao việc là của bạn."
+        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: TABS.find((t) => t.key === tab)?.label ?? "Nhân sự" }]}
       />
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-4">
@@ -66,6 +66,9 @@ export function PeopleView() {
           </SelectContent>
         </Select>
 
+        <TabsContent value="team">
+          <TeamView />
+        </TabsContent>
         <TabsContent value="workload">
           <WorkloadView />
         </TabsContent>
@@ -73,10 +76,10 @@ export function PeopleView() {
           <RebalanceView />
         </TabsContent>
         <TabsContent value="skills">
-          <SkillsMatrixView section="matrix" />
+          <TeamSkillsView />
         </TabsContent>
         <TabsContent value="mine">
-          <SkillsMatrixView section="mine" />
+          <MyProfileView />
         </TabsContent>
       </Tabs>
     </div>

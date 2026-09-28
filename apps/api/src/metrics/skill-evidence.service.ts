@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   buildProfiles,
+  isConclusive,
   type EvidenceItem,
   type SkillEvidence,
 } from './domain/skill-evidence';
@@ -182,8 +183,8 @@ export class SkillEvidenceService {
   }
 
   /**
-   * Thay thế cho `Map<userId, Map<skillId, level tự khai>>`. Chỉ có mặt kỹ năng CÓ bằng chứng (mức có thể là 0 khi
-   * toàn phải làm lại); kỹ năng vắng mặt = chưa có bằng chứng → hệ số thiếu kỹ năng coi là trung tính.
+   * Thay thế cho `Map<userId, Map<skillId, level tự khai>>`. Chỉ có mặt kỹ năng có bằng chứng KẾT LUẬN (mức có thể là
+   * 0 khi việc làm lại nhiều hơn việc đạt); vắng mặt = chưa biết → hệ số thiếu kỹ năng coi là trung tính.
    */
   async levels(
     workspaceId: string,
@@ -193,7 +194,14 @@ export class SkillEvidenceService {
     const built = buildProfiles(await this.items(workspaceId, userIds, now));
     const out = new Map<string, Map<string, number>>();
     for (const [u, m] of built)
-      out.set(u, new Map([...m].map(([s, e]) => [s, e.level])));
+      out.set(
+        u,
+        new Map(
+          [...m]
+            .filter(([, e]) => isConclusive(e))
+            .map(([s, e]) => [s, e.level]),
+        ),
+      );
     return out;
   }
 

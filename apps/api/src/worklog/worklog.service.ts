@@ -176,6 +176,54 @@ export class WorklogService {
 
   // ── Đánh giá việc đã xong ──────────────────────────────────
 
+  /** Việc đã xong trong 60 ngày chưa được đánh giá — PM thấy để chấm (nguồn feedback của hồ sơ kỹ năng). */
+  async pendingReviews(userId: string, projectId: string) {
+    await this.access.assertManage(userId, projectId);
+    const since = new Date(Date.now() - 60 * 86_400_000);
+    const rows = await this.prisma.task.findMany({
+      where: {
+        projectId,
+        deletedAt: null,
+        parentId: null,
+        completedAt: { gte: since },
+        review: null,
+        assignees: { some: {} },
+      },
+      orderBy: { completedAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        number: true,
+        title: true,
+        completedAt: true,
+        project: { select: { key: true } },
+        skills: { select: { skill: { select: { name: true } } } },
+        assignees: {
+          select: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                shortName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    return rows.map((t) => ({
+      id: t.id,
+      key: `${t.project.key}-${t.number}`,
+      title: t.title,
+      completedAt: t.completedAt,
+      skills: t.skills.map((s) => s.skill.name),
+      assignees: t.assignees.map((a) => a.user),
+      // PM tự làm việc này thì cần người khác chấm — tự chấm không tính vào hồ sơ
+      selfAssigned: t.assignees.some((a) => a.user.id === userId),
+    }));
+  }
+
   /** Rating chỉ người được giao và PM xem được (docs 04 §2) — người khác nhận `visible: false`. */
   async getReview(userId: string, taskId: string) {
     const projectId = await this.access.projectOfTask(taskId);

@@ -59,6 +59,17 @@ export class WorklogController {
     return this.worklog.deleteEntry(user.id, id);
   }
 
+  @Get('projects/:projectId/reviews/pending')
+  @ApiOperation({
+    summary: 'Việc đã xong 60 ngày qua chưa đánh giá — PM (UC-36)',
+  })
+  pending(
+    @CurrentUser() user: JwtUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+  ) {
+    return this.worklog.pendingReviews(user.id, projectId);
+  }
+
   @Get('tasks/:id/review')
   @ApiOperation({
     summary: 'Đánh giá việc — chỉ người được giao và PM thấy nội dung (UC-36)',

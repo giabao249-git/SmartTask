@@ -167,6 +167,7 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 | `GET /me/tasks?status=&dueTo=` | auth | — | `task[]` xuyên dự án | M | 15 |
 | `GET /workspaces/:wsId/tasks/search?q=&limit=` | member | — | `task[]` (⌘K) | M | 15 |
 | `GET · POST /tasks/:id/time-entries` · `PATCH · DELETE /time-entries/:id` | assignee · pj:PM | `{ workDate, hours, note? }` | `{ entries[], totalHours, estimateHours }` — **đã làm 28/09**; không ghi ngày tương lai, ≤ 24 h/người/ngày, sửa/xoá: người ghi · PM | S5 | 35 |
+| `GET /projects/:id/reviews/pending` | pj:PM | — | việc đã xong 60 ngày chưa đánh giá `{ id, key, title, completedAt, skills[], assignees[], selfAssigned }[]` — **28/09** | S5 | 36 |
 | `GET · PUT /tasks/:id/review` | GET: pj:MEMBER · PUT: pj:PM | `{ rating, difficultyActual, actualHoursConfirmed?, comment? }` | `{ visible, canReview, done, review }` — **đã làm 28/09**; chỉ việc đã xong; nội dung chỉ người được giao và PM thấy | S5 | 36 |
 
 ### 3.7 Bình luận, đính kèm

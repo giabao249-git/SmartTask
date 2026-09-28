@@ -637,7 +637,8 @@ export interface CapacityTableView {
     fullName: string;
     shortName: string | null;
     role: string;
-    skills: { skillId: string; name: string; level: number }[];
+    /** Mức TỪ BẰNG CHỨNG (docs 02/08); `declared` = tự khai, chỉ để đối chiếu */
+    skills: { skillId: string; name: string; level: number; declared: number | null; tasks: number; failed: number; confidence: SkillConfidence; evidence: string }[];
     utilizationBefore: number;
     levelBefore: WorkloadLevelApi;
     projectsOpen: number;
@@ -653,7 +654,7 @@ export interface CapacityTableView {
     dueDate: string | null;
     dependsOnIds: string[];
     requiredSkills: { skillId: string; name: string; minLevel: number }[];
-    perUser: { userId: string; hoursEff: number; skillMatch: { avg: number; missing: string[] }; freeBeforeDue: number | null }[];
+    perUser: { userId: string; hoursEff: number; skillMatch: { avg: number; missing: string[]; unproven: string[]; items: { skillId: string; name: string; required: number; level: number; unproven: boolean }[] }; freeBeforeDue: number | null }[];
   }[];
   spread: number;
 }
@@ -900,4 +901,69 @@ export interface AiCallLogPage {
   limit: number;
   total: number;
   items: AiCallLogItem[];
+}
+
+export type SkillConfidence = "none" | "low" | "medium" | "high";
+
+/** Một dòng hồ sơ kỹ năng TỪ BẰNG CHỨNG (GET /projects/:id/skill-profiles) */
+export interface SkillEvidenceView {
+  skillId: string;
+  name: string;
+  level: number;
+  confidence: SkillConfidence;
+  tasks: number;
+  passed: number;
+  failed: number;
+  reviewed: number;
+  verified: boolean;
+  lastAt: string | null;
+  declared: number | null;
+  evidence: string;
+}
+
+export interface MemberProfileView {
+  id: string;
+  fullName: string;
+  shortName: string | null;
+  avatarUrl: string | null;
+  role: ProjectRole;
+  /** VIEWER của workspace: chỉ xem, không nhận việc */
+  viewer: boolean;
+  skills: SkillEvidenceView[];
+  /** Chỉ chính người đó và PM nhận được; người khác = null */
+  performance: {
+    windowWeeks: number;
+    doneTasks: number;
+    onTimeRate: number | null;
+    avgRating: number | null;
+    ear: number;
+    reopenCount: number;
+    overdueOpen: number;
+    openTasks: number;
+  } | null;
+}
+
+export interface EvidenceItemView {
+  skillId: string;
+  skill: string;
+  source: "task" | "verified";
+  task: { id: string; key: string; title: string } | null;
+  required: number;
+  demonstrated: number;
+  passed: boolean;
+  weight: number;
+  rating: number | null;
+  reopened: number;
+  bugs: number;
+  at: string;
+}
+
+export interface PendingReviewView {
+  id: string;
+  key: string;
+  title: string;
+  completedAt: string;
+  skills: string[];
+  assignees: { id: string; fullName: string; shortName: string | null; avatarUrl: string | null }[];
+  selfAssigned: boolean;
 }
