@@ -44,6 +44,19 @@ Ngày làm việc lấy từ lịch workspace (`settings.workdays`, mặc địn
 
 Tất cả tính bằng cron chủ nhật vào `user_metrics_weekly (user_id, week_start, skill_category, ear, velocity_hours, on_time_rate, avg_rating, median_cycle_days, sample_size)`; `sample_size` đi kèm mọi số để LLM và giao diện biết độ tin cậy.
 
+## 2b. Hồ sơ kỹ năng từ bằng chứng (thay mức tự khai — [02/08](../02-phan-tich/08-ho-so-ky-nang-tu-bang-chung.md))
+
+```
+Bằng chứng e = (u, s, m) cho mỗi việc ĐÃ XONG trong 26 tuần có yêu cầu kỹ năng s mức m, mỗi người làm u:
+  trượt(e)  = mở lại ≥ 1  ∨  có bug gắn việc gốc  ∨  rating ≤ 2           (rating do người khác chấm; tự chấm bỏ qua)
+  thểHiện(e)= m + 1 nếu rating ≥ 4 ∧ độ khó thực tế > m, ngược lại m      (kẹp 1–5)
+  w(e)      = (rating có ? 1 : 0,5) × 1/số người làm;   PM xác nhận mức L = một bằng chứng đạt, w = 1, thểHiện = L
+Mức(u, s)   = max L sao cho  Σ w(đạt, thểHiện ≥ L) ≥ 1  ∧  Σ w(đạt, ≥ L) > Σ w(trượt, ≥ L);   không có → 0
+Độ tin cậy  = none (0 bằng chứng) · low (Σ w đạt < 2) · medium (< 4) · high
+```
+
+Mức tự khai (`user_skills.level` chưa xác nhận) **không** vào công thức; chỉ hiện để đối chiếu. Hàm thuần `metrics/domain/skill-evidence.ts`, nạp dữ liệu ở `SkillEvidenceService`.
+
 ## 3. Tải hiệu dụng và năng lực hiệu dụng
 
 ```
@@ -103,7 +116,8 @@ NGƯỜI | Lan (PM) · kỹ năng React 4, NestJS 2 · U tuần này 1.05 · EAR
 ## 6. Khớp kỹ năng từng cặp (sự thật, không xếp hạng)
 
 ```
-SkillMatch(u, t) = với mỗi kỹ năng s yêu cầu ở mức m: level(u, s) / m  (kẹp 0–1; không có kỹ năng = 0)
+SkillMatch(u, t) = với mỗi kỹ năng s yêu cầu ở mức m: level(u, s) / m  (kẹp 0–1)
+                   level(u, s) = Mức(u, s) ở §2b; chưa có bằng chứng → ratio 0 nhưng đánh dấu `unproven`, không phải `missing`
                    trả về danh sách [{skill, required: m, level(u,s)}] và trung bình
 ```
 
@@ -116,7 +130,9 @@ LLM nhận danh sách này cho mọi cặp (u, t) chưa giao; giao diện hiển
 Đạt khi:
   u ∈ project_members(t.project)                          → ASSIGN_NOT_MEMBER
   không có user_time_off phủ trọn [start, due]            → ASSIGN_ON_LEAVE
-  với mọi kỹ năng bắt buộc: level(u,s) ≥ m − 1            → ASSIGN_SKILL_GAP      (thiếu ≥ 2 bậc)
+  kỹ năng theo bằng chứng (§2b), CHỈ CẢNH BÁO kèm số (từ 28/09 — PM quyết, dữ liệu thưa):
+     chưa có bằng chứng                                   → ASSIGN_SKILL_UNPROVEN (cảnh báo)
+     Mức(u,s) < m                                         → ASSIGN_SKILL_GAP (cảnh báo, kèm số việc / làm lại)
   FreeBefore(u, due) − FreeBefore(u, start − 1) ≥ HoursEff(u, t)   → ASSIGN_CAPACITY_EXCEEDED {free, need}
   start ≥ hôm nay; start ≤ due; due ≤ sprint.end_date (nếu vượt: WARN_DUE_AFTER_SPRINT)
   thêm cạnh phụ thuộc không tạo vòng                       → DEPENDENCY_CYCLE

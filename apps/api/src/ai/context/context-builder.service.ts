@@ -6,6 +6,7 @@ import { ForecastService } from '../../forecast/forecast.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isoDate, toDate } from '../../workload/domain/calendar';
 import { WorkloadService } from '../../workload/workload.service';
+import { SkillEvidenceService } from '../../metrics/skill-evidence.service';
 import { AiConfigService } from '../ai-config/ai-config.service';
 import { PURPOSE_INSTRUCTIONS } from '../prompt/master-prompt';
 import {
@@ -79,6 +80,7 @@ export class ContextBuilderService {
     private readonly aiConfig: AiConfigService,
     private readonly workload: WorkloadService,
     private readonly forecast: ForecastService,
+    private readonly evidence: SkillEvidenceService,
   ) {}
 
   async build(input: BuildInput): Promise<BuiltContext> {
@@ -105,9 +107,6 @@ export class ContextBuilderService {
                 shortName: true,
                 weeklyCapacityHours: true,
                 aiPersonalPrompt: true,
-                userSkills: {
-                  select: { skillId: true, level: true, verifiedById: true },
-                },
               },
             },
           },
@@ -193,6 +192,12 @@ export class ContextBuilderService {
     ];
 
     const skillName = new Map(skills.map((s) => [s.id, s.name]));
+    // Kỹ năng gửi LLM = hồ sơ TỪ BẰNG CHỨNG; mức tự khai không vào ngữ cảnh (docs 02/08)
+    const evidenceOf = await this.evidence.evidence(
+      project.workspaceId,
+      project.members.map((m) => m.user.id),
+      today,
+    );
     const identity = await this.identityBlock(
       project.workspaceId,
       project.members.map((m) => m.user.id),
@@ -207,7 +212,7 @@ export class ContextBuilderService {
             'tên',
             'tên gọi',
             'vai',
-            'kỹ năng (mức, *=PM xác nhận)',
+            'kỹ năng theo bằng chứng (mức · việc đã xong · làm lại)',
             'giờ/tuần',
           ],
           project.members.map((m) => [
@@ -215,13 +220,13 @@ export class ContextBuilderService {
             m.user.fullName,
             m.user.shortName,
             m.role,
-            m.user.userSkills
+            [...(evidenceOf.get(m.user.id)?.values() ?? [])]
+              .sort((a, b) => b.level - a.level || b.tasks - a.tasks)
               .map(
-                (s) =>
-                  `${codes.codeOf('k', s.skillId) ?? '?'} ${skillName.get(s.skillId) ?? ''} ${s.level}${s.verifiedById ? '*' : ''}`,
+                (e) =>
+                  `${codes.codeOf('k', e.skillId) ?? '?'} ${skillName.get(e.skillId) ?? ''} ${e.level} (${e.tasks} việc${e.failed ? `, ${e.failed} làm lại` : ''}${e.verified ? ', PM xác nhận' : ''})`,
               )
-              .sort()
-              .join(', ') || 'chưa khai',
+              .join(', ') || 'chưa có bằng chứng',
             m.user.weeklyCapacityHours ?? defaultCap,
           ]),
         ),

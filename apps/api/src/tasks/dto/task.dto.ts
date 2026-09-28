@@ -98,6 +98,13 @@ export class CreateTaskDto {
   @ArrayMaxSize(10)
   @IsUUID('4', { each: true })
   assigneeIds?: string[];
+  @ApiPropertyOptional({
+    description:
+      'Chỉ task BUG: bug sinh ra từ việc nào (cùng dự án); null = gỡ',
+  })
+  @IsOptional()
+  @IsUUID()
+  originTaskId?: string | null;
   @ApiPropertyOptional({ type: [RequiredSkillDto] })
   @IsOptional()
   @IsArray()
@@ -153,6 +160,13 @@ export class UpdateTaskDto extends VersionedDto {
   @IsOptional()
   @IsUUID()
   sprintId?: string | null;
+  @ApiPropertyOptional({
+    description:
+      'Chỉ task BUG: bug sinh ra từ việc nào (cùng dự án); null = gỡ',
+  })
+  @IsOptional()
+  @IsUUID()
+  originTaskId?: string | null;
   @ApiPropertyOptional({
     description: 'Gán người thực hiện duy nhất (hoặc null để gỡ)',
   })

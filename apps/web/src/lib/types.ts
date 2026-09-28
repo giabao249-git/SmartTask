@@ -513,6 +513,41 @@ export interface TaskDetail extends TaskListItem {
   parent: { id: string; number: number; title: string } | null;
   subtasks: TaskListItem[];
   dependentIds: string[];
+  /** Chỉ BUG: bug sinh ra từ việc nào (bằng chứng "làm lại" cho hồ sơ kỹ năng) */
+  origin?: { id: string; key: string; title: string } | null;
+  /** Bug được gắn là sinh ra từ việc này */
+  derivedBugs?: { id: string; key: string; title: string; done: boolean }[];
+}
+
+export interface TimeEntryView {
+  id: string;
+  userId: string;
+  user: { fullName: string; shortName: string | null; avatarUrl: string | null };
+  workDate: string;
+  hours: number;
+  note: string | null;
+  canEdit: boolean;
+}
+
+export interface WorklogView {
+  entries: TimeEntryView[];
+  totalHours: number;
+  estimateHours: number | null;
+}
+
+export interface TaskReviewView {
+  visible: boolean;
+  canReview: boolean;
+  done: boolean;
+  review: {
+    rating: number;
+    difficultyActual: number;
+    actualHoursConfirmed: number | null;
+    comment: string | null;
+    createdAt: string;
+    reviewer: { id: string; fullName: string; shortName: string | null };
+    selfReview: boolean;
+  } | null;
 }
 
 export interface TaskListResponse {

@@ -166,8 +166,8 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 | `GET · PUT /tasks/:id/dependencies` | pj:MEMBER | `{ version, dependsOnIds[] }` | `dependency[]` (422 `DEPENDENCY_CYCLE`) | S1 | 11 |
 | `GET /me/tasks?status=&dueTo=` | auth | — | `task[]` xuyên dự án | M | 15 |
 | `GET /workspaces/:wsId/tasks/search?q=&limit=` | member | — | `task[]` (⌘K) | M | 15 |
-| `GET · POST /tasks/:id/time-entries` · `PATCH · DELETE /time-entries/:id` | assignee · pj:PM | `{ workDate, hours, note? }` | `timeEntry[]` | S5 | 35 |
-| `PUT /tasks/:id/review` | pj:PM | `{ rating, difficultyActual, actualHoursConfirmed?, comment? }` | `review` | S5 | 36 |
+| `GET · POST /tasks/:id/time-entries` · `PATCH · DELETE /time-entries/:id` | assignee · pj:PM | `{ workDate, hours, note? }` | `{ entries[], totalHours, estimateHours }` — **đã làm 28/09**; không ghi ngày tương lai, ≤ 24 h/người/ngày, sửa/xoá: người ghi · PM | S5 | 35 |
+| `GET · PUT /tasks/:id/review` | GET: pj:MEMBER · PUT: pj:PM | `{ rating, difficultyActual, actualHoursConfirmed?, comment? }` | `{ visible, canReview, done, review }` — **đã làm 28/09**; chỉ việc đã xong; nội dung chỉ người được giao và PM thấy | S5 | 36 |
 
 ### 3.7 Bình luận, đính kèm
 
@@ -203,6 +203,8 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 | `POST /workload/alerts/:id/ack` | pj:PM | `{ note? }` | `alert` | M | 25 |
 | `POST /projects/:id/workload/recompute` | pj:PM | — | `202` (chạy lại, phát `workload:updated`) | M | 24 |
 | `GET /projects/:id/capacity-table?sprintId=&taskIds=` | pj:PM | — | **bảng sự thật**: `{ members[{ userId, skills[], utilizationBefore, freeByDay[{ date, freeHours, focusBlocks }], metrics{ ear, onTimeRate, sampleSize }, projectsOpen }], tasks[{ taskId, hoursEff per user, skillMatch per user }] }` — không xếp hạng | S4 | 26, 39 |
+| `GET /projects/:id/skill-profiles` | pj:MEMBER (đọc) | — | `[{ id, fullName, role, skills[{ skillId, name, level, confidence, tasks, passed, failed, reviewed, verified, lastAt, declared, evidence }], performance | null }]` — mức **từ bằng chứng** ([02/08](../02-phan-tich/08-ho-so-ky-nang-tu-bang-chung.md)); `performance` (đúng hạn, rating, EAR, mở lại) chỉ cho chính người đó và PM | S5 | 23, 26 |
+| `GET /projects/:id/skill-profiles/:userId/evidence?skillId=` | pj:MEMBER (đọc) | — | các việc làm nên mức: `{ task, required, demonstrated, passed, weight, rating (ẩn với người khác), reopened, bugs, at }[]` | S5 | 23 |
 | `GET /users/:userId/metrics?weeks=8` | self · pj:PM | — | `metricsWeekly[]` | S5 | 35, 36 |
 
 ### 3.10 Lịch bận

@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { CommentsModule } from './comments/comments.module';
 import { ForecastModule } from './forecast/forecast.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { WorklogModule } from './worklog/worklog.module';
 import { WorkloadModule } from './workload/workload.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AccessModule } from './common/access/access.module';
@@ -60,6 +61,7 @@ import { UsersModule } from './users/users.module';
     NotificationsModule,
     ActivityModule,
     MetricsModule,
+    WorklogModule,
     WorkloadModule,
     ForecastModule,
     RealtimeModule,

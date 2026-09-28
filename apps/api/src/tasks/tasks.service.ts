@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma, TaskSource } from '@prisma/client';
+import { Prisma, TaskSource, TaskType } from '@prisma/client';
 import { ProjectAccessService } from '../common/access/project-access.service';
 import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 import { AppError } from '../common/app-error';
@@ -91,6 +91,12 @@ const TASK_DETAIL_SELECT = {
   column: { select: { id: true, name: true, statusKey: true, isDone: true } },
   sprint: { select: { id: true, name: true, status: true } },
   parent: { select: { id: true, number: true, title: true } },
+  originTask: { select: { id: true, number: true, title: true } },
+  derivedBugs: {
+    where: { deletedAt: null },
+    orderBy: { number: 'asc' },
+    select: { id: true, number: true, title: true, completedAt: true },
+  },
   subtasks: {
     where: { deletedAt: null },
     orderBy: { position: 'asc' },
@@ -281,6 +287,8 @@ export class TasksService {
     if (dto.sprintId && !sprint)
       throw AppError.notFound({ sprintId: dto.sprintId });
     await this.assertAssignees(projectId, dto.assigneeIds ?? []);
+    if (dto.originTaskId)
+      await this.assertOrigin(projectId, null, dto.originTaskId, dto.type);
     await this.assertLabelsAndSkills(
       projectId,
       dto.labelIds ?? [],
@@ -294,6 +302,7 @@ export class TasksService {
         data: {
           projectId,
           sprintId: sprint?.id ?? null,
+          originTaskId: dto.originTaskId ?? null,
           columnId: column.id,
           number,
           title: dto.title,
@@ -416,6 +425,16 @@ export class TasksService {
       });
       if (!s) throw AppError.notFound({ sprintId: patch.sprintId });
     }
+    const nextType = patch.type ?? current.type;
+    // Bug → việc gốc chỉ có nghĩa với BUG; đổi khỏi BUG thì gỡ liên kết để bằng chứng "làm lại" không sai
+    const originTaskId =
+      patch.originTaskId !== undefined
+        ? patch.originTaskId
+        : nextType !== TaskType.BUG && current.originTaskId
+          ? null
+          : undefined;
+    if (originTaskId)
+      await this.assertOrigin(projectId, taskId, originTaskId, nextType);
     const targetAssigneeIds =
       patch.assigneeIds !== undefined
         ? [...new Set(patch.assigneeIds)]
@@ -451,6 +470,13 @@ export class TasksService {
         ? {
             sprint: patch.sprintId
               ? { connect: { id: patch.sprintId } }
+              : { disconnect: true },
+          }
+        : {}),
+      ...(originTaskId !== undefined
+        ? {
+            originTask: originTaskId
+              ? { connect: { id: originTaskId } }
               : { disconnect: true },
           }
         : {}),
@@ -934,6 +960,8 @@ export class TasksService {
         sprintId: true,
         title: true,
         description: true,
+        type: true,
+        originTaskId: true,
         priority: true,
         isUrgent: true,
         difficulty: true,
@@ -961,7 +989,7 @@ export class TasksService {
     data: Prisma.TaskUpdateInput,
   ) {
     // updateMany chỉ nhận cột vô hướng; connect/disconnect quan hệ áp riêng sau khi khoá lạc quan đã qua.
-    const { column, sprint, ...scalar } = data;
+    const { column, sprint, originTask, ...scalar } = data;
     const res = await this.prisma.task.updateMany({
       where: { id: taskId, version, deletedAt: null },
       data: {
@@ -982,6 +1010,7 @@ export class TasksService {
     const relational: Prisma.TaskUpdateInput = {};
     if (column) relational.column = column;
     if (sprint) relational.sprint = sprint;
+    if (originTask) relational.originTask = originTask;
     if (Object.keys(relational).length)
       await this.prisma.task.update({
         where: { id: taskId },
@@ -1082,6 +1111,28 @@ export class TasksService {
       source: 'MANUAL',
       at: new Date(),
     });
+  }
+
+  /** Việc gốc của bug: cùng dự án, còn tồn tại, không phải chính nó; và task phải là BUG. */
+  private async assertOrigin(
+    projectId: string,
+    taskId: string | null,
+    originTaskId: string,
+    type: TaskType | undefined,
+  ): Promise<void> {
+    if (type !== TaskType.BUG)
+      throw AppError.unprocessable('VALIDATION_FAILED', {
+        fields: ['originTaskId: chỉ gắn cho task loại BUG'],
+      });
+    if (originTaskId === taskId)
+      throw AppError.unprocessable('VALIDATION_FAILED', {
+        fields: ['originTaskId: không trỏ về chính nó'],
+      });
+    const o = await this.prisma.task.findFirst({
+      where: { id: originTaskId, projectId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!o) throw AppError.notFound({ originTaskId });
   }
 
   private async assertAssignees(
@@ -1210,6 +1261,19 @@ export class TasksService {
       column: t.column,
       sprint: t.sprint,
       parent: t.parent,
+      origin: t.originTask
+        ? {
+            id: t.originTask.id,
+            key: `${t.project.key}-${t.originTask.number}`,
+            title: t.originTask.title,
+          }
+        : null,
+      derivedBugs: t.derivedBugs.map((b) => ({
+        id: b.id,
+        key: `${t.project.key}-${b.number}`,
+        title: b.title,
+        done: !!b.completedAt,
+      })),
       subtasks: t.subtasks.map((s) => this.toListView(s)),
       dependentIds: t.dependents.map((d) => d.taskId),
     };

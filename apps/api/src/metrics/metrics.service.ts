@@ -9,6 +9,7 @@ import {
   type WorkCalendar,
 } from '../workload/domain/calendar';
 import { PrismaService } from '../prisma/prisma.service';
+import { reopenCounts } from './skill-evidence.service';
 
 export interface UserMetrics {
   windowWeeks: number;
@@ -125,16 +126,19 @@ export class MetricsService {
       .map((r) => r.cycleDays as number)
       .sort((a, b) => a - b);
     const [reopens, overdueOpen, openTasks] = await Promise.all([
+      // Đếm trong JS: diff.completedAt.to là JSON null — lọc `equals: 'null'` (chuỗi) cũ luôn ra 0
       this.prisma.activityLog
-        .count({
+        .findMany({
           where: {
-            actorId: undefined,
             action: 'task.moved',
             createdAt: { gte: since },
             task: { assignees: { some: { userId } } },
-            diff: { path: ['completedAt', 'to'], equals: 'null' },
           },
+          select: { taskId: true, diff: true },
         })
+        .then((logs) =>
+          [...reopenCounts(logs).values()].reduce((s, n) => s + n, 0),
+        )
         .catch(() => 0),
       this.prisma.task.count({
         where: {

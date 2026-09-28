@@ -16,6 +16,8 @@ import { ProjectAccessService } from '../../common/access/project-access.service
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.schema';
 import { WorkloadService } from '../../workload/workload.service';
+import { evidenceText } from '../../metrics/domain/skill-evidence';
+import { SkillEvidenceService } from '../../metrics/skill-evidence.service';
 import { remainingOf } from '../../workload/domain/allocation';
 import {
   ForecastService,
@@ -73,6 +75,15 @@ const CAUSE_LABEL: Record<ForecastCause['code'], (n: number) => string> = {
   SCOPE_CREEP: (n) => `phạm vi tăng > 10 % trong ${n} ngày`,
 };
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const ROLE_LABEL: Record<string, string> = {
+  PM: 'PM',
+  MEMBER: 'Thành viên',
+};
+/** Kỹ năng có bằng chứng đạt ít nhất mức 1, xếp mức cao trước */
+const proven = <T extends { level: number; confidence: string }>(xs?: T[]) =>
+  (xs ?? [])
+    .filter((x) => x.confidence !== 'none' && x.level > 0)
+    .sort((a, b) => b.level - a.level);
 const PURPOSE_LABEL: Record<string, string> = {
   CHAT: 'Trò chuyện',
   DECOMPOSE: 'Phân rã yêu cầu',
@@ -231,6 +242,7 @@ export class AiQueryService {
     private readonly config: ConfigService<Env, true>,
     private readonly sprintsSvc: SprintsService,
     private readonly forecast: ForecastService,
+    private readonly evidence: SkillEvidenceService,
   ) {}
 
   private assertRate(userId: string): void {
@@ -907,11 +919,6 @@ export class AiQueryService {
               select: { title: true, department: true },
               take: 1,
             },
-            userSkills: {
-              select: { level: true, skill: { select: { name: true } } },
-              orderBy: { level: 'desc' },
-              take: 4,
-            },
             taskAssignees: {
               where: {
                 task: {
@@ -927,6 +934,14 @@ export class AiQueryService {
       },
       orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
     });
+    const ws = await this.prisma.project.findUniqueOrThrow({
+      where: { id: ctx.projectId },
+      select: { workspaceId: true },
+    });
+    const profiles = await this.evidence.profiles(
+      ws.workspaceId,
+      rows.map((m) => m.user.id),
+    );
     const items: BlockItem[] = rows.map((m) => {
       const hours = m.user.taskAssignees.reduce(
         (sum, a) => sum + num(a.task.remainingHours),
@@ -943,11 +958,17 @@ export class AiQueryService {
         subtitle:
           [w?.title, w?.department].filter(Boolean).join(' · ') || m.user.email,
         badges: [
-          { text: m.role, tone: m.role === 'PM' ? 'info' : 'muted' },
-          ...m.user.userSkills.map((sk) => ({
-            text: `${sk.skill.name} ${sk.level}`,
-            tone: 'muted' as const,
-          })),
+          {
+            text: ROLE_LABEL[m.role] ?? m.role,
+            tone: m.role === 'PM' ? 'info' : 'muted',
+          },
+          // Kỹ năng theo bằng chứng (docs 02/08) — tự khai không hiện như sự thật
+          ...proven(profiles.get(m.user.id))
+            .slice(0, 4)
+            .map((sk) => ({
+              text: `${sk.name} ${sk.level}`,
+              tone: 'muted' as const,
+            })),
         ],
         meta: [
           {
@@ -985,15 +1006,6 @@ export class AiQueryService {
           fullName: true,
           shortName: true,
           email: true,
-          userSkills: {
-            select: {
-              level: true,
-              verifiedAt: true,
-              skill: { select: { name: true } },
-            },
-            orderBy: { level: 'desc' },
-            take: 8,
-          },
         },
       }),
       this.prisma.task.findMany({
@@ -1017,6 +1029,13 @@ export class AiQueryService {
         },
       }),
     ]);
+    const ws = await this.prisma.project.findUniqueOrThrow({
+      where: { id: ctx.projectId },
+      select: { workspaceId: true },
+    });
+    const skillsOf = proven(
+      (await this.evidence.profiles(ws.workspaceId, [userId], at)).get(userId),
+    ).slice(0, 8);
     const today = startOfDay(at).getTime();
     const overdue = tasks.filter(
       (t) => t.dueDate && t.dueDate.getTime() < today,
@@ -1033,8 +1052,8 @@ export class AiQueryService {
           },
           title: user.fullName,
           subtitle: user.email,
-          badges: user.userSkills.map((sk) => ({
-            text: `${sk.skill.name} ${sk.level}${sk.verifiedAt ? ' ✓' : ''}`,
+          badges: skillsOf.map((sk) => ({
+            text: `${sk.name} ${sk.level} · ${sk.tasks} việc${sk.verified ? ' ✓' : ''}`,
             tone: 'muted' as const,
           })),
         },
@@ -1182,7 +1201,10 @@ export class AiQueryService {
         member: m.fullName,
         utilization: `${Math.round(m.utilizationBefore * 100)}%`,
         free: hrs(m.freeByDay.reduce((s, d) => s + d.freeHours, 0)),
-        skills: m.skills.map((s) => `${s.name} ${s.level}`).join(', ') || '—',
+        skills:
+          proven(m.skills)
+            .map((s) => `${s.name} ${s.level}`)
+            .join(', ') || 'chưa có bằng chứng',
       },
     }));
     return {
@@ -1225,33 +1247,53 @@ export class AiQueryService {
         code: spec.filters.skill ?? null,
       });
     const minLevel = spec.filters.minLevel ?? 3;
-    const rows = await this.prisma.userSkill.findMany({
-      where: {
-        skillId,
-        level: { gte: minLevel },
-        user: { workspaceMembers: { some: { workspaceId } } },
-      },
-      orderBy: { level: 'desc' },
-      take: spec.limit,
-      select: {
-        level: true,
-        verifiedAt: true,
-        skill: { select: { name: true } },
-        user: { select: { id: true, fullName: true, shortName: true } },
-      },
-    });
-    const skillName =
-      rows[0]?.skill.name ??
-      (
-        await this.prisma.skill.findUnique({
-          where: { id: skillId },
-          select: { name: true },
-        })
-      )?.name ??
-      '';
+    const [skill, members] = await Promise.all([
+      this.prisma.skill.findUnique({
+        where: { id: skillId },
+        select: { name: true },
+      }),
+      this.prisma.workspaceMember.findMany({
+        where: { workspaceId },
+        select: {
+          userId: true,
+          user: { select: { fullName: true, shortName: true } },
+        },
+      }),
+    ]);
+    const skillName = skill?.name ?? '';
+    // Mức TỪ BẰNG CHỨNG: việc đã xong + đánh giá + làm lại + PM xác nhận (docs 02/08)
+    const profiles = await this.evidence.profiles(
+      workspaceId,
+      members.map((m) => m.userId),
+    );
+    const entryOf = (userId: string) =>
+      profiles.get(userId)?.find((e) => e.skillId === skillId);
+    const rows = members
+      .map((m) => ({ ...m, e: entryOf(m.userId) }))
+      .filter((m) => m.e && m.e.level >= minLevel)
+      .sort((a, b) => b.e!.level - a.e!.level || b.e!.tasks - a.e!.tasks)
+      .slice(0, spec.limit);
+    // Người TỰ KHAI đủ mức nhưng chưa có bằng chứng: nêu riêng để PM biết mà cho làm thử, không tính là "biết"
+    const claimed = members
+      .map((m) => ({ ...m, e: entryOf(m.userId) }))
+      .filter(
+        (m) =>
+          m.e && m.e.confidence === 'none' && (m.e.declared ?? 0) >= minLevel,
+      );
+    const claimedNote: QueryBlock[] = claimed.length
+      ? [
+          {
+            kind: 'note',
+            text: `Tự khai ${skillName} ≥ ${minLevel} nhưng chưa có việc nào làm chứng: ${claimed
+              .map((m) => m.user.shortName ?? m.user.fullName)
+              .join(', ')}.`,
+            tone: 'muted',
+          },
+        ]
+      : [];
     return {
       source: {
-        endpoint: 'GET /workspaces/:id/skill-matrix',
+        endpoint: 'GET /workspaces/:id/skill-profiles',
         params: { skill: skillName, minLevel },
         rowCount: rows.length,
       },
@@ -1262,39 +1304,39 @@ export class AiQueryService {
               items: rows.map((r) => ({
                 ref: {
                   type: 'user' as const,
-                  id: r.user.id,
+                  id: r.userId,
                   key: r.user.shortName ?? r.user.fullName,
                 },
                 title: r.user.fullName,
+                subtitle: evidenceText(r.e),
                 badges: [
                   {
-                    text: `${r.skill.name} mức ${r.level}`,
+                    text: `${skillName} mức ${r.e!.level}`,
                     tone:
-                      r.level >= 4 ? ('success' as const) : ('muted' as const),
+                      r.e!.level >= 4
+                        ? ('success' as const)
+                        : ('muted' as const),
                   },
-                  ...(r.verifiedAt
-                    ? [{ text: 'đã xác nhận', tone: 'info' as const }]
+                  ...(r.e!.verified
+                    ? [{ text: 'PM xác nhận', tone: 'info' as const }]
                     : []),
                 ],
               })),
             },
+            ...claimedNote,
           ]
         : [
             {
               kind: 'empty',
-              title: `Chưa ai khai ${skillName} từ mức ${minLevel}`,
+              title: `Chưa ai có bằng chứng ${skillName} từ mức ${minLevel}`,
               description:
-                'Nhờ thành viên cập nhật ở màn Nhân sự › Kỹ năng của tôi.',
+                'Mức kỹ năng tính từ việc đã xong, đánh giá của PM và số lần phải làm lại — không dùng mức tự khai.',
             },
+            ...claimedNote,
           ]) as QueryBlock[],
     };
   }
 
-  /**
-   * "Ai làm được việc này?" — cho một task THẬT (`filters.task`) hoặc một BẢN NHÁP đang mở trong phiên
-   * (`filters.draft`). Trả bảng SỰ THẬT từng người (khớp kỹ năng, giờ hiệu dụng, giờ trống trước hạn,
-   * mức dùng) để LLM và người đọc tự cân nhắc — backend không chọn hộ, không loại ai khỏi bảng.
-   */
   private async taskCandidates(
     spec: DataQuerySpec,
     ctx: QueryContext,
@@ -1415,20 +1457,27 @@ export class AiQueryService {
     workspaceId: string,
   ) {
     const minLevel = spec.filters.minLevel ?? 3;
-    const skills = await this.prisma.skill.findMany({
-      where: { workspaceId, isActive: true },
-      select: {
-        id: true,
-        name: true,
-        userSkills: {
-          where: {
-            level: { gte: minLevel },
-            user: { workspaceMembers: { some: { workspaceId } } },
-          },
-          select: { userId: true },
-        },
-      },
-    });
+    const [catalog, members] = await Promise.all([
+      this.prisma.skill.findMany({
+        where: { workspaceId, isActive: true },
+        select: { id: true, name: true },
+      }),
+      this.prisma.workspaceMember.findMany({
+        where: { workspaceId },
+        select: { userId: true },
+      }),
+    ]);
+    // "Người giữ" kỹ năng = có BẰNG CHỨNG đạt mức, không phải tự khai (docs 02/08)
+    const levels = await this.evidence.levels(
+      workspaceId,
+      members.map((m) => m.userId),
+    );
+    const skills = catalog.map((sk) => ({
+      ...sk,
+      userSkills: [...levels]
+        .filter(([, m]) => (m.get(sk.id) ?? 0) >= minLevel)
+        .map(([userId]) => ({ userId })),
+    }));
     // Rủi ro thật là kỹ năng CHỈ MỘT người giữ (người đó nghỉ là mất); "chưa ai" là lỗ hổng tuyển dụng — xếp sau
     const risky = skills
       .filter((sk) => sk.userSkills.length <= 1)

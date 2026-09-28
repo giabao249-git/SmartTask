@@ -48,20 +48,11 @@ function makeService(opts: {
       findMany: jest.fn().mockResolvedValue([
         {
           userId: U_LAN,
-          user: {
-            fullName: 'Lan',
-            userSkills: [
-              { skillId: K_REACT, level: 4 },
-              { skillId: K_NEST, level: 1 },
-            ],
-          },
+          user: { fullName: 'Lan' },
         },
         {
           userId: U_MINH,
-          user: {
-            fullName: 'Minh',
-            userSkills: [{ skillId: K_NEST, level: 3 }],
-          },
+          user: { fullName: 'Minh' },
         },
       ]),
     },
@@ -93,7 +84,36 @@ function makeService(opts: {
         Promise.resolve([{ freeHours: opts.freeHours?.[userId] ?? 40 }]),
       ),
   };
-  return new ActionValidatorService(prisma as never, workload as never);
+  // Hồ sơ kỹ năng TỪ BẰNG CHỨNG (docs 02/08): Lan React 4 · NestJS 1 (2 việc, 1 phải làm lại); Minh NestJS 3
+  const ev = (level: number, tasks = 2, failed = 0) => ({
+    level,
+    confidence: 'medium',
+    tasks,
+    passed: tasks - failed,
+    failed,
+    reviewed: tasks,
+    verified: false,
+    lastAt: new Date('2026-09-20T00:00:00Z'),
+  });
+  const evidence = {
+    evidence: jest.fn().mockResolvedValue(
+      new Map([
+        [
+          U_LAN,
+          new Map([
+            [K_REACT, { skillId: K_REACT, ...ev(4) }],
+            [K_NEST, { skillId: K_NEST, ...ev(1, 2, 1) }],
+          ]),
+        ],
+        [U_MINH, new Map([[K_NEST, { skillId: K_NEST, ...ev(3) }]])],
+      ]),
+    ),
+  };
+  return new ActionValidatorService(
+    prisma as never,
+    workload as never,
+    evidence as never,
+  );
 }
 
 function proposal(
@@ -240,13 +260,32 @@ describe('ActionValidatorService.validateDecompose — 7 mã lỗi', () => {
     expect(e!.data).toEqual({ from: '2026-10-10', to: '2026-10-30' });
   });
 
-  it('ASSIGN_SKILL_GAP: mức người thấp hơn mức yêu cầu, kèm số', async () => {
+  it('ASSIGN_SKILL_GAP: mức theo BẰNG CHỨNG thấp hơn yêu cầu → CẢNH BÁO kèm số, không khoá duyệt', async () => {
     const r = await makeService({}).validateDecompose(
       proposal([{ requiredSkills: [{ skill: 'k2', minLevel: 3 }] }]), // Lan NestJS 1 < 3
       ctx(),
     );
-    const e = r.errors.find((x) => x.code === 'ASSIGN_SKILL_GAP');
-    expect(e?.data).toMatchObject({ skill: 'NestJS', required: 3, level: 1 });
+    expect(r.errors.find((x) => x.code === 'ASSIGN_SKILL_GAP')).toBeUndefined();
+    const w = r.warnings.find((x) => x.code === 'ASSIGN_SKILL_GAP');
+    expect(w?.data).toMatchObject({
+      skill: 'NestJS',
+      required: 3,
+      level: 1,
+      tasks: 2,
+      failed: 1,
+    });
+    expect(w?.message).toContain('1 phải làm lại');
+    expect(r.ok).toBe(true);
+  });
+
+  it('ASSIGN_SKILL_UNPROVEN: chưa có việc nào dùng kỹ năng đó đã xong → cảnh báo, không đoán mức', async () => {
+    const r = await makeService({}).validateDecompose(
+      proposal([{}, { requiredSkills: [{ skill: 'k1', minLevel: 2 }] }]), // Minh chưa có bằng chứng React
+      ctx(),
+    );
+    const w = r.warnings.find((x) => x.code === 'ASSIGN_SKILL_UNPROVEN');
+    expect(w?.path).toBe('tasks[1].suggestedAssignee');
+    expect(w?.message).toContain('chưa có việc React nào đã xong');
   });
 
   it('ASSIGN_CAPACITY_EXCEEDED: giờ giao vượt giờ trống tới hết sprint', async () => {
