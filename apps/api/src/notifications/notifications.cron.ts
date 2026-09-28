@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { NotificationType } from '@prisma/client';
+import { webLink } from './web-links';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from './notifications.service';
 
@@ -49,7 +50,7 @@ export class NotificationsCron {
           ? `${key} đã quá hạn`
           : `${key} đến hạn ${t.dueDate!.toISOString().slice(0, 10) === today.toISOString().slice(0, 10) ? 'hôm nay' : 'ngày mai'}`,
         body: t.title,
-        link: `/p/${t.project.key}/t/${key}`,
+        link: webLink.task(t.projectId, key),
         data: { taskId: t.id, projectId: t.projectId },
       });
     }

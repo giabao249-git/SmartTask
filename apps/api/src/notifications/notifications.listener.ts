@@ -10,6 +10,7 @@ import {
   type TaskEventPayload,
 } from '../common/events/task.events';
 import { AI_EVENTS, type AiProposalAppliedPayload } from '../ai/ai.events';
+import { webLink } from './web-links';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   WORKLOAD_EVENTS,
@@ -174,7 +175,7 @@ export class NotificationsListener {
         body: p.movedTaskIds?.length
           ? `${p.movedTaskIds.length} việc chưa xong được chuyển đi`
           : undefined,
-        link: `/p/${sprint.project.key}/sprints`,
+        link: webLink.sprints(p.projectId),
         data: { sprintId: p.sprintId, projectId: p.projectId },
       });
     } catch (e) {
@@ -189,6 +190,7 @@ export class NotificationsListener {
         number: true,
         title: true,
         dueDate: true,
+        projectId: true,
         project: { select: { key: true } },
       },
     });
@@ -197,7 +199,7 @@ export class NotificationsListener {
       key,
       title: t.title,
       dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
-      link: `/p/${t.project.key}/t/${key}`,
+      link: webLink.task(t.projectId, key),
     };
   }
 
@@ -227,7 +229,7 @@ export class NotificationsListener {
         type: NotificationType.AI_PROPOSAL_APPLIED,
         title: `AI đã tạo ${p.taskIds.length} công việc trong ${project?.key ?? 'dự án'}`,
         body: project?.name,
-        link: `/projects/${p.projectId}`,
+        link: webLink.project(p.projectId),
         data: {
           proposalId: p.proposalId,
           taskIds: p.taskIds,

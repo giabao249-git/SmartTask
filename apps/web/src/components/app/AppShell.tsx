@@ -63,7 +63,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { UserAvatar } from "./UserAvatar";
-import { MOCK_NOTIFICATIONS } from "@/mocks/notifications";
+import { NotificationsPanel, useBellCount } from "@/features/notifications/NotificationsPanel";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -97,7 +97,7 @@ export function AppShell({ children }: AppShellProps) {
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
   const mod = useModKey();
   const [isDark, setIsDark] = React.useState(false);
-  const [notifications, setNotifications] = React.useState(MOCK_NOTIFICATIONS);
+  const [bellOpen, setBellOpen] = React.useState(false);
   const auth = useAuth();
 
   // Read pinned state from localStorage on client
@@ -163,7 +163,8 @@ export function AppShell({ children }: AppShellProps) {
   const workspace = projectCtx
     ? auth.workspaces.find((w) => w.id === projectCtx.workspaceId) ?? auth.workspaces[0]
     : auth.workspaces[0];
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  // Số chưa đọc thật từ GET /notifications/unread-count (trước đây đếm trên dữ liệu giả)
+  const unreadCount = useBellCount();
 
   const isAssistantPage = pathname.includes("/assistant");
 
@@ -275,11 +276,6 @@ export function AppShell({ children }: AppShellProps) {
     ],
     [unreadCount, currentUser?.isSuperAdmin]
   );
-
-  const handleMarkAllNotificationsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    toast.success("Đã đánh dấu tất cả thông báo là đã đọc");
-  };
 
   const isExpanded = isPinned || isHovered;
 
@@ -800,7 +796,7 @@ export function AppShell({ children }: AppShellProps) {
             </Button>
 
             {/* Notification Bell with Popover */}
-            <Popover>
+            <Popover open={bellOpen} onOpenChange={setBellOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
@@ -817,57 +813,13 @@ export function AppShell({ children }: AppShellProps) {
                   )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-80 p-0" align="end">
-                <div className="p-3 border-b border-border/60 flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-semibold text-foreground">Trung tâm thông báo</h4>
-                    <p className="text-[10px] text-muted-foreground">
-                      {unreadCount} thông báo mới chưa đọc
-                    </p>
-                  </div>
-                  {unreadCount > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleMarkAllNotificationsRead}
-                      className="h-6 text-[10px] text-primary hover:text-primary/80 px-1.5"
-                    >
-                      Đọc tất cả
-                    </Button>
-                  )}
-                </div>
-                <ScrollArea className="max-h-[320px]">
-                  <div className="divide-y divide-border/40">
-                    {notifications.map((n) => (
-                      <div
-                        key={n.id}
-                        className={cn(
-                          "p-3 text-xs space-y-1 transition-colors hover:bg-muted/50 cursor-pointer",
-                          !n.read && "bg-primary/5"
-                        )}
-                        onClick={() => {
-                          setNotifications((prev) =>
-                            prev.map((item) => (item.id === n.id ? { ...item, read: true } : item))
-                          );
-                          if (n.linkUrl) router.push(n.linkUrl);
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className={cn("font-medium", !n.read ? "text-foreground" : "text-muted-foreground")}>
-                            {n.title}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">{n.timestamp}</span>
-                        </div>
-                        <p className="text-muted-foreground line-clamp-2 text-[11px] leading-relaxed">
-                          {n.message}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
+              <PopoverContent className="w-96 p-0" align="end">
+                {/* Thông báo thật (GET /notifications) — cùng panel với trang Cài đặt, link đã đổi sang route có thật */}
+                <NotificationsPanel compact onNavigate={() => setBellOpen(false)} />
                 <div className="p-2 border-t border-border/60 text-center bg-muted/20">
                   <Link
                     href="/settings"
+                    onClick={() => setBellOpen(false)}
                     className="text-[11px] text-primary hover:underline font-medium"
                   >
                     Xem tất cả trong Cài đặt thông báo →

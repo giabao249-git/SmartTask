@@ -2,7 +2,7 @@
 
 > Trạng thái: **hoàn tất bước 0–8** trên `main` (23/09/2026). Bước 8 = đợt cải tiến tạo/quản lý task theo
 > [02/05](../02-phan-tich/05-cai-tien-quan-ly-task.md) — chi tiết ở [web-cai-tien-task](web-cai-tien-task.md).
-> Mock chỉ còn `src/mocks/notifications.ts` (AppShell vẫn import — xem §4).
+> Không còn mock nào trong `src/mocks` (chuông thông báo gắn API thật 28/09 — xem §4).
 > Quy ước giữ nguyên docs 10: chỉ `components/ui`, màu qua `lib/status.ts`, TypeScript strict không `any`, mỗi màn 4 trạng thái (loading / empty / error theo mã / data) từ dữ liệu thật.
 
 ## 1. Hạ tầng (bước 0)
@@ -83,7 +83,7 @@ Ký hiệu: ✅ nối API thật · 🟡 tính trên web từ dữ liệu API (k
 
 | Hạng mục | Tình trạng | Việc cần |
 |---|---|---|
-| Chuông thông báo trên AppShell | `useBellCount()` + `NotificationsPanel compact` đã có (`features/notifications`), **chưa gắn** vì `AppShell.tsx` đang được phiên khác viết lại (sidebar Zen/Arc) — bản đó vẫn import `mocks/notifications.ts` | Khi AppShell ổn định: thay `MOCK_NOTIFICATIONS` bằng `useBellCount()` + Popover `NotificationsPanel compact`, rồi xoá `src/mocks/notifications.ts` |
+| ~~Chuông thông báo trên AppShell~~ | ✅ **Đã gắn 28/09** (`feature/UC-20-thong-bao-sprint`): chuông dùng `useBellCount()` + Popover `NotificationsPanel compact`; `src/mocks/notifications.ts` đã xoá. Link thông báo do backend sinh theo route web thật (`notifications/web-links.ts`); link cũ `/p/KEY/...` đã lưu được `NotificationsPanel` đổi sang `/projects/:id/...` | Còn lại: cảnh báo tải vẫn mang link `/me/workload`, `/workload?user=` chưa có route — xử lý cùng màn Nhân sự |
 | ~~Tìm kiếm theo task trong bảng lệnh~~ | ✅ **xong 23/09** — `TaskSearchGroup` đã nhúng vào `CommandDialog`, và đổi sang `GET /workspaces/:wsId/tasks/search` nên tìm **xuyên dự án** chứ không chỉ dự án đang mở | Còn lại: tìm thành viên trong bảng lệnh (⏳ backend chưa có endpoint) |
 | Mục sidebar "Cấu hình dự án" | Trang `/projects/:id/settings` đã có, vào từ Dashboard | Thêm nav item khi AppShell ổn định |
 | ~~Kéo task vào sprint hàng loạt~~ | ✅ **xong 23/09** — chọn nhiều ở Bảng / Danh sách / Backlog rồi dùng thanh thao tác; đổi sprint đi đúng 1 request `POST /sprints/:id/tasks` | — |
