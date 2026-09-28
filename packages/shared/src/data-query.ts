@@ -105,6 +105,38 @@ export const FILTERS_BY_INTENT: Record<QueryIntent, (keyof QueryFilters)[]> = {
   AI_USAGE: ['groupUsageBy'],
 };
 
+/**
+ * Câu hỏi mẫu cho từng ý định — MỘT nguồn cho master prompt (mục CHAT), bảng ở docs 04/14 và test.
+ * Thêm ý định: thêm vào QUERY_INTENTS, FILTERS_BY_INTENT và ở đây; responseSchema + prompt tự theo.
+ */
+export const QUERY_INTENT_HINT: Record<QueryIntent, string> = {
+  TASK_LIST: 'còn việc nào chưa giao, việc BUG của tôi',
+  TASK_AGENDA: 'hôm nay tôi làm gì, việc đến hạn tuần này',
+  TASK_DETAIL: 'ST-6 đang thế nào',
+  TASK_STATS: 'mỗi cột bao nhiêu việc',
+  TASK_BLOCKED: 'việc nào đang bị chặn',
+  MEMBER_LIST: 'danh sách thành viên',
+  MEMBER_PROFILE: 'Huy đang làm gì',
+  WORKLOAD_WEEK: 'ai đang quá tải tuần này',
+  CAPACITY_FREE: 'ai còn giờ trống',
+  WHO_KNOWS_SKILL: 'ai biết NestJS mức 4',
+  TASK_CANDIDATES: 'ai làm được t7 / d2',
+  BUS_FACTOR: 'kỹ năng nào chỉ một người biết',
+  SPRINT_LIST: 'có mấy sprint',
+  SPRINT_PROGRESS: 'sprint này còn bao nhiêu giờ, có kịp không',
+  ACTIVITY_FEED: 'hôm qua ai sửa gì',
+  NOTIFICATION_LIST: 'tôi có thông báo gì',
+  AI_USAGE: 'tháng này tốn bao nhiêu tiền AI',
+};
+
+/** Đoạn liệt kê ý định cho master prompt: "- INTENT: câu mẫu [filter: a, b]" — sinh từ QUERY_INTENTS. */
+export function queryIntentGuide(): string {
+  return QUERY_INTENTS.map((i) => {
+    const f = FILTERS_BY_INTENT[i];
+    return `  - ${i}: "${QUERY_INTENT_HINT[i]}"${f.length ? ` [filter: ${f.join(', ')}]` : ''}`;
+  }).join('\n');
+}
+
 const KNOWN_FILTER_KEYS: (keyof QueryFilters)[] = [
   'assignee',
   'status',

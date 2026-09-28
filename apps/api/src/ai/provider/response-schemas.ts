@@ -1,4 +1,10 @@
 import type { AiPurpose } from '@prisma/client';
+import {
+  QUERY_INTENTS,
+  dueRangePresetSchema,
+  prioritySchema,
+  taskTypeSchema,
+} from '@smarttask/shared';
 
 /**
  * JSON Schema đầu ra theo mục đích — ép nhà cung cấp trả đúng cấu trúc (Gemini `responseSchema`, Ollama `format`).
@@ -105,48 +111,24 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
       // DATA_QUERY: chỉ ý định + bộ lọc; backend chạy truy vấn và vẽ khối (docs 14)
       query: obj(
         {
-          intent: {
-            type: 'string',
-            enum: [
-              'TASK_LIST',
-              'TASK_AGENDA',
-              'TASK_DETAIL',
-              'TASK_STATS',
-              'TASK_BLOCKED',
-              'MEMBER_LIST',
-              'MEMBER_PROFILE',
-              'WORKLOAD_WEEK',
-              'CAPACITY_FREE',
-              'WHO_KNOWS_SKILL',
-              'TASK_CANDIDATES',
-              'BUS_FACTOR',
-              'SPRINT_LIST',
-              'SPRINT_PROGRESS',
-              'ACTIVITY_FEED',
-              'NOTIFICATION_LIST',
-              'AI_USAGE',
-            ],
-          },
+          // Sinh từ packages/shared — thêm ý định không phải sửa tay ở đây (docs 02/07 D5)
+          intent: { type: 'string', enum: [...QUERY_INTENTS] },
           sprint: str('mã s, "__all" hoặc "__backlog"'),
           filters: obj({
             assignee: arr(str('mã u hoặc "me"')),
             status: { type: 'string', enum: ['OPEN', 'DONE', 'ALL'] },
-            taskType: arr({ type: 'string', enum: ['STORY', 'TASK', 'BUG'] }),
+            taskType: arr({
+              type: 'string',
+              enum: [...taskTypeSchema.options],
+            }),
             priority: arr({
               type: 'string',
-              enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'],
+              enum: [...prioritySchema.options],
             }),
             dueRange: obj({
               preset: {
                 type: 'string',
-                enum: [
-                  'TODAY',
-                  'TOMORROW',
-                  'THIS_WEEK',
-                  'NEXT_WEEK',
-                  'OVERDUE',
-                  'NO_DUE',
-                ],
+                enum: [...dueRangePresetSchema.options],
               },
               from: str('YYYY-MM-DD'),
               to: str('YYYY-MM-DD'),
