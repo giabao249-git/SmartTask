@@ -636,6 +636,8 @@ export interface ForecastView {
   causes: { code: string; count: number; taskIds?: string[]; userIds?: string[] }[];
   /** Sprint đã đóng: số chụp lúc đóng (null nếu đóng trước khi có bản chụp này) */
   final: { date: string; scopeHours: number; remainingHours: number; closedAt: string | null } | null;
+  /** Ngày làm việc còn lại, tính cả hôm nay (0 khi sprint không chạy) */
+  workdaysLeft: number;
 }
 
 export interface ExplainView {
