@@ -110,3 +110,25 @@ body {
   color: hsl(var(--foreground));
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
+
+/* Kết quả của Trợ lý AI hiện dần từ trên xuống, mờ → rõ (kiểu Gemini). Tắt khi người dùng chọn giảm chuyển động. */
+@keyframes st-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+.st-reveal {
+  animation: st-reveal 360ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .st-reveal {
+    animation: none;
+  }
+}

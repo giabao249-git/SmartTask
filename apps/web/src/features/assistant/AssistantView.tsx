@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Archive,
   ArchiveRestore,
+  ArrowDown,
   Bot,
   Check,
   Code,
@@ -236,9 +237,44 @@ export function AssistantView() {
     if (!activeSessionId && sessionsQuery.data?.length) setActiveSessionId(sessionsQuery.data[0].id);
   }, [activeSessionId, sessionsQuery.data]);
 
+  // "Bám đáy": chữ AI gõ dần ra, thẻ/bảng hiện dần sau đó làm nội dung CAO DẦN — trước đây chỉ cuộn một lần khi có tin
+  // mới nên người dùng phải tự kéo xuống. Đang ở cuối thì tự cuộn theo; đã cuộn lên đọc tin cũ thì không giật xuống.
+  const scrollRootRef = React.useRef<HTMLDivElement>(null);
+  const pinnedRef = React.useRef(true);
+  const [showJump, setShowJump] = React.useState(false);
+  const viewportOf = () => scrollRootRef.current?.querySelector<HTMLDivElement>("[data-radix-scroll-area-viewport]") ?? null;
+  const toBottom = React.useCallback((smooth = false) => {
+    const v = viewportOf();
+    if (!v) return;
+    pinnedRef.current = true;
+    setShowJump(false);
+    v.scrollTo({ top: v.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+  }, []);
   React.useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, turn.isPending]);
+    const v = viewportOf();
+    const content = v?.firstElementChild;
+    if (!v || !content) return;
+    const onScroll = () => {
+      const near = v.scrollHeight - v.scrollTop - v.clientHeight < 80;
+      pinnedRef.current = near;
+      if (near) setShowJump(false);
+    };
+    const ro = new ResizeObserver(() => {
+      if (pinnedRef.current) v.scrollTop = v.scrollHeight;
+      else setShowJump(true);
+    });
+    v.addEventListener("scroll", onScroll, { passive: true });
+    ro.observe(content);
+    return () => {
+      v.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  }, [activeSessionId, detail.isPending]);
+  // Mở phiên khác → xuống cuối; gửi tin → luôn xuống cuối (người vừa gõ muốn thấy câu trả lời)
+  React.useEffect(() => toBottom(), [activeSessionId, detail.isPending, toBottom]);
+  React.useEffect(() => {
+    if (turn.isPending) toBottom(true);
+  }, [turn.isPending, toBottom]);
 
   const reloadProposals = React.useCallback(async () => {
     setVersionConflict(false);
@@ -573,7 +609,8 @@ export function AssistantView() {
 
           {/* Vùng tin nhắn chat cuộn */}
           {/* Radix bọc nội dung trong display:table → bong bóng nở theo phần tử rộng nhất, tràn ngang ở 375px; ép về block */}
-          <ScrollArea className="flex-1 p-4 [&>[data-radix-scroll-area-viewport]>div]:!block">
+          <div className="relative flex-1 min-h-0 flex flex-col">
+          <ScrollArea ref={scrollRootRef} className="flex-1 p-4 [&>[data-radix-scroll-area-viewport]>div]:!block">
             {detail.isPending && activeSessionId ? (
               <div className="space-y-4 w-full px-1 sm:px-2 py-2">
                 {[0, 1, 2].map((i) => (
@@ -679,6 +716,12 @@ export function AssistantView() {
               </div>
             )}
           </ScrollArea>
+          {showJump && (
+            <Button variant="outline" size="sm" className="absolute bottom-3 left-1/2 -translate-x-1/2 h-8 gap-1.5 rounded-full text-xs shadow-sm bg-background" onClick={() => toBottom(true)}>
+              <ArrowDown className="h-3.5 w-3.5" /> Xuống tin mới nhất
+            </Button>
+          )}
+          </div>
 
           {turnError && (
             <div className="px-3 pt-2">
@@ -976,6 +1019,8 @@ function MessageBubble({
     : null;
   // Thẻ hành động/đề xuất chỉ hiện sau khi gõ xong để không nhảy giật
   const [revealed, setRevealed] = React.useState(!typing);
+  // Bong bóng sinh ra khi đang gõ = tin vừa đến → thẻ/bảng hiện dần; tin cũ mở lại thì hiện ngay
+  const [fresh] = React.useState(typing);
   React.useEffect(() => {
     if (!typing) setRevealed(true);
   }, [typing]);
@@ -1055,6 +1100,7 @@ function MessageBubble({
             }}
           />
           {action && revealed && (
+            <div className={cn(fresh && "st-reveal")}>
             <ActionCard
               action={action}
               resolver={resolver}
@@ -1063,6 +1109,7 @@ function MessageBubble({
               onShowDrafts={onShowDrafts}
               disabled={busy}
             />
+            </div>
           )}
           {revealed && queryResult && (
             <QueryResultCard
@@ -1071,6 +1118,7 @@ function MessageBubble({
               projectId={projectId}
               sessionId={sessionId}
               messageId={m.id}
+              animate={fresh}
             />
           )}
 
