@@ -163,6 +163,13 @@ export function AssistantView() {
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const itemRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+  /** Nút "Xem và duyệt" trong bong bóng chat: màn hẹp mở Sheet bản nháp, rồi cuộn tới mục và nháy sáng */
+  const showDrafts = React.useCallback((keys: string[]) => {
+    if (!window.matchMedia("(min-width: 1024px)").matches) setRailSheet(true);
+    setHighlightedKeys(new Set(keys));
+    setTimeout(() => keys[0] && itemRefs.current[keys[0]]?.scrollIntoView({ behavior: "smooth", block: "center" }), 250);
+    setTimeout(() => setHighlightedKeys(new Set()), 1500);
+  }, []);
   const endRef = React.useRef<HTMLDivElement>(null);
 
   const sessionsQuery = useSessions(project.id, showArchived);
@@ -565,7 +572,8 @@ export function AssistantView() {
           </div>
 
           {/* Vùng tin nhắn chat cuộn */}
-          <ScrollArea className="flex-1 p-4">
+          {/* Radix bọc nội dung trong display:table → bong bóng nở theo phần tử rộng nhất, tràn ngang ở 375px; ép về block */}
+          <ScrollArea className="flex-1 p-4 [&>[data-radix-scroll-area-viewport]>div]:!block">
             {detail.isPending && activeSessionId ? (
               <div className="space-y-4 w-full px-1 sm:px-2 py-2">
                 {[0, 1, 2].map((i) => (
@@ -628,6 +636,7 @@ export function AssistantView() {
                     sessionId={activeSessionId}
                     onTypingDone={() => setTypingMessageId(null)}
                     onSelectOption={(code, label) => send(label, code)}
+                    onShowDrafts={showDrafts}
                   />
                 ))}
                 {turn.isPending && pendingText && (
@@ -945,6 +954,7 @@ function MessageBubble({
   sessionId,
   onTypingDone,
   onSelectOption,
+  onShowDrafts,
 }: {
   m: ChatMessageView;
   me: string;
@@ -956,6 +966,7 @@ function MessageBubble({
   sessionId?: string | null;
   onTypingDone?: () => void;
   onSelectOption: (code: string, label: string) => void;
+  onShowDrafts?: (keys: string[]) => void;
 }) {
   const isUser = m.role === "USER";
   const action = !isUser ? parseAction(m.structuredData) : null;
@@ -1049,6 +1060,7 @@ function MessageBubble({
               resolver={resolver}
               validation={(m.structuredData as { validation?: ValidationResult | null } | null)?.validation ?? undefined}
               onSelectOption={onSelectOption}
+              onShowDrafts={onShowDrafts}
               disabled={busy}
             />
           )}
