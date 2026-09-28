@@ -1,0 +1,21 @@
+name: Check Branch Naming Convention
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!main' # Bỏ qua nhánh main
+
+jobs:
+  check-branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate branch name format
+        run: |
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          REGEX="^(sprint/.+|feature/.+|chore/.+|bugfix/.+|release/.+|hotfix/.+)$"
+          
+          if [[ ! "$BRANCH_NAME" =~ $REGEX ]]; then
+            echo "::error::Tên branch '$BRANCH_NAME' không hợp lệ."
+            exit 1
+          fi
