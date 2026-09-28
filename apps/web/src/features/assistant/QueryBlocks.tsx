@@ -3,13 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import { AlertTriangle, Clock, ExternalLink, Info, RefreshCw, User, CalendarDays, Flag, Link2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, Clock, ExternalLink, Inbox, Info, RefreshCw, User, CalendarDays, Flag, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { EmptyState } from "@/components/app/EmptyState";
 import { api, describeError } from "@/lib/api";
 import type { BadgeVariant } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -25,6 +24,13 @@ const TONE: Record<NonNullable<BlockBadge["tone"]>, BadgeVariant> = {
   danger: "destructive",
 };
 const ICON = { clock: Clock, user: User, calendar: CalendarDays, flag: Flag, link: Link2 } as const;
+
+/** "2026-09-15" → "15/09" cho nhãn trục biểu đồ; nhãn khác giữ nguyên */
+const axisDate = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v.slice(8, 10)}/${v.slice(5, 7)}` : String(v));
+/** Số trong ô bảng theo kiểu Việt: 397111 → "397.111", 5.4 → "5,4" */
+const cellText = (v: unknown) => (typeof v === "number" ? v.toLocaleString("vi-VN", { maximumFractionDigits: 2 }) : v == null || v === "" ? "—" : String(v));
+/** Bảng dài (BUS_FACTOR 22 dòng) đẩy câu trả lời khỏi màn hình — hiện trước chừng này dòng */
+const TABLE_PREVIEW = 8;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -82,7 +88,7 @@ export function QueryResultCard({
       {data.blocks.map((b, i) => (
         <div key={i} className="space-y-1.5">
           {/* Một kết quả có nhiều danh sách (báo cáo sprint) thì mỗi khối cần tiêu đề */}
-          {(b.kind === "task_list" || b.kind === "table") && b.title && <p className="text-[11px] font-semibold text-foreground">{b.title}</p>}
+          {(b.kind === "task_list" || b.kind === "table") && b.title && <p className="text-xs font-semibold text-foreground">{b.title}</p>}
           <BlockView block={b} projectId={projectId} />
         </div>
       ))}
@@ -141,8 +147,8 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
           {block.groups.map((g, i) => (
             <div key={i} className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <span className={cn("text-[11px] font-semibold", g.tone === "danger" ? "text-destructive" : "text-foreground")}>{g.label}</span>
-                <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono">
+                <span className={cn("text-xs font-semibold", g.tone === "danger" ? "text-destructive" : "text-foreground")}>{g.label}</span>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 tabular-nums">
                   {g.items.length}
                 </Badge>
               </div>
@@ -169,32 +175,7 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
       );
 
     case "table":
-      return (
-        <div className="overflow-x-auto rounded-md border border-border/60">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {block.columns.map((c) => (
-                  <TableHead key={c.key} className={cn("text-[10px]", c.align === "right" && "text-right", c.align === "center" && "text-center")}>
-                    {c.label}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {block.rows.map((r, i) => (
-                <TableRow key={i} className={cn("text-[11px]", r.ref && "cursor-pointer")} onClick={() => open(r)}>
-                  {block.columns.map((c) => (
-                    <TableCell key={c.key} className={cn(c.align === "right" && "text-right font-mono", c.align === "center" && "text-center")}>
-                      {r.cells[c.key] ?? "—"}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      );
+      return <TableBlock block={block} onOpen={open} />;
 
     case "heatmap":
       return (
@@ -202,9 +183,9 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-[10px]">Thành viên</TableHead>
+                <TableHead className="text-[11px]">Thành viên</TableHead>
                 {block.columns.map((c) => (
-                  <TableHead key={c} className="text-[10px] text-center">
+                  <TableHead key={c} className="text-[11px] text-center">
                     {c}
                   </TableHead>
                 ))}
@@ -212,11 +193,11 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
             </TableHeader>
             <TableBody>
               {block.rows.map((r, i) => (
-                <TableRow key={i} className="text-[11px]">
+                <TableRow key={i} className="text-xs">
                   <TableCell className="whitespace-nowrap">{r.label}</TableCell>
                   {r.cells.map((cell, j) => (
                     <TableCell key={j} className="text-center">
-                      <Badge variant={TONE[cell.tone ?? "muted"]} className="text-[10px] font-mono px-1.5 py-0">
+                      <Badge variant={TONE[cell.tone ?? "muted"]} className="text-[11px] tabular-nums px-1.5 py-0">
                         {cell.text}
                       </Badge>
                     </TableCell>
@@ -237,14 +218,14 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
       return (
         <div className="space-y-1">
           <ChartContainer config={config} className="h-40 w-full">
-          <BarChart data={block.series} margin={{ left: -24, right: 4 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} />
-            <YAxis allowDecimals={false} fontSize={10} tickLine={false} axisLine={false} />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            {paired && <Bar dataKey="compare" fill="var(--color-compare)" radius={4} />}
-            <Bar dataKey="value" fill="var(--color-value)" radius={4} />
-          </BarChart>
+            <BarChart data={block.series} margin={{ left: -24, right: 4 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} tickFormatter={axisDate} />
+              <YAxis allowDecimals={false} fontSize={10} tickLine={false} axisLine={false} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              {paired && <Bar dataKey="compare" fill="var(--color-compare)" radius={4} />}
+              <Bar dataKey="value" fill="var(--color-value)" radius={4} />
+            </BarChart>
           </ChartContainer>
           {paired && (
             <div className="flex justify-center gap-4 text-[10px] text-muted-foreground">
@@ -269,12 +250,10 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
         <ChartContainer config={config} className="h-40 w-full">
           <LineChart data={block.points} margin={{ left: -24, right: 4 }}>
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} tickFormatter={axisDate} minTickGap={16} />
             <YAxis fontSize={10} tickLine={false} axisLine={false} />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            {block.points.some((p) => p.compare != null) && (
-              <Line dataKey="compare" stroke="var(--color-compare)" strokeDasharray="4 4" dot={false} connectNulls />
-            )}
+            <ChartTooltip content={<ChartTooltipContent labelFormatter={axisDate} />} />
+            {block.points.some((p) => p.compare != null) && <Line dataKey="compare" stroke="var(--color-compare)" strokeDasharray="4 4" dot={false} connectNulls />}
             <Line dataKey="value" stroke="var(--color-value)" dot={{ r: 2 }} strokeWidth={2} connectNulls />
           </LineChart>
         </ChartContainer>
@@ -282,14 +261,19 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
     }
 
     case "note":
-      return (
-        <p className={cn("text-[11px] rounded-md px-2.5 py-1.5", block.tone === "warning" ? "bg-warning/10 text-warning-foreground" : "bg-muted/60 text-muted-foreground")}>
-          {block.text}
-        </p>
-      );
+      return <p className={cn("text-xs rounded-md px-2.5 py-1.5", block.tone === "warning" ? "bg-warning/10 text-warning-foreground" : "bg-muted/60 text-muted-foreground")}>{block.text}</p>;
 
     case "empty":
-      return <EmptyState title={block.title} description={block.description ?? ""} />;
+      // Trước: EmptyState cao 360px viền đứt — một câu "không có gì" chiếm cả màn chat
+      return (
+        <div className="flex items-start gap-2.5 rounded-md border border-dashed border-border/80 bg-background/60 px-3 py-2.5">
+          <Inbox className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="space-y-0.5">
+            <p className="text-xs font-medium text-foreground">{block.title}</p>
+            {block.description && <p className="text-[11px] text-muted-foreground">{block.description}</p>}
+          </div>
+        </div>
+      );
   }
 }
 
@@ -297,15 +281,15 @@ function Stat({ stat }: { stat: StatItem }) {
   return (
     <div className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5">
       {/* Cảnh báo = icon vàng cạnh nhãn; chữ vàng trên nền sáng không đạt tương phản AA (docs 10 §6) */}
-      <div className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
+      <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
         {stat.tone === "warning" && <AlertTriangle className="h-3 w-3 shrink-0 text-warning" aria-hidden />}
         {stat.label}
       </div>
       <div className={cn("text-sm font-semibold tabular-nums", stat.tone === "danger" && "text-destructive")}>
-        {stat.value}
+        {cellText(stat.value)}
         {stat.unit ? <span className="text-[10px] font-normal text-muted-foreground ml-0.5">{stat.unit}</span> : null}
       </div>
-      {stat.hint && <div className="text-[9px] text-muted-foreground truncate">{stat.hint}</div>}
+      {stat.hint && <div className="text-[10px] text-muted-foreground truncate">{stat.hint}</div>}
     </div>
   );
 }
@@ -318,34 +302,74 @@ function ItemRow({ item, onOpen }: { item: BlockItem; onOpen: () => void }) {
       tabIndex={clickable ? 0 : undefined}
       onClick={clickable ? onOpen : undefined}
       onKeyDown={clickable ? (e) => e.key === "Enter" && onOpen() : undefined}
-      className={cn(
-        "rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5 space-y-1",
-        clickable && "cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors",
-      )}
+      className={cn("rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5 space-y-1", clickable && "cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors")}
     >
       <div className="flex items-start gap-1.5 flex-wrap">
-        {item.ref?.key && <span className="font-mono text-[10px] text-muted-foreground">{item.ref.key}</span>}
-        <span className="text-[11px] font-medium text-foreground flex-1 min-w-0">{item.title}</span>
+        {item.ref?.key && <span className="font-mono text-[11px] text-muted-foreground">{item.ref.key}</span>}
+        <span className="text-xs font-medium text-foreground flex-1 min-w-0">{item.title}</span>
         {clickable && <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />}
       </div>
-      {item.subtitle && <p className="text-[10px] text-muted-foreground line-clamp-2">{item.subtitle}</p>}
+      {item.subtitle && <p className="text-[11px] text-muted-foreground line-clamp-2">{item.subtitle}</p>}
       {(item.badges?.length || item.meta?.length) && (
         <div className="flex items-center gap-1.5 flex-wrap">
           {item.badges?.map((b, i) => (
-            <Badge key={i} variant={TONE[b.tone ?? "muted"]} className="text-[9px] px-1 py-0">
+            <Badge key={i} variant={TONE[b.tone ?? "muted"]} className="text-[10px] px-1.5 py-0">
               {b.text}
             </Badge>
           ))}
           {item.meta?.map((m, i) => {
             const Icon = m.icon ? ICON[m.icon] : null;
             return (
-              <span key={i} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+              <span key={i} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                 {Icon && <Icon className="h-3 w-3" />}
                 {m.text}
               </span>
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+type TableQueryBlock = Extract<QueryBlock, { kind: "table" }>;
+
+function TableBlock({ block, onOpen }: { block: TableQueryBlock; onOpen: (r: TableQueryBlock["rows"][number]) => void }) {
+  const [all, setAll] = React.useState(false);
+  const rows = all ? block.rows : block.rows.slice(0, TABLE_PREVIEW);
+  const hidden = block.rows.length - rows.length;
+  return (
+    <div className="space-y-1">
+      <div className="overflow-x-auto rounded-md border border-border/60">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {block.columns.map((c) => (
+                <TableHead key={c.key} className={cn("text-[11px] h-8", c.align === "right" && "text-right", c.align === "center" && "text-center")}>
+                  {c.label}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r, i) => (
+              <TableRow key={i} className={cn("text-xs", r.ref && "cursor-pointer")} onClick={() => onOpen(r)}>
+                {block.columns.map((c) => (
+                  // Số căn phải bằng tabular-nums (không dùng font mono: lệch kiểu chữ với phần còn lại của bảng)
+                  <TableCell key={c.key} className={cn("py-1.5", c.align === "right" && "text-right tabular-nums whitespace-nowrap", c.align === "center" && "text-center")}>
+                    {cellText(r.cells[c.key])}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      {block.rows.length > TABLE_PREVIEW && (
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] gap-1 text-muted-foreground" onClick={() => setAll((v) => !v)}>
+          <ChevronDown className={cn("h-3 w-3 transition-transform", all && "rotate-180")} />
+          {all ? "Thu gọn" : `Xem thêm ${hidden} dòng`}
+        </Button>
       )}
     </div>
   );
