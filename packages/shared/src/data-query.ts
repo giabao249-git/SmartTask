@@ -75,6 +75,8 @@ export const queryFiltersSchema = z
       .regex(/^d\d{1,3}$/, 'draftKey dạng d1, d2…')
       .optional(),
     user: z.union([shortCode('u'), z.literal('me')]).optional(),
+    /** ACTIVITY_FEED: khoảng thời gian theo múi giờ người hỏi. */
+    range: z.enum(['TODAY', 'YESTERDAY', 'THIS_WEEK']).optional(),
     /** SPRINT_VELOCITY: số sprint đã đóng gần nhất (mặc định 3). */
     lastN: z.number().int().min(1).max(10).optional(),
     /** AI_USAGE: gộp theo gì. */
@@ -106,7 +108,7 @@ export const FILTERS_BY_INTENT: Record<QueryIntent, (keyof QueryFilters)[]> = {
   SPRINT_PROGRESS: ['assignee'],
   SPRINT_REPORT: [],
   SPRINT_VELOCITY: ['lastN'],
-  ACTIVITY_FEED: [],
+  ACTIVITY_FEED: ['user', 'range'],
   NOTIFICATION_LIST: [],
   AI_USAGE: ['groupUsageBy'],
 };
@@ -124,7 +126,7 @@ export const QUERY_INTENT_HINT: Record<QueryIntent, string> = {
   MEMBER_LIST: 'danh sách thành viên',
   MEMBER_PROFILE: 'Huy đang làm gì',
   WORKLOAD_WEEK: 'ai đang quá tải tuần này',
-  CAPACITY_FREE: 'ai còn giờ trống',
+  CAPACITY_FREE: 'ai còn giờ trống (trong sprint này)',
   WHO_KNOWS_SKILL: 'ai biết NestJS mức 4',
   TASK_CANDIDATES: 'ai làm được t7 / d2',
   BUS_FACTOR: 'kỹ năng nào chỉ một người biết',
@@ -133,7 +135,7 @@ export const QUERY_INTENT_HINT: Record<QueryIntent, string> = {
   SPRINT_REPORT:
     'sprint trước làm được gì, việc nào bị đẩy sang sprint này, có thêm việc giữa chừng không',
   SPRINT_VELOCITY: 'vận tốc 3 sprint gần nhất, mỗi sprint nhóm làm được bao nhiêu giờ',
-  ACTIVITY_FEED: 'hôm qua ai sửa gì',
+  ACTIVITY_FEED: 'hôm qua ai sửa gì, hôm nay Huy làm gì',
   NOTIFICATION_LIST: 'tôi có thông báo gì',
   AI_USAGE: 'tháng này tốn bao nhiêu tiền AI',
 };
@@ -161,6 +163,7 @@ const KNOWN_FILTER_KEYS: (keyof QueryFilters)[] = [
   'user',
   'groupUsageBy',
   'lastN',
+  'range',
 ];
 
 const SPRINT_INTENTS: QueryIntent[] = [
@@ -170,27 +173,51 @@ const SPRINT_INTENTS: QueryIntent[] = [
   'TASK_STATS',
   'SPRINT_PROGRESS',
   'SPRINT_REPORT',
+  'CAPACITY_FREE',
 ];
 
 /** Cắt field thừa theo ý định trước khi kiểm schema. */
+/** Bộ lọc mang Ý người hỏi — cắt đi thì phải nói ra; các field khác LLM hay điền rác (tN, u0) nên cắt im. */
+const MEANINGFUL: string[] = [
+  'assignee',
+  'user',
+  'status',
+  'taskType',
+  'priority',
+  'dueRange',
+  'q',
+  'range',
+];
+
 export function pruneQuerySpec(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const spec = { ...(raw as Record<string, unknown>) };
   const intent = spec.intent as QueryIntent;
   const allowed = FILTERS_BY_INTENT[intent];
   if (!allowed) return spec;
-  if (!SPRINT_INTENTS.includes(intent)) delete spec.sprint;
+  const dropped: string[] = [];
+  const meaningful = (v: unknown) =>
+    v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0);
+  if (!SPRINT_INTENTS.includes(intent) && spec.sprint !== undefined) {
+    if (meaningful(spec.sprint) && spec.sprint !== '__all') dropped.push('sprint');
+    delete spec.sprint;
+  }
   if (spec.filters && typeof spec.filters === 'object') {
     const filters = spec.filters as Record<string, unknown>;
     // Chỉ cắt field HỢP LỆ nhưng không thuộc ý định; field lạ hoàn toàn vẫn để schema strict từ chối
     spec.filters = Object.fromEntries(
-      Object.entries(filters).filter(
-        ([k]) =>
+      Object.entries(filters).filter(([k, v]) => {
+        const keep =
           !KNOWN_FILTER_KEYS.includes(k as keyof QueryFilters) ||
-          allowed.includes(k as keyof QueryFilters),
-      ),
+          allowed.includes(k as keyof QueryFilters);
+        if (!keep && MEANINGFUL.includes(k) && meaningful(v)) dropped.push(k);
+        return keep;
+      }),
     );
   }
+  // Truyền cho backend để trả ghi chú "bộ lọc X không áp dụng" thay vì lặng lẽ trả kết quả rộng hơn câu hỏi
+  // Không xoá ignoredFilters có sẵn: "Làm mới" gửi lại truy vấn đã cắt, ghi chú vẫn phải còn
+  if (dropped.length) spec.ignoredFilters = dropped;
   return spec;
 }
 
@@ -200,6 +227,8 @@ const rawQuerySpecSchema = z
     /** Sprint áp dụng; bỏ trống = sprint đang chạy, "__all" = mọi sprint, "__backlog" = backlog. */
     sprint: z.union([shortCode('s'), z.literal('__all'), z.literal('__backlog')]).optional(),
     filters: queryFiltersSchema.default({}),
+    /** Do pruneQuerySpec điền (không phải LLM): bộ lọc có nghĩa bị cắt vì không thuộc ý định. */
+    ignoredFilters: z.array(z.string().max(20)).max(20).optional(),
     groupBy: z.enum(['NONE', 'DUE_DATE', 'ASSIGNEE', 'COLUMN', 'PRIORITY']).default('NONE'),
     sort: z
       .object({

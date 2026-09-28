@@ -825,4 +825,38 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
       filters: { lastN: 11 },
     }).expect(400);
   });
+
+  it('bộ lọc không lặng lẽ: cắt bộ lọc có nghĩa thì có ghi chú, mã rác thì cắt im; ACTIVITY_FEED lọc người và khoảng ngày', async () => {
+    const withNote = await runQuery(pm, {
+      intent: 'SPRINT_LIST',
+      filters: { assignee: ['me'] },
+    }).expect(200);
+    const last = withNote.body.blocks.at(-1);
+    expect(last.kind).toBe('note');
+    expect(last.text).toContain('người thực hiện');
+
+    const junk = await runQuery(pm, {
+      intent: 'MEMBER_LIST',
+      filters: { task: 't1' }, // LLM hay điền mã giả cho field không dùng
+    }).expect(200);
+    expect(
+      junk.body.blocks.some((b: { kind: string }) => b.kind === 'note'),
+    ).toBe(false);
+
+    const mine = await runQuery(pm, {
+      intent: 'ACTIVITY_FEED',
+      filters: { user: 'me', range: 'TODAY' },
+    }).expect(200);
+    const items = mine.body.blocks[0].items as { title: string }[];
+    expect(items.length).toBeGreaterThan(0);
+    for (const it of items)
+      expect(it.title.startsWith('Phạm Quản Lý')).toBe(true);
+    expect(mine.body.source.params.range).toBe('TODAY');
+
+    const yesterday = await runQuery(pm, {
+      intent: 'ACTIVITY_FEED',
+      filters: { range: 'YESTERDAY' },
+    }).expect(200);
+    expect(yesterday.body.blocks[0].kind).toBe('empty'); // mọi hoạt động của bộ test đều tạo hôm nay
+  });
 });
