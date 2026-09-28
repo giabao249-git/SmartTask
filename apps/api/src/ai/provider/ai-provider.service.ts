@@ -11,6 +11,7 @@ import { fakeGenerate } from './fake-provider';
 import { mockGenerate } from './mock-provider';
 import {
   geminiBody,
+  thinkingBudgetFor,
   geminiGenerateUrl,
   geminiHeaders,
   readGemini,
@@ -226,15 +227,20 @@ export class AiProviderService {
           input.staticHash,
         )
       : undefined;
+    const maxOut =
+      input.maxOutputTokens ??
+      config.advanced.maxOutputTokens ??
+      DEFAULT_MAX_OUTPUT;
     const body = geminiBody({
       system: input.system,
       userText: cachedContent ? dong : input.userText,
       temperature: input.temperature ?? config.advanced.temperature,
-      maxOutputTokens:
-        input.maxOutputTokens ??
-        config.advanced.maxOutputTokens ??
-        DEFAULT_MAX_OUTPUT,
-      thinkingBudget: config.advanced.thinkingBudget,
+      maxOutputTokens: maxOut,
+      thinkingBudget: thinkingBudgetFor(
+        maxOut,
+        config.advanced.thinkingBudget,
+        config.caps.isReasoning,
+      ),
       supportsTemperature: config.caps.supportsTemperature,
       responseSchema: config.caps.supportsStructuredOutput
         ? RESPONSE_SCHEMAS[input.purpose]

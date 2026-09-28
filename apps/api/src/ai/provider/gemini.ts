@@ -63,6 +63,21 @@ export interface GeminiBodyInput {
   cachedContent?: string;
 }
 
+/**
+ * Ngân sách "suy nghĩ" cho model có reasoning khi cấu hình không đặt. Với Gemini 2.5, token suy nghĩ tính CHUNG
+ * vào maxOutputTokens: đo 28/09 với trần 4.096, model tiêu ~3.930 token suy nghĩ rồi JSON phân rã bị cắt sau ~150
+ * token → "Không phải JSON", lỗi 503 sau 2 lần (~40 s). Giữ tối đa 1/4 trần cho suy nghĩ, phần còn lại cho JSON.
+ */
+export function thinkingBudgetFor(
+  maxOutputTokens: number,
+  configured: number | undefined,
+  isReasoning: boolean,
+): number | undefined {
+  if (configured !== undefined) return configured;
+  if (!isReasoning) return undefined;
+  return Math.min(1024, Math.floor(maxOutputTokens / 4));
+}
+
 export function geminiBody(i: GeminiBodyInput): Record<string, unknown> {
   const generationConfig: Record<string, unknown> = {
     responseMimeType: 'application/json',
