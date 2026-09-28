@@ -111,7 +111,7 @@ function linkOf(n: NotificationView): string | null {
     if (!pid) return null;
     const task = /^\/p\/[^/]+\/t\/([A-Za-z0-9]+-\d+)(#.*)?$/.exec(l);
     if (task) return `/projects/${pid}/tasks/${task[1]}${task[2] ?? ""}`;
-    if (/^\/p\/[^/]+\/sprints/.test(l)) return `/projects/${pid}/settings?tab=sprints`;
+    if (/^\/p\/[^/]+\/sprints/.test(l)) return `/projects/${pid}/sprints${typeof n.data?.sprintId === "string" ? `?sprint=${n.data.sprintId}` : ""}`;
     return `/projects/${pid}/dashboard`;
   }
   if (l) return l;

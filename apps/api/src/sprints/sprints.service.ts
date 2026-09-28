@@ -299,8 +299,16 @@ export class SprintsService {
         orderBy: { number: 'asc' },
         select: TASK_BRIEF,
       }),
+      // Người chỉ xem (VIEWER của workspace) không nhận việc → không tính vào năng lực nhóm
       this.prisma.projectMember.findMany({
-        where: { projectId: s.projectId },
+        where: {
+          projectId: s.projectId,
+          user: {
+            workspaceMembers: {
+              some: { workspaceId: acc.workspaceId, role: { not: 'VIEWER' } },
+            },
+          },
+        },
         select: {
           user: {
             select: {

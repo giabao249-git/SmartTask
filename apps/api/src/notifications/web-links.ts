@@ -5,6 +5,7 @@
 export const webLink = {
   task: (projectId: string, taskKey: string) =>
     `/projects/${projectId}/tasks/${taskKey}`,
-  sprints: (projectId: string) => `/projects/${projectId}/settings?tab=sprints`,
+  sprint: (projectId: string, sprintId: string) =>
+    `/projects/${projectId}/sprints?sprint=${sprintId}`,
   project: (projectId: string) => `/projects/${projectId}/dashboard`,
 };

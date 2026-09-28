@@ -28,6 +28,7 @@ import {
   ChevronsUpDown,
   Plus,
   ShieldAlert,
+  Flag,
 } from "lucide-react";
 import { ShortcutsDialog } from "@/components/app/ShortcutsDialog";
 import { useModKey } from "@/lib/hooks/use-mod-key";
@@ -222,6 +223,11 @@ export function AppShell({ children }: AppShellProps) {
               icon: Kanban,
               badge: "4 cách xem",
               badgeVariant: "secondary" as const,
+            },
+            {
+              title: "Sprint",
+              href: `${projectBase}/sprints`,
+              icon: Flag,
             },
             {
               title: "Nhân sự & kỹ năng",
@@ -769,11 +775,14 @@ export function AppShell({ children }: AppShellProps) {
               {projectCtx && (
                 <>
                   <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/60 hidden sm:inline" />
-                  <Badge variant="outline" className="text-[10px] font-mono font-medium truncate max-w-[130px] sm:max-w-none hidden sm:inline-flex">
-                    {projectCtx.activeSprint
-                      ? `${projectCtx.activeSprint.name}`
-                      : "Chưa có sprint"}
-                  </Badge>
+                  {/* Huy hiệu sprint dẫn tới trang Sprint (trước đây không bấm được) */}
+                  <Link href={`${projectBase}/sprints`} className="hidden sm:inline-flex" aria-label="Mở trang Sprint">
+                    <Badge variant="outline" className="text-[10px] font-mono font-medium truncate max-w-[130px] sm:max-w-none hover:bg-muted">
+                      {projectCtx.activeSprint
+                        ? `${projectCtx.activeSprint.name}`
+                        : "Chưa có sprint"}
+                    </Badge>
+                  </Link>
                 </>
               )}
             </div>
