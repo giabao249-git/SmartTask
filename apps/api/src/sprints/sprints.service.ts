@@ -62,6 +62,7 @@ export class SprintsService {
       },
       _sum: { estimateHours: true, remainingHours: true },
     });
+    // Việc đã xong ở lại sprint khi đóng (chỉ việc dở bị chuyển) → Σ ước lượng = giờ HOÀN THÀNH của sprint
     const done = await this.prisma.task.groupBy({
       by: ['sprintId'],
       where: {
@@ -72,6 +73,7 @@ export class SprintsService {
         completedAt: { not: null },
       },
       _count: { _all: true },
+      _sum: { estimateHours: true },
     });
     return rows.map((s) => {
       const h = hours.find((x) => x.sprintId === s.id);
@@ -79,6 +81,9 @@ export class SprintsService {
         ...s,
         taskCount: s._count.tasks,
         doneCount: done.find((x) => x.sprintId === s.id)?._count._all ?? 0,
+        completedHours: num(
+          done.find((x) => x.sprintId === s.id)?._sum.estimateHours,
+        ),
         estimateHours: num(h?._sum.estimateHours),
         remainingHours: num(h?._sum.remainingHours),
         _count: undefined,
@@ -451,6 +456,20 @@ export class SprintsService {
       return others.filter((t) => set.has(t.id)).map(brief);
     };
     const capacityHours = [...cap.values()].reduce((x, h) => x + h, 0);
+    // Vận tốc tham chiếu (Jira Velocity chart; Linear lấy 3 cycle): 3 sprint ĐÃ ĐÓNG gần nhất, cam kết lúc bắt
+    // đầu so với giờ hoàn thành. Chỉ là số để người lập kế hoạch nhìn — không dùng để gợi ý hay chặn.
+    const history = (await this.list(userId, s.projectId))
+      .filter((x) => x.status === SprintStatus.CLOSED && x.id !== sprintId)
+      .sort(
+        (a, b) => (b.closedAt?.getTime() ?? 0) - (a.closedAt?.getTime() ?? 0),
+      )
+      .slice(0, 3)
+      .map((x) => ({
+        id: x.id,
+        name: x.name,
+        committedHours: round2(num(x.scopeHoursInitial)),
+        completedHours: round2(x.completedHours),
+      }));
     return {
       sprint: {
         id: s.id,
@@ -496,6 +515,15 @@ export class SprintsService {
         // Xếp theo giờ còn lại chỉ để đọc cho dễ — không phải thứ hạng
         .sort((x, y) => y.remainingHours - x.remainingHours),
       unassigned: { tasks: unassignedTasks, hours: round2(unassignedHours) },
+      velocity: {
+        sprints: history,
+        avgCompletedHours: history.length
+          ? round2(
+              history.reduce((x, h) => x + h.completedHours, 0) /
+                history.length,
+            )
+          : null,
+      },
       completed: done.map(brief),
       open: open.map(brief),
       carriedOut: pick(carriedOutIds),

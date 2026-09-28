@@ -481,6 +481,14 @@ describe('Dự án, sprint, task (e2e)', () => {
     );
     expect(sum.body.capacityHours).toBeGreaterThan(0);
     expect(Object.keys(sum.body)).not.toContain('bestUserId'); // không xếp hạng
+    // Vận tốc tham chiếu: sprint đã đóng gần nhất, cam kết lúc bắt đầu (13 h) và giờ hoàn thành khớp danh sách
+    const closedRow = again.body.find((x: { id: string }) => x.id === sprintId);
+    expect(sum.body.velocity.sprints[0]).toMatchObject({
+      name: 'Sprint 1',
+      committedHours: 13,
+      completedHours: closedRow.completedHours,
+    });
+    expect(sum.body.velocity.avgCompletedHours).toBe(closedRow.completedHours);
   });
 
   it('việc của tôi, tìm kiếm ⌘K, by-key, dashboard, gỡ thành viên mất assignee', async () => {

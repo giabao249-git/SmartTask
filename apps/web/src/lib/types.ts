@@ -381,6 +381,9 @@ export interface SprintView {
   remainingHours?: number;
   startedAt?: string | null;
   closedAt?: string | null;
+  /** Cam kết chốt lúc bắt đầu (Decimal → chuỗi) và giờ hoàn thành (Σ ước lượng việc đã xong) */
+  scopeHoursInitial?: string | number | null;
+  completedHours?: number;
 }
 
 /** Một việc trong tóm tắt sprint (GET /sprints/:id/summary) */
@@ -408,6 +411,8 @@ export interface SprintSummaryView {
   capacityHours: number;
   byAssignee: { userId: string; fullName: string; shortName: string | null; avatarUrl: string | null; tasks: number; remainingHours: number; capacityHours: number }[];
   unassigned: { tasks: number; hours: number };
+  /** 3 sprint đã đóng gần nhất — cam kết vs hoàn thành, trung bình do backend tính */
+  velocity: { sprints: { id: string; name: string; committedHours: number; completedHours: number }[]; avgCompletedHours: number | null };
   completed: SprintTaskBrief[];
   open: SprintTaskBrief[];
   carriedOut: SprintTaskBrief[];

@@ -24,6 +24,7 @@ import { SprintFormDialog } from "./SprintFormDialog";
 import { SprintPlanner } from "./SprintPlanner";
 import { StartSprintDialog } from "./StartSprintDialog";
 import { CloseSprintDialog } from "./CloseSprintDialog";
+import { VelocityCard } from "./VelocityCard";
 import { dm, hrs, useInvalidateSprints } from "./shared";
 
 const ORDER: Record<SprintView["status"], number> = { ACTIVE: 0, PLANNED: 1, CLOSED: 2 };
@@ -84,11 +85,14 @@ export function SprintsView() {
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[300px_1fr] items-start">
-          <nav aria-label="Danh sách sprint" className="space-y-2">
-            {rows.map((s) => (
-              <SprintListItem key={s.id} s={s} active={s.id === selected?.id} onClick={() => select(s.id)} />
-            ))}
-          </nav>
+          <div className="space-y-4 min-w-0">
+            <nav aria-label="Danh sách sprint" className="space-y-2">
+              {rows.map((s) => (
+                <SprintListItem key={s.id} s={s} active={s.id === selected?.id} onClick={() => select(s.id)} />
+              ))}
+            </nav>
+            <VelocityCard sprints={rows} />
+          </div>
           {selected && <SprintDetail key={selected.id} sprint={selected} sprints={rows} canManage={can} onEdit={() => setEditing(selected)} onOpenSprint={select} />}
         </div>
       )}
@@ -241,6 +245,12 @@ function SummaryBlock({ s }: { s: SprintSummaryView }) {
             Cửa sổ {dm(s.window.from)} → {dm(s.window.to)}. Năng lực đã trừ họp, nghỉ, việc hành chính; <strong>chưa trừ</strong> việc ở dự án khác.
             {over > 0 && <span className="text-destructive"> Vượt {hrs(over)}.</span>}
           </p>
+          {s.velocity.avgCompletedHours !== null && (
+            <p className="text-xs text-muted-foreground">
+              Vận tốc {s.velocity.sprints.length} sprint đã đóng gần nhất: trung bình <strong className="tabular-nums">{hrs(s.velocity.avgCompletedHours)}</strong> hoàn thành mỗi sprint
+              {status === "PLANNED" && s.committedHours > s.velocity.avgCompletedHours && <> — cam kết lần này cao hơn {hrs(s.committedHours - s.velocity.avgCompletedHours)}</>}.
+            </p>
+          )}
         </div>
       )}
 
