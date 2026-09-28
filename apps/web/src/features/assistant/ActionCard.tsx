@@ -64,9 +64,16 @@ export function ActionCard({ action, resolver, validation, onSelectOption, disab
               <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5 text-warning" /> Phân tích rủi ro tiến độ
               </CardTitle>
-              <Badge variant={riskToVariant(action.riskLevel)} className="text-[10px]">
-                Rủi ro: {riskLabel(action.riskLevel)}
-              </Badge>
+              {validation && !validation.ok ? (
+                // Mức do AI tự nêu mà lệch số hệ thống thì KHÔNG in như sự thật (docs 05 §4)
+                <Badge variant="outline" className="text-[10px]">
+                  Mức rủi ro chưa khớp số hệ thống
+                </Badge>
+              ) : (
+                <Badge variant={riskToVariant(action.riskLevel)} className="text-[10px]">
+                  Rủi ro: {riskLabel(action.riskLevel)}
+                </Badge>
+              )}
             </div>
           </CardHeader>
           <CardContent className="p-3 text-xs space-y-2">

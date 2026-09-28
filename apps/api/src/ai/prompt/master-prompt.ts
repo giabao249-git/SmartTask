@@ -69,7 +69,10 @@ riskLevel PHẢI trùng "Mức rủi ro (backend)" trong ngữ cảnh; không th
 - Giao/giao lại nhiều task thật → ASSIGN_PROPOSAL { "assignments": [ { "task": "t3", "assignee": "u2", "start", "due",
   "reason", "alternatives": [] } ], "unassigned": [], "warnings": [] }.
 - Gỡ tải ("ai quá tải, gỡ bớt cho Minh") → REBALANCE_PROPOSAL { "moves": [ { "task": "t3", "from": "u1", "to": "u2", "reason" } ] }.
-- Hỏi về rủi ro sprint → RISK_EXPLANATION (riskLevel PHẢI trùng số backend nếu có trong ngữ cảnh).
+- "Sprint có kịp không", "còn bao nhiêu giờ", "rủi ro mức nào" → DATA_QUERY { "intent": "SPRINT_PROGRESS" } — backend trả
+  ETA, vận tốc, mức rủi ro; reply chỉ là câu dẫn, KHÔNG nêu mức hay số.
+- "Vì sao sprint rủi ro", "nên làm gì để kịp" → RISK_EXPLANATION; "riskLevel" PHẢI chép đúng mục MỨC RỦI RO SPRINT trong
+  ngữ cảnh (hệ thống kiểm, lệch là bị từ chối). Không có mục đó → hỏi lại sprint nào hoặc dùng DATA_QUERY.
 - AI LÀM ĐƯỢC VIỆC NÀY ("ai có thể làm task này", "ai phù hợp làm t7", "ai rảnh nhận việc d2", "giao cho ai hợp lý")
   → DATA_QUERY { "reply": "câu dẫn NGẮN, KHÔNG có số", "query": { "intent": "TASK_CANDIDATES",
     "filters": { "task": "t7" } } } — hỏi về BẢN NHÁP thì dùng { "draft": "d2" } thay cho "task".

@@ -283,6 +283,16 @@ export class ContextBuilderService {
         facts,
         today,
       );
+      if (input.purpose === 'CHAT')
+        await this.chatRiskBlock(
+          input.userId,
+          sprint ??
+            project.sprints.find((s) => s.status === SprintStatus.ACTIVE) ??
+            null,
+          codes,
+          dynamicBlocks,
+          facts,
+        );
     } else {
       await this.explainBlocks(
         input,
@@ -509,6 +519,26 @@ export class ContextBuilderService {
         ),
         `Tổng giờ trống cả nhóm tới hết cửa sổ: ${facts.sprintFreeHours} h · giờ còn lại của task đã có trong ${sprint ? 'sprint' : 'backlog'}: ${facts.sprintPlannedHours} h`,
       ].join('\n'),
+    });
+  }
+
+  /**
+   * Một dòng số rủi ro cho CHAT (docs 04 §8): LLM có câu "sprint có kịp không" thì chỉ được nhắc lại mức
+   * này — ChatService kiểm RISK_EXPLANATION với đúng `facts.forecastRiskLevel`.
+   */
+  private async chatRiskBlock(
+    userId: string,
+    sprint: { id: string; name: string } | null,
+    codes: CodeBook,
+    out: PromptBlock[],
+    facts: BuiltContext['facts'],
+  ) {
+    if (!sprint) return;
+    const fc = await this.forecast.forecast(userId, sprint.id);
+    facts.forecastRiskLevel = fc.riskLevel;
+    out.push({
+      title: 'MỨC RỦI RO SPRINT (backend tính — sự thật, không tự đổi)',
+      body: `${codes.codeOf('s', sprint.id)} ${sprint.name}: mức rủi ro ${fc.riskLevel} · ETA ${fc.eta ?? 'không tính được'} · còn ${fc.remainingHours} h · vận tốc ${fc.velocity} h/ngày làm việc`,
     });
   }
 
