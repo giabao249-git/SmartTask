@@ -141,6 +141,7 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
             draft: str('mã bản nháp dN — TASK_CANDIDATES hỏi về việc chưa ghi'),
             user: str('mã u hoặc "me"'),
             groupUsageBy: { type: 'string', enum: ['day', 'purpose', 'user'] },
+            lastN: int('SPRINT_VELOCITY: số sprint đã đóng gần nhất, 1–10'),
           }),
           groupBy: {
             type: 'string',

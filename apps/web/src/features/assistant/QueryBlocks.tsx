@@ -229,17 +229,34 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
       );
 
     case "bar_chart": {
-      const config: ChartConfig = { value: { label: block.unit ?? "giá trị", color: "hsl(var(--chart-1))" } };
+      const config: ChartConfig = {
+        value: { label: block.unit ?? "giá trị", color: "hsl(var(--chart-1))" },
+        compare: { label: block.compareLabel ?? "so sánh", color: "hsl(var(--chart-2))" },
+      };
+      const paired = block.series.some((p) => p.compare != null);
       return (
-        <ChartContainer config={config} className="h-40 w-full">
+        <div className="space-y-1">
+          <ChartContainer config={config} className="h-40 w-full">
           <BarChart data={block.series} margin={{ left: -24, right: 4 }}>
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
             <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} />
             <YAxis allowDecimals={false} fontSize={10} tickLine={false} axisLine={false} />
             <ChartTooltip content={<ChartTooltipContent />} />
+            {paired && <Bar dataKey="compare" fill="var(--color-compare)" radius={4} />}
             <Bar dataKey="value" fill="var(--color-value)" radius={4} />
           </BarChart>
-        </ChartContainer>
+          </ChartContainer>
+          {paired && (
+            <div className="flex justify-center gap-4 text-[10px] text-muted-foreground">
+              {(["compare", "value"] as const).map((k) => (
+                <span key={k} className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-sm" style={{ background: config[k].color }} />
+                  {config[k].label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       );
     }
 
