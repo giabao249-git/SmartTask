@@ -81,7 +81,7 @@ export function StartSprintDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg [&>*]:min-w-0">
         <DialogHeader>
           <DialogTitle>Bắt đầu {sprint.name}?</DialogTitle>
           <DialogDescription>Bắt đầu sẽ chốt phạm vi giờ làm đường lý tưởng cho burn-down. Mỗi dự án chỉ chạy một sprint.</DialogDescription>

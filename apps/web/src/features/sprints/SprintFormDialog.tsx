@@ -18,7 +18,7 @@ type Form = { name: string; goal: string; startDate: string; endDate: string };
  * Sprint mới mặc định bắt đầu NGAY SAU sprint cuối và dài bằng nó (14 ngày nếu chưa có sprint nào).
  * Trước đây mặc định "hôm nay → +13" theo giờ UTC: chồng lên sprint kế tiếp và trước 7 giờ sáng ra hôm qua.
  */
-function defaults(sprints: SprintView[]): Form {
+export function defaults(sprints: SprintView[]): Form {
   const last = [...sprints].sort((a, b) => b.endDate.localeCompare(a.endDate))[0];
   const day = 86_400_000;
   if (!last) {
