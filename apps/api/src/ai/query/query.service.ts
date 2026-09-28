@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, TaskType } from '@prisma/client';
+import { ACTIVITY_ACTION_LABEL, sprintActivityDetail } from '@smarttask/shared';
 import type {
   BlockItem,
   DataQuerySpec,
@@ -1567,25 +1568,47 @@ export class AiQueryService {
   }
 
   private async activity(spec: DataQuerySpec, ctx: QueryContext) {
-    const rows = await this.prisma.activityLog.findMany({
-      where: { projectId: ctx.projectId },
-      orderBy: { createdAt: 'desc' },
-      take: spec.limit,
-      select: {
-        id: true,
-        action: true,
-        createdAt: true,
-        source: true,
-        actor: { select: { fullName: true, shortName: true } },
-        task: {
-          select: {
-            number: true,
-            title: true,
-            project: { select: { key: true } },
+    const [rows, sprints, me] = await Promise.all([
+      this.prisma.activityLog.findMany({
+        where: { projectId: ctx.projectId },
+        orderBy: { createdAt: 'desc' },
+        take: spec.limit,
+        select: {
+          id: true,
+          action: true,
+          diff: true,
+          createdAt: true,
+          source: true,
+          actor: { select: { fullName: true, shortName: true } },
+          task: {
+            select: {
+              number: true,
+              title: true,
+              project: { select: { key: true } },
+            },
           },
         },
-      },
+      }),
+      this.prisma.sprint.findMany({
+        where: { projectId: ctx.projectId },
+        select: { id: true, name: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: ctx.userId },
+        select: { timezone: true },
+      }),
+    ]);
+    const sprintName = new Map(sprints.map((s) => [s.id, s.name]));
+    // Giờ theo múi giờ người hỏi, cùng kiểu "dd/MM HH:mm" với màn Dashboard (trước đây in UTC)
+    const when = new Intl.DateTimeFormat('en-GB', {
+      timeZone: me?.timezone || 'Asia/Ho_Chi_Minh',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
     });
+    const fmt = (d: Date) => when.format(d).replace(',', '');
     return {
       source: {
         endpoint: 'GET /projects/:id/activity',
@@ -1596,25 +1619,25 @@ export class AiQueryService {
         ? [
             {
               kind: 'activity_list',
-              items: rows.map((r) => ({
-                title: `${r.actor?.shortName ?? r.actor?.fullName ?? 'Hệ thống'} · ${r.action}`,
-                subtitle: r.task
-                  ? `${r.task.project.key}-${r.task.number} ${r.task.title}`
-                  : undefined,
-                meta: [
-                  {
-                    icon: 'clock' as const,
-                    text: r.createdAt
-                      .toISOString()
-                      .slice(0, 16)
-                      .replace('T', ' '),
-                  },
-                ],
-                badges:
-                  r.source !== 'MANUAL'
-                    ? [{ text: r.source, tone: 'info' as const }]
-                    : undefined,
-              })),
+              items: rows.map((r) => {
+                const d = (r.diff ?? {}) as { sprintId?: string };
+                const sprint = sprintActivityDetail(
+                  r.action,
+                  r.diff,
+                  d.sprintId ? sprintName.get(d.sprintId) : undefined,
+                );
+                return {
+                  title: `${r.actor?.shortName ?? r.actor?.fullName ?? 'Hệ thống'} ${ACTIVITY_ACTION_LABEL[r.action] ?? r.action}`,
+                  subtitle: r.task
+                    ? `${r.task.project.key}-${r.task.number} ${r.task.title}`
+                    : (sprint ?? undefined),
+                  meta: [{ icon: 'clock' as const, text: fmt(r.createdAt) }],
+                  badges:
+                    r.source !== 'MANUAL'
+                      ? [{ text: r.source, tone: 'info' as const }]
+                      : undefined,
+                };
+              }),
             },
           ]
         : [{ kind: 'empty', title: 'Chưa có hoạt động' }]) as QueryBlock[],

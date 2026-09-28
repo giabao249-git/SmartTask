@@ -265,6 +265,7 @@ export class SprintsService {
       sprintId,
       actorId: userId,
       movedTaskIds: dto.taskIds,
+      afterStart: s.status === SprintStatus.ACTIVE,
       at: new Date(),
     });
     return this.prisma.task.findMany({

@@ -699,4 +699,37 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
       .set(auth(pm))
       .expect(204);
   });
+
+  it('ACTIVITY_FEED: nhãn tiếng Việt như màn hình, giờ địa phương, dòng sprint có tên và số việc thêm giữa sprint', async () => {
+    const t = await api()
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set(auth(pm))
+      .send({ title: 'Việc thêm giữa sprint', estimateHours: 2 })
+      .expect(201);
+    await api()
+      .post(`/api/v1/sprints/${sprintId}/tasks`)
+      .set(auth(pm))
+      .send({ taskIds: [t.body.id] })
+      .expect(201);
+    // Listener ghi nhật ký bất đồng bộ — chờ tới khi dòng xuất hiện
+    let item:
+      | { title: string; subtitle?: string; meta: { text: string }[] }
+      | undefined;
+    for (let i = 0; i < 20 && !item; i++) {
+      const act = await runQuery(pm, {
+        intent: 'ACTIVITY_FEED',
+        limit: 5,
+      }).expect(200);
+      item = act.body.blocks[0].items?.find((x: { title: string }) =>
+        x.title.includes('đưa việc vào sprint'),
+      );
+      if (!item) await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(item).toBeDefined();
+    expect(item!.title).not.toMatch(/sprint\.|task\./); // không còn mã máy
+    expect(item!.subtitle).toContain('Sprint tra cứu');
+    expect(item!.subtitle).toContain('thêm sau khi sprint đã bắt đầu');
+    expect(item!.meta[0].text).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2}$/);
+    await api().delete(`/api/v1/tasks/${t.body.id}`).set(auth(pm)).expect(204);
+  });
 });

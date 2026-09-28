@@ -40,6 +40,8 @@ export interface SprintEventPayload {
   sprintId: string;
   actorId: string;
   movedTaskIds?: string[];
+  /** Việc đưa vào sprint đang chạy (scope tăng giữa chừng — mục "thêm sau khi bắt đầu" của báo cáo sprint) */
+  afterStart?: boolean;
   at: Date;
 }
 

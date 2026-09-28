@@ -44,7 +44,7 @@ Người dùng ──▶ LLM ──▶ DATA_QUERY { intent, filters }   (KHÔNG 
 | | `BUS_FACTOR` | "kỹ năng nào chỉ 1 người biết" | `note` + `table` |
 | Tiến độ | `SPRINT_LIST` | "có mấy sprint" | `table` (trạng thái tiếng Việt, xong/tổng, giờ còn lại — **cùng nguồn** `SprintsService.list`) |
 | | `SPRINT_PROGRESS` | "sprint còn bao nhiêu giờ, có kịp không" | `stat_row` (xong, còn lại, vận tốc, ngày làm việc còn, ETA, rủi ro, quá hạn) + `line_chart` (thực tế vs lý tưởng) + `note` nguyên nhân — **nguyên văn** `ForecastService` |
-| | `ACTIVITY_FEED` | "hôm qua ai sửa gì" | `activity_list` |
+| | `ACTIVITY_FEED` | "hôm qua ai sửa gì" | `activity_list` — nhãn dùng chung với màn hình (`packages/shared/activity.ts`), giờ theo múi giờ người hỏi, dòng sprint có tên + số việc |
 | Khác | `NOTIFICATION_LIST` | "tôi có thông báo gì" | `stat_row` + `activity_list` |
 | | `AI_USAGE` | "tháng này tốn bao nhiêu tiền AI" | `stat_row` + `table` |
 
