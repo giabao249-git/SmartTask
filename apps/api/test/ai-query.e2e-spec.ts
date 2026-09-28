@@ -763,4 +763,35 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].ref.id).toBe(dev.id);
   });
+
+  it('SPRINT_REPORT: chưa có sprint đóng → khối trống; đóng xong → việc bị chuyển đi khớp movedTaskIds', async () => {
+    const none = await runQuery(pm, { intent: 'SPRINT_REPORT' }).expect(200);
+    expect(none.body.blocks[0]).toMatchObject({ kind: 'empty' });
+
+    const closed = await api()
+      .post(`/api/v1/sprints/${sprintId}/close`)
+      .set(auth(pm))
+      .send({ moveOpenTo: 'backlog' })
+      .expect(201);
+    // Nhật ký sprint.closed (nguồn "bị chuyển đi") ghi bất đồng bộ
+    let body: {
+      blocks: {
+        kind: string;
+        title?: string;
+        items?: { ref: { id: string } }[];
+      }[];
+    } = { blocks: [] };
+    for (let i = 0; i < 20; i++) {
+      body = (await runQuery(dev, { intent: 'SPRINT_REPORT' }).expect(200))
+        .body;
+      if (body.blocks.some((b) => b.title?.startsWith('Bị chuyển đi'))) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const out = body.blocks.find((b) => b.title?.startsWith('Bị chuyển đi'))!;
+    const rootMoved = (closed.body.movedTaskIds as string[]).filter((id) =>
+      taskIds.includes(id),
+    );
+    expect(out.items!.map((i) => i.ref.id).sort()).toEqual(rootMoved.sort());
+    expect(body.blocks.some((b) => b.title?.startsWith('Đã xong'))).toBe(true);
+  });
 });
