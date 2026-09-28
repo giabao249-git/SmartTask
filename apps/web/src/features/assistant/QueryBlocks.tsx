@@ -80,7 +80,11 @@ export function QueryResultCard({
   return (
     <div className="mt-2 pt-2 border-t border-border/40 space-y-2">
       {data.blocks.map((b, i) => (
-        <BlockView key={i} block={b} projectId={projectId} />
+        <div key={i} className="space-y-1.5">
+          {/* Một kết quả có nhiều danh sách (báo cáo sprint) thì mỗi khối cần tiêu đề */}
+          {(b.kind === "task_list" || b.kind === "table") && b.title && <p className="text-[11px] font-semibold text-foreground">{b.title}</p>}
+          <BlockView block={b} projectId={projectId} />
+        </div>
       ))}
 
       <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground pt-0.5">
@@ -106,7 +110,7 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
     if (!ref) return;
     if (ref.type === "task") router.push(`/projects/${projectId}/work?task=${ref.id}`);
     else if (ref.type === "user") router.push(`/projects/${projectId}/people?tab=workload`);
-    else if (ref.type === "sprint") router.push(`/projects/${projectId}/settings?tab=sprints`);
+    else if (ref.type === "sprint") router.push(`/projects/${projectId}/sprints?sprint=${ref.id}`);
     else if (ref.type === "notification") router.push(`/settings`);
   };
 
