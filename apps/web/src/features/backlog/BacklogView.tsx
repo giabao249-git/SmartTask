@@ -258,6 +258,8 @@ export function BacklogView() {
         project={project}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        taskIds={rows.map((t) => t.id)}
+        onNavigate={setSelectedId}
         onOpenFullPage={() => {
           const t = rows.find((x) => x.id === selectedId);
           if (!t) return;

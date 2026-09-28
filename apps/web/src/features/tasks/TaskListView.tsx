@@ -347,6 +347,8 @@ export function TaskListView() {
         project={project}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        taskIds={rows.map((t) => t.id)}
+        onNavigate={setSelectedId}
         onOpenFullPage={() => {
           const t = (tasksQuery.data ?? []).find((x) => x.id === selectedId);
           if (!t) return;

@@ -89,6 +89,34 @@ export function priorityToVariant(p: PriorityLevel | string): BadgeVariant {
 }
 
 /**
+ * Màu dải nhấn (accent strip) cho thanh Gantt theo priority — khớp màu với priorityToVariant
+ * (LOW≈outline, MEDIUM≈secondary, HIGH≈warning, URGENT≈destructive) để nhất quán
+ * với Badge priority hiển thị ở hover card/footer legend.
+ * Dùng làm nền cho 1 dải phủ mỏng bên trái (không dùng CSS border) để tránh xung đột
+ * với tailwind-merge — class "border-{color}" (toàn viền) và "border-l-{color}" (viền trái)
+ * cùng nhóm xung đột trong twMerge nên sẽ bị loại bỏ lẫn nhau nếu kết hợp cả hai.
+ */
+export function priorityToAccentColor(p: PriorityLevel | string): string {
+  switch (p) {
+    case "LOW":
+    case "Thấp":
+      return "bg-border";
+    case "MEDIUM":
+    case "Trung bình":
+      return "bg-muted-foreground/50";
+    case "HIGH":
+    case "Cao":
+      return "bg-warning";
+    case "URGENT":
+    case "Rất cao":
+    case "Khẩn":
+      return "bg-destructive";
+    default:
+      return "bg-border";
+  }
+}
+
+/**
  * Ánh xạ trạng thái task sang variant Badge
  */
 export function statusToVariant(s: TaskStatus | string): BadgeVariant {

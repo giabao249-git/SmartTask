@@ -846,6 +846,8 @@ export function KanbanBoard() {
         project={project}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        taskIds={grid.flatMap((g) => g.ids)}
+        onNavigate={setSelectedId}
         onOpenFullPage={() => {
           const t = (tasksQuery.data ?? []).find((x) => x.id === selectedId);
           if (!t) return;

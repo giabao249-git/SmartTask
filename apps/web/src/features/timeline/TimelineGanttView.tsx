@@ -21,10 +21,11 @@ import { useSprints } from "@/lib/hooks/queries";
 import { useWorkFilters } from "@/features/work/filters";
 import { priorityToVariant } from "@/lib/status";
 import type { TaskListItem } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { useTaskMutations, useTasks } from "@/features/board/hooks";
 import { describeError as errInfo } from "@/lib/api";
 import { toast } from "sonner";
+import { BAR_H, GanttBar } from "./GanttBar";
+import { TaskHoverCard } from "./TaskHoverCard";
 
 const DAY = 86_400_000;
 const ZOOM = { day: 56, week: 24, month: 10 } as const;
@@ -36,117 +37,10 @@ const fmt = (dayIdx: number) => {
   return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
-const fmtDate = (iso: string | null) => {
-  if (!iso) return "Chưa đặt";
-  const d = new Date(iso);
-  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
-};
-
-interface TaskHoverCardProps {
-  task: TaskListItem;
-  projectKey: string;
-  columnName?: string;
-  isOverdue: boolean;
-  today: number;
-}
-
-function TaskHoverCard({ task, projectKey, columnName, isOverdue, today }: TaskHoverCardProps) {
-  const dueDay = task.dueDate ? toDay(task.dueDate) : null;
-  const overdueDays = dueDay !== null && dueDay < today ? today - dueDay : 0;
-
-  return (
-    <div className="space-y-2 text-left">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[11px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
-          {taskKeyOf(projectKey, task)}
-        </span>
-        <div className="flex items-center gap-1.5">
-          <Badge variant={priorityToVariant(task.priority)} className="text-[10px] px-1.5 py-0">
-            {task.priority}
-          </Badge>
-          {columnName && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
-              {columnName}
-            </Badge>
-          )}
-        </div>
-      </div>
-
-      <div className="text-xs font-semibold text-foreground line-clamp-2 leading-snug">
-        {task.title}
-      </div>
-
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] pt-1.5 border-t border-border/50 text-muted-foreground">
-        <div>
-          <span className="text-[10px] block text-muted-foreground/70">Bắt đầu</span>
-          <span className="font-medium text-foreground">{fmtDate(task.startDate)}</span>
-        </div>
-        <div>
-          <span className="text-[10px] block text-muted-foreground/70">Hạn chót</span>
-          <span className={cn("font-medium", isOverdue ? "text-destructive font-semibold" : "text-foreground")}>
-            {fmtDate(task.dueDate)}
-          </span>
-        </div>
-      </div>
-
-      {isOverdue && (
-        <div className="text-[10px] text-destructive font-medium bg-destructive/10 px-2 py-1 rounded flex items-center gap-1 border border-destructive/20">
-          <span>⚠️ Quá hạn {overdueDays} ngày</span>
-        </div>
-      )}
-
-      {/* Tiến độ & Ước tính */}
-      <div className="space-y-1 pt-1.5 border-t border-border/50">
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-          <span>Tiến độ ({task.progress}%)</span>
-          <span>{task.estimateHours ? `${task.estimateHours}h ước tính` : "Chưa ước lượng"}</span>
-        </div>
-        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-          <div
-            className={cn("h-full transition-all rounded-full", task.progress === 100 ? "bg-success" : "bg-primary")}
-            style={{ width: `${Math.min(task.progress, 100)}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Phân công & Phụ thuộc */}
-      <div className="flex items-center justify-between pt-1.5 border-t border-border/50 text-[11px]">
-        <div className="flex items-center gap-1.5 truncate max-w-[170px]">
-          {task.assignees && task.assignees.length > 0 ? (
-            <>
-              <UserAvatar
-                name={task.assignees[0].fullName}
-                avatar={task.assignees[0].avatarUrl ?? undefined}
-                size="sm"
-                showTooltip={false}
-                className="h-4 w-4 text-[8px]"
-              />
-              <span className="text-[11px] truncate font-medium text-foreground">
-                {task.assignees[0].fullName}
-              </span>
-            </>
-          ) : (
-            <span className="text-muted-foreground text-[10px] italic">Chưa phân công</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground shrink-0 font-mono">
-          {task.dependsOnIds.length > 0 && (
-            <span className="flex items-center gap-0.5" title={`${task.dependsOnIds.length} việc phụ thuộc`}>
-              <Link2 className="h-3 w-3" /> {task.dependsOnIds.length}
-            </span>
-          )}
-          {task.subtaskCount > 0 && (
-            <span title={`${task.subtaskCount} việc con`}>
-              ✓ {task.subtaskCount}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const ROW = 38;
+// Cột trái (xếp theo flow) và timeline (định vị tuyệt đối) cùng dùng các chiều cao này — lệch một chỗ là tên task lệch khỏi thanh.
+const HEADER_H = 32;
+const GROUP_H = 40;
+const ROW = 52;
 const SIDEBAR_WIDTH = 340;
 
 /** Gantt tương tác cao (UC-13): lấp đầy viewport, xem trước hover, thanh theo ngày bắt đầu–hạn, nhóm sprint, đường hôm nay, quá hạn, kéo thả điều chỉnh */
@@ -254,12 +148,18 @@ export function TimelineGanttView() {
     }));
   }, [rows, sprints.data]);
 
-  // Hàng 0 = trục ngày (h-8), mỗi nhóm 1 hàng tiêu đề rồi tới task
-  const rowIndex = new Map<string, number>();
-  let idx = 1;
+  // Toạ độ top của từng hàng task, tính từ dưới trục ngày: mỗi nhóm 1 hàng tiêu đề (GROUP_H) rồi tới các task (ROW)
+  const rowTop = new Map<string, number>();
+  const rowBottoms: number[] = [];
+  let contentH = HEADER_H;
   for (const g of groups) {
-    idx += 1;
-    for (const t of g.tasks) rowIndex.set(t.id, idx++);
+    contentH += GROUP_H;
+    rowBottoms.push(contentH);
+    for (const t of g.tasks) {
+      rowTop.set(t.id, contentH);
+      contentH += ROW;
+      rowBottoms.push(contentH);
+    }
   }
 
   const bar = (t: TaskListItem) => {
@@ -274,7 +174,7 @@ export function TimelineGanttView() {
     return { left: (s - range.start) * px, width: (e - s + 1) * px, overdue: !t.completedAt && !!t.dueDate && e < today };
   };
 
-  const gridHeight = Math.max(idx * ROW + 40, 520);
+  const gridHeight = Math.max(contentH + 24, 520);
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -340,12 +240,18 @@ export function TimelineGanttView() {
                     className="shrink-0 border-r border-border/60 sticky left-0 bg-card z-20 shadow-xs"
                     style={{ width: SIDEBAR_WIDTH, minHeight: gridHeight }}
                   >
-                    <div className="h-8 border-b border-border/60 px-3 flex items-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/20">
+                    <div
+                      className="border-b border-border/60 px-3 flex items-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/20"
+                      style={{ height: HEADER_H }}
+                    >
                       Công việc & Phân công
                     </div>
                     {groups.map((g) => (
                       <React.Fragment key={g.id}>
-                        <div className="h-[38px] px-3 flex items-center text-xs font-semibold bg-muted/40 border-b border-border/40 text-foreground">
+                        <div
+                          className="px-3 flex items-center text-xs font-semibold bg-muted/40 border-b border-border/40 text-foreground"
+                          style={{ height: GROUP_H }}
+                        >
                           {g.name}
                         </div>
                         {g.tasks.map((t) => {
@@ -356,7 +262,8 @@ export function TimelineGanttView() {
                                 <Button
                                   variant="ghost"
                                   onClick={() => setSelectedId(t.id)}
-                                  className="h-[38px] w-full justify-between px-3 text-xs rounded-none border-b border-border/30 gap-2 hover:bg-muted/60 text-left font-normal cursor-pointer"
+                                  style={{ height: ROW }}
+                                  className="w-full justify-between px-3 text-xs rounded-none border-b border-border/30 gap-2 hover:bg-muted/60 text-left font-normal cursor-pointer"
                                 >
                                   <div className="flex items-center gap-2 truncate min-w-0">
                                     <span className="font-mono text-[11px] font-semibold text-muted-foreground shrink-0">
@@ -430,21 +337,21 @@ export function TimelineGanttView() {
                     })}
 
                     {/* Đường phân cách hàng */}
-                    {Array.from({ length: idx }).map((_, r) => (
+                    {rowBottoms.map((y) => (
                       <div
-                        key={r}
+                        key={y}
                         className="absolute left-0 right-0 border-b border-border/20 pointer-events-none"
-                        style={{ top: (r + 1) * ROW, height: 1 }}
+                        style={{ top: y - 1, height: 1 }}
                       />
                     ))}
 
-                    {/* Hôm nay */}
+                    {/* Hôm nay: nhãn đặt ở nửa trên hàng trục (ngày căn theo items-end nửa dưới) để không đè lên nhau */}
                     <div
-                      className="absolute top-0 bottom-0 w-[2px] bg-destructive z-10 pointer-events-none"
+                      className="absolute top-0 bottom-0 w-[2px] bg-destructive z-20 pointer-events-none"
                       style={{ left: (today - range.start) * px + px / 2 }}
                       title="Hôm nay"
                     >
-                      <div className="absolute -top-1 -translate-x-1/2 bg-destructive text-destructive-foreground text-[9px] font-bold px-1 rounded shadow-xs">
+                      <div className="absolute top-0.5 -translate-x-1/2 whitespace-nowrap bg-destructive text-destructive-foreground text-[8px] leading-none font-bold px-1 py-0.5 rounded-sm shadow-xs">
                         Hôm nay
                       </div>
                     </div>
@@ -453,68 +360,26 @@ export function TimelineGanttView() {
                     {groups.flatMap((g) =>
                       g.tasks.map((t) => {
                         const b = bar(t);
-                        const r = rowIndex.get(t.id) ?? 0;
                         const isDragging = drag?.id === t.id;
 
                         return (
-                          <Tooltip key={t.id} delayDuration={150} open={isDragging ? false : undefined}>
-                            <TooltipTrigger asChild>
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                onPointerDown={(e) => onPointerDown(e, t, "move")}
-                                onPointerMove={onPointerMove}
-                                onPointerUp={() => onPointerUp(t)}
-                                onKeyDown={(e) => e.key === "Enter" && setSelectedId(t.id)}
-                                className={cn(
-                                  "absolute h-7 px-2.5 flex items-center text-[11px] rounded-md border shadow-2xs select-none transition-shadow",
-                                  project.canEdit && !t.completedAt
-                                    ? "cursor-grab active:cursor-grabbing hover:shadow-sm"
-                                    : "cursor-pointer",
-                                  isDragging && "ring-2 ring-ring z-30 shadow-md",
-                                  b.overdue
-                                    ? "bg-destructive/15 border-destructive/50 text-destructive font-medium"
-                                    : t.completedAt
-                                    ? "bg-success/15 border-success/40 text-success-foreground"
-                                    : "bg-primary/15 border-primary/40 text-primary-foreground font-medium",
-                                )}
-                                style={{
-                                  top: r * ROW + 5,
-                                  left: b.left,
-                                  width: Math.max(b.width, px),
-                                  zIndex: isDragging ? 30 : 15,
-                                }}
-                              >
-                                <span className="truncate mr-1 font-medium">{t.title}</span>
-                                {t.progress > 0 && (
-                                  <span className="ml-auto font-mono text-[10px] opacity-80 shrink-0">
-                                    {t.progress}%
-                                  </span>
-                                )}
-                                {project.canEdit && !t.completedAt && t.dueDate && (
-                                  <span
-                                    onPointerDown={(e) => onPointerDown(e, t, "resize")}
-                                    className="absolute right-0 top-0 h-full w-2.5 cursor-ew-resize hover:bg-foreground/20 rounded-r-md"
-                                    aria-label="Kéo đổi hạn"
-                                  />
-                                )}
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent
-                              side="top"
-                              align="center"
-                              sideOffset={8}
-                              className="z-50 p-3 bg-popover/95 text-popover-foreground border border-border/80 shadow-xl rounded-xl w-80 backdrop-blur-sm pointer-events-none"
-                            >
-                              <TaskHoverCard
-                                task={t}
-                                projectKey={project.key}
-                                columnName={columnMap.get(t.columnId)}
-                                isOverdue={b.overdue}
-                                today={today}
-                              />
-                            </TooltipContent>
-                          </Tooltip>
+                          <GanttBar
+                            key={t.id}
+                            task={t}
+                            projectKey={project.key}
+                            columnName={columnMap.get(t.columnId)}
+                            today={today}
+                            left={b.left}
+                            width={Math.max(b.width, px)}
+                            top={(rowTop.get(t.id) ?? 0) + (ROW - BAR_H) / 2}
+                            overdue={b.overdue}
+                            isDragging={isDragging}
+                            canEdit={project.canEdit}
+                            onPointerDown={(e, mode) => onPointerDown(e, t, mode)}
+                            onPointerMove={onPointerMove}
+                            onPointerUp={() => onPointerUp(t)}
+                            onSelect={() => setSelectedId(t.id)}
+                          />
                         );
                       }),
                     )}
@@ -531,8 +396,8 @@ export function TimelineGanttView() {
                           if (!dep) return null;
                           const a = bar(dep);
                           const b = bar(t);
-                          const y1 = (rowIndex.get(dep.id) ?? 0) * ROW + ROW / 2;
-                          const y2 = (rowIndex.get(t.id) ?? 0) * ROW + ROW / 2;
+                          const y1 = (rowTop.get(dep.id) ?? 0) + ROW / 2;
+                          const y2 = (rowTop.get(t.id) ?? 0) + ROW / 2;
                           const x1 = a.left + a.width;
                           const x2 = b.left;
                           return (
@@ -579,6 +444,8 @@ export function TimelineGanttView() {
           project={project}
           open={!!selectedId}
           onOpenChange={(o) => !o && setSelectedId(null)}
+          taskIds={groups.flatMap((g) => g.tasks.map((t) => t.id))}
+          onNavigate={setSelectedId}
         />
       </div>
     </TooltipProvider>

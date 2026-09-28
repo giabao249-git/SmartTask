@@ -93,7 +93,14 @@ export function EisenhowerMatrixView() {
           ))}
         </div>
       )}
-      <TaskDetailModal taskId={selectedId} project={project} open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)} />
+      <TaskDetailModal
+        taskId={selectedId}
+        project={project}
+        open={!!selectedId}
+        onOpenChange={(o) => !o && setSelectedId(null)}
+        taskIds={QUADRANTS.flatMap((q) => grouped[q.key].map((t) => t.id))}
+        onNavigate={setSelectedId}
+      />
     </div>
   );
 }

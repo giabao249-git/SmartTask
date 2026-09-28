@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AtSign, ChevronDown, Clock, Download, FileText, History, Loader2, Maximize2, MessageSquare, Paperclip, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { AtSign, ChevronDown, ChevronLeft, ChevronRight, Clock, Download, FileText, History, Loader2, Maximize2, MessageSquare, Paperclip, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { ActivityList } from "@/features/activity/ActivityList";
 import { useTasks } from "@/features/board/hooks";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,14 @@ export interface TaskDetailModalProps {
   onOpenChange: (open: boolean) => void;
   /** Bấm nút phóng to trong modal — nơi gọi tự điều hướng sang trang riêng. */
   onOpenFullPage?: () => void;
+  /**
+   * Id các task theo đúng thứ tự đang hiển thị ở view gọi modal (Gantt, Bảng, Danh sách…).
+   * Có giá trị này mới hiện nút ◀ ▶ chuyển task trước/sau; bỏ qua nếu view không có danh sách
+   * thứ tự rõ ràng để điều hướng.
+   */
+  taskIds?: string[];
+  /** Bắt buộc đi kèm taskIds: đổi task đang mở sang id khác, giữ modal mở (không đóng/mở lại). */
+  onNavigate?: (id: string) => void;
 }
 
 /**
@@ -57,11 +65,17 @@ export interface TaskDetailModalProps {
  * Mở dạng modal giữa màn chứ không phải ngăn trượt bên phải: nội dung dàn hai cột nên cần bề
  * ngang, và modal giữ được mạch "xem rồi đóng, bảng vẫn nguyên chỗ cũ".
  */
-export function TaskDetailModal({ taskId, project, open, onOpenChange, onOpenFullPage }: TaskDetailModalProps) {
+export function TaskDetailModal({ taskId, project, open, onOpenChange, onOpenFullPage, taskIds, onNavigate }: TaskDetailModalProps) {
   const q = useTask(open ? taskId : null);
+  const idx = taskIds && taskId ? taskIds.indexOf(taskId) : -1;
+  const hasPrev = idx > 0;
+  const hasNext = idx >= 0 && !!taskIds && idx < taskIds.length - 1;
+  const goPrev = () => hasPrev && taskIds && onNavigate?.(taskIds[idx - 1]);
+  const goNext = () => hasNext && taskIds && onNavigate?.(taskIds[idx + 1]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full sm:max-w-3xl p-0 flex flex-col max-h-[88vh] overflow-hidden gap-0">
+      <DialogContent className="w-full sm:max-w-4xl p-0 flex flex-col max-h-[88vh] overflow-hidden gap-0">
         {q.isPending || !taskId ? (
           <div className="p-6 space-y-4">
             <Skeleton className="h-6 w-40" />
@@ -73,7 +87,16 @@ export function TaskDetailModal({ taskId, project, open, onOpenChange, onOpenFul
             <ErrorState code={describeError(q.error).code} message={describeError(q.error).message} onRetry={() => q.refetch()} />
           </div>
         ) : (
-          <TaskDetailBody task={q.data} project={project} onRefresh={() => q.refetch()} onOpenFullPage={onOpenFullPage} />
+          <TaskDetailBody
+            task={q.data}
+            project={project}
+            onRefresh={() => q.refetch()}
+            onOpenFullPage={onOpenFullPage}
+            onPrev={taskIds && onNavigate ? goPrev : undefined}
+            onNext={taskIds && onNavigate ? goNext : undefined}
+            hasPrev={hasPrev}
+            hasNext={hasNext}
+          />
         )}
       </DialogContent>
     </Dialog>
@@ -108,12 +131,21 @@ export function TaskDetailBody({
   onRefresh,
   variant = "modal",
   onOpenFullPage,
+  onPrev,
+  onNext,
+  hasPrev = false,
+  hasNext = false,
 }: {
   task: TaskDetail;
   project: ProjectDetail;
   onRefresh: () => void;
   variant?: "modal" | "page";
   onOpenFullPage?: () => void;
+  /** Chuyển sang task trước/sau trong danh sách đang xem — chỉ có ở modal khi view gọi truyền taskIds. */
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
 }) {
   const m = useTaskMutations(project.id);
   const sprints = useSprints(project.id);
@@ -197,6 +229,33 @@ export function TaskDetailBody({
             </Badge>
           )}
           <span className="text-[10px] text-muted-foreground ml-auto font-mono">v{task.version}</span>
+          {variant === "modal" && (onPrev || onNext) && (
+            <div className="flex items-center rounded-md border border-border/70">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 rounded-r-none"
+                aria-label="Việc trước đó"
+                title="Việc trước đó"
+                disabled={!hasPrev}
+                onClick={onPrev}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <div className="w-px self-stretch bg-border/70" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 rounded-l-none"
+                aria-label="Việc kế tiếp"
+                title="Việc kế tiếp"
+                disabled={!hasNext}
+                onClick={onNext}
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
           {variant === "modal" && onOpenFullPage && (
             <Button
               variant="ghost"
@@ -244,7 +303,8 @@ export function TaskDetailBody({
         <Separator />
 
         <Tabs defaultValue="subtasks">
-          <TabsList className="h-8">
+          {/* w-full + flex-wrap: chật thì xuống dòng thay vì tràn đè lên cột phải (aside "Phân công") */}
+          <TabsList className="h-auto w-full flex-wrap justify-start gap-1">
             <TabsTrigger value="subtasks" className="text-xs">
               Việc con ({task.subtasks.length})
             </TabsTrigger>
@@ -316,7 +376,7 @@ export function TaskDetailBody({
         </div>
 
         {/* Cột phải: thuộc tính, gom 3 nhóm; nhóm ít đụng tới nhất thu gọn sẵn (docs 02/05 §D1) */}
-        <aside className="w-full lg:w-72 shrink-0 space-y-4 lg:border-l lg:border-border/60 lg:pl-4">
+        <aside className="w-full lg:w-72 shrink-0 space-y-5 lg:border-l lg:border-border/60 lg:pl-4">
           <PropGroup title="Phân công">
             <Field label="Người thực hiện" saving={isSaving("assignees")}>
               <AssigneePicker
@@ -546,12 +606,12 @@ function PropGroup({
               <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-3 pt-2">{children}</CollapsibleContent>
+          <CollapsibleContent className="space-y-3.5 pt-2.5">{children}</CollapsibleContent>
         </Collapsible>
       ) : (
         <>
           <div className="text-[11px] font-semibold text-muted-foreground">{title}</div>
-          <div className="space-y-3">{children}</div>
+          <div className="space-y-3.5">{children}</div>
         </>
       )}
     </div>
@@ -560,7 +620,7 @@ function PropGroup({
 
 function Field({ label, children, saving }: { label: string; children: React.ReactNode; saving?: boolean }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <label className="text-[11px] font-medium text-muted-foreground inline-flex items-center gap-1">
         {label}
         {saving && <Loader2 className="h-3 w-3 animate-spin" />}

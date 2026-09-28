@@ -9,7 +9,7 @@ export interface UserAvatarProps {
   role?: string;
   initials?: string;
   isOnline?: boolean;
-  size?: "sm" | "default" | "lg";
+  size?: "xs" | "sm" | "default" | "lg";
   showTooltip?: boolean;
   className?: string;
   workloadPercent?: number;
@@ -27,6 +27,7 @@ export function UserAvatar({
   workloadPercent,
 }: UserAvatarProps) {
   const sizeClasses = {
+    xs: "h-4 w-4 text-[7px]",
     sm: "h-6 w-6 text-[10px]",
     default: "h-8 w-8 text-xs",
     lg: "h-10 w-10 text-sm",
@@ -57,7 +58,7 @@ export function UserAvatar({
         <span
           className={cn(
             "absolute bottom-0 right-0 block rounded-full ring-2 ring-background",
-            size === "sm" ? "h-1.5 w-1.5" : "h-2 w-2",
+            size === "xs" ? "h-1 w-1" : size === "sm" ? "h-1.5 w-1.5" : "h-2 w-2",
             isOnline ? "bg-success" : "bg-muted-foreground"
           )}
           aria-label={isOnline ? "Trực tuyến" : "Ngoại tuyến"}
