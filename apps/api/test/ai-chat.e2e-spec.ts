@@ -732,4 +732,69 @@ describe('AI chat theo phiên (e2e)', () => {
       expect(after.version).toBe(before.version);
     });
   });
+
+  it('tra cứu: "Làm mới" giải được mã của phiên chỉ có tra cứu; mã sprint không đổi khi có sprint mới hay sprint bị đóng', async () => {
+    const sprintCode = (text: string, name: string) =>
+      new RegExp(`^(s\\d+) \\| ${name} \\|`, 'm').exec(text)?.[1];
+    const ask = () =>
+      api()
+        .post('/api/v1/ai/chat')
+        .set(auth(pm))
+        .send({ projectId, text: 'Sprint 2 tiến độ thế nào?' });
+    const dataQuery = (userText: string) => ({
+      type: 'DATA_QUERY',
+      reply: 'Đây là tiến độ Sprint 2.',
+      query: {
+        intent: 'SPRINT_PROGRESS',
+        sprint: sprintCode(userText, 'Sprint 2'),
+      },
+    });
+
+    AiMockQueue.push(dataQuery);
+    const first = await ask().expect(200);
+    const code = sprintCode(AiMockQueue.lastPrompt!.userText, 'Sprint 2')!;
+    expect(first.body.action.type).toBe('DATA_QUERY');
+    expect(code).toMatch(/^s\d+$/);
+    expect(first.body.action.query.sprint).toBe(code);
+    expect(first.body.proposals).toHaveLength(0); // tra cứu không sinh proposal
+    const refresh = (extra: Record<string, unknown>) =>
+      api()
+        .post('/api/v1/ai/query')
+        .set(auth(pm))
+        .send({
+          projectId,
+          sessionId: first.body.sessionId,
+          query: first.body.action.query,
+          ...extra,
+        });
+    // Trước đây: 422 UNKNOWN_CODE vì bảng mã chỉ nằm trong ai_proposals
+    await refresh({ messageId: first.body.message.id }).expect(200);
+    await refresh({}).expect(200);
+
+    // Sprint tạo sau nhưng bắt đầu sớm hơn, rồi bắt đầu + đóng nó: mã của Sprint 2 vẫn như cũ
+    const old = await api()
+      .post(`/api/v1/projects/${projectId}/sprints`)
+      .set(auth(pm))
+      .send({
+        name: 'Sprint cũ',
+        startDate: iso(plus(monday, -14)),
+        endDate: iso(plus(monday, -3)),
+      })
+      .expect(201);
+    await api()
+      .post(`/api/v1/sprints/${old.body.id}/start`)
+      .set(auth(pm))
+      .expect(201);
+    await api()
+      .post(`/api/v1/sprints/${old.body.id}/close`)
+      .set(auth(pm))
+      .send({ moveOpenTo: 'backlog' })
+      .expect(201);
+    AiMockQueue.push(dataQuery);
+    await ask().expect(200);
+    const prompt = AiMockQueue.lastPrompt!.userText;
+    expect(sprintCode(prompt, 'Sprint 2')).toBe(code);
+    expect(sprintCode(prompt, 'Sprint cũ')).toBeDefined(); // hỏi được "sprint trước"
+    expect(prompt).toMatch(/Sprint cũ \| CLOSED/);
+  });
 });

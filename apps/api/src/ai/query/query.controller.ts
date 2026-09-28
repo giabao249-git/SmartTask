@@ -33,6 +33,7 @@ export class AiQueryController {
       projectId: body.projectId,
       codes: null,
       sessionId: body.sessionId,
+      messageId: body.messageId,
     });
   }
 }
