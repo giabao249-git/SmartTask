@@ -21,6 +21,7 @@ export const QUERY_INTENTS = [
   'BUS_FACTOR',
   'SPRINT_LIST',
   'SPRINT_PROGRESS',
+  'SPRINT_REPORT',
   'ACTIVITY_FEED',
   'NOTIFICATION_LIST',
   'AI_USAGE',
@@ -100,6 +101,7 @@ export const FILTERS_BY_INTENT: Record<QueryIntent, (keyof QueryFilters)[]> = {
   BUS_FACTOR: ['minLevel'],
   SPRINT_LIST: [],
   SPRINT_PROGRESS: ['assignee'],
+  SPRINT_REPORT: [],
   ACTIVITY_FEED: [],
   NOTIFICATION_LIST: [],
   AI_USAGE: ['groupUsageBy'],
@@ -124,6 +126,8 @@ export const QUERY_INTENT_HINT: Record<QueryIntent, string> = {
   BUS_FACTOR: 'kỹ năng nào chỉ một người biết',
   SPRINT_LIST: 'có mấy sprint',
   SPRINT_PROGRESS: 'sprint này còn bao nhiêu giờ, có kịp không, ai đang gánh nhiều nhất sprint này',
+  SPRINT_REPORT:
+    'sprint trước làm được gì, việc nào bị đẩy sang sprint này, có thêm việc giữa chừng không',
   ACTIVITY_FEED: 'hôm qua ai sửa gì',
   NOTIFICATION_LIST: 'tôi có thông báo gì',
   AI_USAGE: 'tháng này tốn bao nhiêu tiền AI',
@@ -159,6 +163,7 @@ const SPRINT_INTENTS: QueryIntent[] = [
   'TASK_BLOCKED',
   'TASK_STATS',
   'SPRINT_PROGRESS',
+  'SPRINT_REPORT',
 ];
 
 /** Cắt field thừa theo ý định trước khi kiểm schema. */

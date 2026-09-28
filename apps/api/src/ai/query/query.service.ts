@@ -153,6 +153,7 @@ const INTENT_PERMISSION: Record<QueryIntent, 'read' | 'manage'> = {
   BUS_FACTOR: 'read',
   SPRINT_LIST: 'read',
   SPRINT_PROGRESS: 'read',
+  SPRINT_REPORT: 'read',
   ACTIVITY_FEED: 'read',
   NOTIFICATION_LIST: 'read',
   AI_USAGE: 'manage', // sổ token là dữ liệu quản trị
@@ -319,6 +320,8 @@ export class AiQueryService {
         return { ...base, ...(await this.sprints(ctx)) };
       case 'SPRINT_PROGRESS':
         return { ...base, ...(await this.sprintProgress(spec, ctx)) };
+      case 'SPRINT_REPORT':
+        return { ...base, ...(await this.sprintReport(spec, ctx)) };
       case 'ACTIVITY_FEED':
         return { ...base, ...(await this.activity(spec, ctx)) };
       case 'NOTIFICATION_LIST':
@@ -1616,6 +1619,126 @@ export class AiQueryService {
         endpoint: 'GET /sprints/:id/forecast + /burndown',
         params: { sprintId: sprint.id },
         rowCount: row?.taskCount ?? 0,
+      },
+      blocks,
+    };
+  }
+
+  /**
+   * Báo cáo một sprint (docs 02/07 D2 — các mục của Sprint report Jira): mặc định sprint đã đóng gần nhất.
+   * Số và danh sách lấy nguyên văn SprintsService.summary — cùng nguồn với báo cáo trên trang Sprint.
+   */
+  private async sprintReport(spec: DataQuerySpec, ctx: QueryContext) {
+    const id =
+      spec.sprint && spec.sprint !== '__all'
+        ? this.sprintId(spec, ctx)
+        : undefined;
+    if (spec.sprint === '__backlog')
+      return {
+        source: {
+          endpoint: 'GET /sprints/:id/summary',
+          params: {},
+          rowCount: 0,
+        },
+        blocks: [
+          {
+            kind: 'note',
+            text: 'Backlog không phải sprint nên không có báo cáo.',
+            tone: 'muted',
+          },
+        ] as QueryBlock[],
+      };
+    const sprint = id
+      ? await this.prisma.sprint.findFirst({
+          where: { id, projectId: ctx.projectId },
+          select: { id: true },
+        })
+      : await this.prisma.sprint.findFirst({
+          where: { projectId: ctx.projectId, status: 'CLOSED' },
+          orderBy: { closedAt: 'desc' },
+          select: { id: true },
+        });
+    if (!sprint)
+      return {
+        source: {
+          endpoint: 'GET /sprints/:id/summary',
+          params: {},
+          rowCount: 0,
+        },
+        blocks: [
+          {
+            kind: 'empty',
+            title: 'Chưa có sprint nào đã đóng',
+            description: 'Báo cáo có sau khi kết thúc sprint đầu tiên.',
+          },
+        ] as QueryBlock[],
+      };
+    const s = await this.sprintsSvc.summary(ctx.userId, sprint.id);
+    const sumH = (xs: { estimateHours: number }[]) =>
+      round1(xs.reduce((x, t) => x + t.estimateHours, 0));
+    const list = (title: string, xs: typeof s.completed): QueryBlock => ({
+      kind: 'task_list',
+      title: `${title} (${xs.length})`,
+      items: xs.map((t) => ({
+        ref: { type: 'task', id: t.id, key: t.key },
+        title: t.title, // mã việc đã có ở ref.key — web tự in, không lặp
+        meta: [
+          { icon: 'clock', text: `${round1(t.estimateHours)} h ước lượng` },
+        ],
+      })),
+    });
+    const blocks: QueryBlock[] = [
+      {
+        kind: 'stat_row',
+        items: [
+          {
+            label: s.sprint.name,
+            value: SPRINT_STATUS_LABEL[s.sprint.status] ?? s.sprint.status,
+          },
+          {
+            label: 'Cam kết lúc bắt đầu',
+            value: round1(s.committedHours),
+            unit: 'h',
+          },
+          {
+            label: 'Hoàn thành',
+            value: round1(s.completedHours),
+            unit: 'h',
+            hint: `${s.doneCount}/${s.taskCount} việc`,
+          },
+          {
+            label: 'Bị chuyển đi',
+            value: s.carriedOut.length,
+            unit: 'việc',
+            hint: `${sumH(s.carriedOut)} h`,
+          },
+          {
+            label: 'Thêm sau khi bắt đầu',
+            value: s.addedAfterStart.length,
+            unit: 'việc',
+            hint: `${sumH(s.addedAfterStart)} h`,
+          },
+        ],
+      },
+    ];
+    if (s.sprint.status !== 'CLOSED')
+      blocks.push({
+        kind: 'note',
+        text: 'Sprint chưa đóng — số tính tới hiện tại.',
+        tone: 'muted',
+      });
+    blocks.push(list('Đã xong', s.completed));
+    if (s.carriedOut.length)
+      blocks.push(list('Bị chuyển đi lúc đóng', s.carriedOut));
+    if (s.addedAfterStart.length)
+      blocks.push(list('Thêm sau khi bắt đầu', s.addedAfterStart));
+    if (s.carriedIn.length)
+      blocks.push(list('Chuyển vào từ sprint trước', s.carriedIn));
+    return {
+      source: {
+        endpoint: 'GET /sprints/:id/summary',
+        params: { sprintId: sprint.id },
+        rowCount: s.taskCount,
       },
       blocks,
     };

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import { Clock, ExternalLink, Info, RefreshCw, User, CalendarDays, Flag, Link2 } from "lucide-react";
+import { AlertTriangle, Clock, ExternalLink, Info, RefreshCw, User, CalendarDays, Flag, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -279,8 +279,12 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
 function Stat({ stat }: { stat: StatItem }) {
   return (
     <div className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5">
-      <div className="text-[10px] text-muted-foreground truncate">{stat.label}</div>
-      <div className={cn("text-sm font-semibold tabular-nums", stat.tone === "danger" && "text-destructive", stat.tone === "warning" && "text-warning")}>
+      {/* Cảnh báo = icon vàng cạnh nhãn; chữ vàng trên nền sáng không đạt tương phản AA (docs 10 §6) */}
+      <div className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
+        {stat.tone === "warning" && <AlertTriangle className="h-3 w-3 shrink-0 text-warning" aria-hidden />}
+        {stat.label}
+      </div>
+      <div className={cn("text-sm font-semibold tabular-nums", stat.tone === "danger" && "text-destructive")}>
         {stat.value}
         {stat.unit ? <span className="text-[10px] font-normal text-muted-foreground ml-0.5">{stat.unit}</span> : null}
       </div>
