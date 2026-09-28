@@ -6,6 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { AlertTriangle, Bot, CheckCircle2, ClipboardList, Clock, History, Settings2, Sparkles, TrendingDown, UserX, Users2 } from "lucide-react";
 import { ActivityList } from "@/features/activity/ActivityList";
+import { PendingReviewsCard } from "./PendingReviewsCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -115,6 +116,8 @@ export function ProjectDashboardView() {
             <Stat icon={AlertTriangle} label="Quá hạn" value={d.counts.overdue} tone={d.counts.overdue ? "destructive" : undefined} />
             <Stat icon={UserX} label="Chưa giao" value={d.counts.unassigned} tone={d.counts.unassigned ? "warning" : undefined} />
           </div>
+
+          {project.canManage && <PendingReviewsCard projectId={project.id} />}
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <Card className="border-border/80">

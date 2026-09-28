@@ -71,7 +71,7 @@ export function DeclaredSkillsEditor({ workspaceId, projectId }: { workspaceId: 
           <Save className="h-3.5 w-3.5" /> Lưu
         </Button>
       </div>
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2">
         {sorted.map((s) => {
           const cur = levels[s.id] ?? 0;
           const verified = mine.data.find((m) => m.id === s.id)?.verifiedAt;
