@@ -229,6 +229,47 @@ export class WorkloadController {
     });
   }
 
+  @Get('projects/:projectId/skill-profiles')
+  @ApiOperation({
+    summary:
+      'Hồ sơ kỹ năng TỪ BẰNG CHỨNG của thành viên dự án (docs 02/08); hiệu suất chỉ bản thân và PM thấy',
+  })
+  async skillProfiles(
+    @CurrentUser() user: JwtUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+  ) {
+    const a = await this.access.assertRead(user.id, projectId);
+    return this.workload.skillProfiles(projectId, {
+      userId: user.id,
+      canManage: a.canManage,
+    });
+  }
+
+  @Get('projects/:projectId/skill-profiles/:userId/evidence')
+  @ApiOperation({
+    summary: 'Các việc làm nên mức kỹ năng của một người (giải thích mức)',
+  })
+  @ApiQuery({ name: 'skillId', required: false })
+  async skillEvidence(
+    @CurrentUser() user: JwtUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Query('skillId') skillId?: string,
+  ) {
+    const a = await this.access.assertRead(user.id, projectId);
+    const member = await this.prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId } },
+      select: { userId: true },
+    });
+    if (!member) throw AppError.notFound({ userId });
+    return this.workload.skillEvidenceDetail(
+      projectId,
+      userId,
+      { userId: user.id, canManage: a.canManage },
+      skillId,
+    );
+  }
+
   private async defaultWorkspace(userId: string): Promise<string> {
     const m = await this.prisma.workspaceMember.findFirst({
       where: { userId, workspace: { archivedAt: null } },

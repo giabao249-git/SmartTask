@@ -158,6 +158,12 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
       .set(auth(dev))
       .send({ skills: [{ skillId, level: 5 }] })
       .expect(200);
+    // Mức tự khai không còn là bằng chứng (docs 02/08) — chủ workspace xác nhận thì mới tính
+    await api()
+      .patch(`/api/v1/users/${dev.id}/skills/${skillId}/verify`)
+      .set(auth(pm))
+      .send({ level: 5 })
+      .expect(200);
   });
 
   afterAll(async () => {

@@ -41,8 +41,9 @@ Ràng buộc: 1–25 task, draftKey d1..dN duy nhất; taskType chỉ nhận STO
 (việc kỹ thuật, nghiên cứu, cấu hình) | BUG (sửa lỗi có sẵn) — không chắc thì để TASK; estimateHours 0,5–40 (task lớn
 hơn → tách); requiredSkills chỉ mã k
 trong DANH MỤC KỸ NĂNG (không có kỹ năng phù hợp → bỏ trống và ghi vào assumptions); dependsOn chỉ trỏ tới draftKey
-khác và không tạo vòng; suggestedAssignee chỉ khi người đó có kỹ năng và còn giờ trống trong BẢNG NĂNG LỰC — không
-chắc thì để trống; tổng giờ nên ≤ năng lực còn lại của sprint (nếu vượt, nói rõ trong reply).
+khác và không tạo vòng; suggestedAssignee chỉ khi người đó còn giờ trống trong BẢNG NĂNG LỰC; kỹ năng ở DANH BẠ đo từ việc ĐÃ LÀM (mức ·
+số việc · làm lại), không phải tự khai — "chưa có bằng chứng" nghĩa là CHƯA BIẾT, không phải "không biết": vẫn giao được,
+ghi rõ trong reason (ví dụ "chưa có việc NestJS nào đã xong"); không chắc thì để trống; tổng giờ nên ≤ năng lực còn lại của sprint (nếu vượt, nói rõ trong reply).
 Mức chi tiết: coarse = 3–6 task lớn; normal = 5–12; fine = 8–25 task nhỏ kèm subtasks.
 Yêu cầu quá mơ hồ để phân rã → { "type": "ASK_CLARIFICATION", "reply": "...", "question": "...", "options": [] }.`,
   ASSIGN: `NHIỆM VỤ: đề xuất người thực hiện cho các task chưa giao. Trả JSON ASSIGN_PROPOSAL theo schema.`,

@@ -19,6 +19,7 @@ describe('Ghi giờ, đánh giá việc, bug → việc gốc (e2e)', () => {
   let columnId = '';
   let doneColumnId = '';
   let featureId = '';
+  let wsId = '';
   const auth = (u: U) => ({ Authorization: `Bearer ${u.token}` });
   const day = (offset: number) =>
     new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
@@ -44,6 +45,7 @@ describe('Ghi giờ, đánh giá việc, bug → việc gốc (e2e)', () => {
       .set(auth(pm))
       .send({ name: 'WS giờ', slug: `ws-worklog-${Date.now()}` })
       .expect(201);
+    wsId = ws.body.id;
     for (const u of [dev, other]) {
       const inv = await api()
         .post(`/api/v1/workspaces/${ws.body.id}/invitations`)
@@ -277,5 +279,112 @@ describe('Ghi giờ, đánh giá việc, bug → việc gốc (e2e)', () => {
         originTaskId: bug.body.id,
       })
       .expect(422);
+  });
+
+  it('hồ sơ kỹ năng TỪ BẰNG CHỨNG: tự khai không tính; xong + PM đánh giá → lên mức; bug gốc → tụt; hiệu suất chỉ bản thân/PM thấy', async () => {
+    const skills = await api()
+      .get(`/api/v1/workspaces/${wsId}/skills`)
+      .set(auth(pm))
+      .expect(200);
+    const nest =
+      skills.body.find((s: { name: string }) => s.name === 'NestJS') ??
+      skills.body[0];
+    // Tự khai mức 5 → hồ sơ vẫn "chưa có bằng chứng"
+    await api()
+      .put(`/api/v1/workspaces/${wsId}/me/skills`)
+      .set(auth(dev))
+      .send({ skills: [{ skillId: nest.id, level: 5 }] })
+      .expect(200);
+    const skillOf = async (viewer: U) => {
+      const r = await api()
+        .get(`/api/v1/projects/${projectId}/skill-profiles`)
+        .set(auth(viewer))
+        .expect(200);
+      const me = r.body.find((m: { id: string }) => m.id === dev.id);
+      return {
+        me,
+        row: me.skills.find((s: { skillId: string }) => s.skillId === nest.id),
+      };
+    };
+    let { row } = await skillOf(pm);
+    expect(row).toMatchObject({
+      level: 0,
+      confidence: 'none',
+      declared: 5,
+      evidence: 'chưa có bằng chứng',
+    });
+
+    // Việc cần NestJS ≥ 3, dev làm xong, PM đánh giá 4 → mức 3
+    const t = await api()
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set(auth(pm))
+      .send({
+        title: 'API refresh token',
+        columnId,
+        assigneeIds: [dev.id],
+        estimateHours: 6,
+        difficulty: 3,
+        requiredSkills: [{ skillId: nest.id, minLevel: 3 }],
+      })
+      .expect(201);
+    await api()
+      .patch(`/api/v1/tasks/${t.body.id}/move`)
+      .set(auth(pm))
+      .send({ version: t.body.version, columnId: doneColumnId })
+      .expect(200);
+    await api()
+      .put(`/api/v1/tasks/${t.body.id}/review`)
+      .set(auth(pm))
+      .send({ rating: 4, difficultyActual: 3 })
+      .expect(200);
+    ({ row } = await skillOf(pm));
+    expect(row).toMatchObject({
+      level: 3,
+      confidence: 'low',
+      tasks: 1,
+      passed: 1,
+      reviewed: 1,
+      declared: 5,
+    });
+
+    // Hiệu suất: PM và chính dev thấy; người khác không
+    expect((await skillOf(pm)).me.performance).not.toBeNull();
+    expect((await skillOf(dev)).me.performance).not.toBeNull();
+    expect((await skillOf(other)).me.performance).toBeNull();
+
+    // Bug gắn việc gốc → việc đó thành "phải làm lại" → mức rơi về 0 (còn bằng chứng, không phải "chưa biết")
+    await api()
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set(auth(pm))
+      .send({
+        title: 'Refresh token không hết hạn',
+        columnId,
+        type: 'BUG',
+        originTaskId: t.body.id,
+      })
+      .expect(201);
+    ({ row } = await skillOf(pm));
+    expect(row).toMatchObject({
+      level: 0,
+      confidence: 'low',
+      tasks: 1,
+      failed: 1,
+    });
+    expect(row.evidence).toContain('1 phải làm lại');
+
+    const detail = await api()
+      .get(
+        `/api/v1/projects/${projectId}/skill-profiles/${dev.id}/evidence?skillId=${nest.id}`,
+      )
+      .set(auth(other))
+      .expect(200);
+    expect(detail.body).toEqual([
+      expect.objectContaining({
+        task: expect.objectContaining({ id: t.body.id }),
+        passed: false,
+        bugs: 1,
+        rating: null,
+      }),
+    ]);
   });
 });

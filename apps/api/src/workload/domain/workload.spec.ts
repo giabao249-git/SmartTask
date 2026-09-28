@@ -123,7 +123,13 @@ describe('hệ số (docs 04 §2–3)', () => {
     expect(skillGapFactor(lv, [{ skillId: 'react', minLevel: 3 }])).toBe(1);
     expect(skillGapFactor(lv, [{ skillId: 'react', minLevel: 4 }])).toBe(1.15);
     expect(skillGapFactor(lv, [{ skillId: 'nest', minLevel: 3 }])).toBe(1.3);
-    expect(skillGapFactor(lv, [{ skillId: 'docker', minLevel: 1 }])).toBe(1.3);
+    // chưa có bằng chứng về docker → trung tính; có bằng chứng mức 0 → thiếu 2 bậc
+    expect(skillGapFactor(lv, [{ skillId: 'docker', minLevel: 1 }])).toBe(1);
+    expect(
+      skillGapFactor(new Map([['docker', 0]]), [
+        { skillId: 'docker', minLevel: 1 },
+      ]),
+    ).toBe(1.3);
     expect(switchPenalty(1)).toBe(1);
     expect(switchPenalty(3)).toBeCloseTo(1.1);
   });
@@ -366,7 +372,8 @@ describe('burnout, khớp kỹ năng, công bằng', () => {
     );
     expect(m.items.map((i) => i.ratio)).toEqual([1, 0.5, 0]);
     expect(m.avg).toBe(0.5);
-    expect(m.missing).toEqual(['Docker']);
+    expect(m.missing).toEqual([]);
+    expect(m.unproven).toEqual(['Docker']);
   });
   it('Spread = max − median', () => {
     expect(spreadOf([0.4, 0.62, 1.05])).toBe(0.43);

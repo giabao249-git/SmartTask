@@ -2,6 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AlertKind, WorkloadLevel } from '@prisma/client';
 import { MetricsService } from '../metrics/metrics.service';
+import {
+  demonstrated,
+  evidenceText,
+  passedOf,
+  weightOf,
+} from '../metrics/domain/skill-evidence';
+import { SkillEvidenceService } from '../metrics/skill-evidence.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   mergeSettings,
@@ -79,6 +86,7 @@ export class WorkloadService {
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
     private readonly events: EventEmitter2,
+    private readonly evidence: SkillEvidenceService,
   ) {}
 
   /** Tải theo tuần cho một tập người trong workspace (mọi dự án của họ trong workspace). */
@@ -151,10 +159,8 @@ export class WorkloadService {
           },
         },
       }),
-      this.prisma.userSkill.findMany({
-        where: { userId: { in: userIds }, skill: { workspaceId } },
-        select: { userId: true, skillId: true, level: true },
-      }),
+      // Mức kỹ năng để tính hệ số thiếu kỹ năng: TỪ BẰNG CHỨNG, không phải tự khai (docs 02/08)
+      this.evidence.levels(workspaceId, userIds, today),
       this.prisma.calendarEvent.findMany({
         where: {
           userId: { in: userIds },
@@ -179,11 +185,7 @@ export class WorkloadService {
         },
       }),
     ]);
-    const levelsOf = new Map<string, Map<string, number>>();
-    for (const s of skills) {
-      if (!levelsOf.has(s.userId)) levelsOf.set(s.userId, new Map());
-      levelsOf.get(s.userId)!.set(s.skillId, s.level);
-    }
+    const levelsOf = skills;
     const currentWeek = weekStartOf(today);
     const out: UserWorkload[] = [];
     for (const u of users) {
@@ -711,18 +713,11 @@ export class WorkloadService {
       2,
       { today },
     );
-    const skills = await this.prisma.userSkill.findMany({
-      where: {
-        userId: { in: memberIds },
-        skill: { workspaceId: project.workspaceId },
-      },
-      select: {
-        userId: true,
-        skillId: true,
-        level: true,
-        skill: { select: { name: true } },
-      },
-    });
+    const profiles = await this.evidence.profiles(
+      project.workspaceId,
+      memberIds,
+      today,
+    );
     const tasks = await this.prisma.task.findMany({
       where: {
         projectId,
@@ -761,8 +756,13 @@ export class WorkloadService {
     });
     const members = await Promise.all(
       users.map(async (u) => {
-        const mine = skills.filter((s) => s.userId === u.userId);
-        const levels = new Map(mine.map((s) => [s.skillId, s.level]));
+        const mine = profiles.get(u.userId) ?? [];
+        // Chỉ kỹ năng CÓ bằng chứng vào phép tính khớp; tự khai chỉ đi kèm để hiển thị
+        const levels = new Map(
+          mine
+            .filter((s) => s.confidence !== 'none')
+            .map((s) => [s.skillId, s.level]),
+        );
         const metrics = await this.metrics.compute(
           u.userId,
           project.workspaceId,
@@ -784,8 +784,13 @@ export class WorkloadService {
             'MEMBER',
           skills: mine.map((s) => ({
             skillId: s.skillId,
-            name: s.skill.name,
+            name: s.name,
             level: s.level,
+            declared: s.declared,
+            tasks: s.tasks,
+            failed: s.failed,
+            confidence: s.confidence,
+            evidence: evidenceText(s),
           })),
           utilizationBefore: u.weeks[0]?.utilization ?? 0,
           levelBefore: u.weeks[0]?.level ?? 'NORMAL',
@@ -899,7 +904,11 @@ export class WorkloadService {
 
     const rows = table.members.map((m) => {
       const per = real?.perUser.find((p) => p.userId === m.userId);
-      const levels = new Map(m.skills.map((s) => [s.skillId, s.level]));
+      const levels = new Map(
+        m.skills
+          .filter((s) => s.confidence !== 'none')
+          .map((s) => [s.skillId, s.level]),
+      );
       const required = subject.requiredSkills.map((r) => ({
         skillId: r.skillId,
         name: r.name,
@@ -943,6 +952,140 @@ export class WorkloadService {
         (b.freeBeforeDue ?? b.freeTotal) - (a.freeBeforeDue ?? a.freeTotal),
     );
     return { window: table.window, subject, rows };
+  }
+
+  /**
+   * Hồ sơ kỹ năng & hiệu suất của thành viên dự án (docs 02/08). Kỹ năng (mức từ bằng chứng) ai trong dự án
+   * cũng xem được; hiệu suất cá nhân (đúng hạn, đánh giá, EAR, làm lại) chỉ chính người đó và PM (docs 04 §2).
+   */
+  async skillProfiles(
+    projectId: string,
+    viewer: { userId: string; canManage: boolean },
+    today = new Date(),
+  ) {
+    const project = await this.prisma.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: {
+        workspaceId: true,
+        workspace: { select: { settings: true } },
+        members: {
+          orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
+          select: {
+            role: true,
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                shortName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    const settings = mergeSettings(project.workspace.settings, {});
+    const cal = { workdays: settings.workdays, holidays: settings.holidays };
+    const ids = project.members.map((m) => m.user.id);
+    const profiles = await this.evidence.profiles(
+      project.workspaceId,
+      ids,
+      today,
+    );
+    return Promise.all(
+      project.members.map(async (m) => {
+        const canSee = viewer.canManage || viewer.userId === m.user.id;
+        const perf = canSee
+          ? await this.metrics.compute(
+              m.user.id,
+              project.workspaceId,
+              cal,
+              hoursPerDay(settings.defaultCapacityHours, cal),
+              settings.workload.ear.smoothingHours,
+              settings.workload.ear.windowWeeks,
+              today,
+            )
+          : null;
+        return {
+          ...m.user,
+          role: m.role,
+          skills: (profiles.get(m.user.id) ?? []).map((e) => ({
+            ...e,
+            lastAt: e.lastAt ? isoDate(toDate(e.lastAt)) : null,
+            evidence: evidenceText(e),
+          })),
+          performance: perf && {
+            windowWeeks: perf.windowWeeks,
+            doneTasks: perf.sampleSize,
+            onTimeRate: perf.onTimeRate,
+            avgRating: perf.avgRating,
+            ear: perf.ear,
+            reopenCount: perf.reopenCount,
+            overdueOpen: perf.overdueOpen,
+            openTasks: perf.openTasks,
+          },
+        };
+      }),
+    );
+  }
+
+  /** Các việc làm nên mức kỹ năng của một người — để giải thích "vì sao mức 3". */
+  async skillEvidenceDetail(
+    projectId: string,
+    userId: string,
+    viewer: { userId: string; canManage: boolean },
+    skillId?: string,
+    today = new Date(),
+  ) {
+    const project = await this.prisma.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { workspaceId: true },
+    });
+    const items = (
+      await this.evidence.items(project.workspaceId, [userId], today)
+    ).filter((e) => !skillId || e.skillId === skillId);
+    const taskIds = [
+      ...new Set(items.map((e) => e.taskId).filter((x): x is string => !!x)),
+    ];
+    const [tasks, skills] = await Promise.all([
+      this.prisma.task.findMany({
+        where: { id: { in: taskIds } },
+        select: {
+          id: true,
+          number: true,
+          title: true,
+          project: { select: { key: true } },
+        },
+      }),
+      this.prisma.skill.findMany({
+        where: { id: { in: [...new Set(items.map((e) => e.skillId))] } },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const taskOf = new Map(tasks.map((t) => [t.id, t]));
+    const nameOf = new Map(skills.map((s) => [s.id, s.name]));
+    const canSeeRating = viewer.canManage || viewer.userId === userId;
+    return items
+      .sort((a, b) => b.at.getTime() - a.at.getTime())
+      .map((e) => {
+        const t = e.taskId ? taskOf.get(e.taskId) : undefined;
+        return {
+          skillId: e.skillId,
+          skill: nameOf.get(e.skillId) ?? e.skillId,
+          source: e.source,
+          task: t
+            ? { id: t.id, key: `${t.project.key}-${t.number}`, title: t.title }
+            : null,
+          required: e.required,
+          demonstrated: demonstrated(e),
+          passed: passedOf(e),
+          weight: Math.round(weightOf(e) * 100) / 100,
+          rating: canSeeRating ? e.rating : null,
+          reopened: e.reopened,
+          bugs: e.bugs,
+          at: isoDate(toDate(e.at)),
+        };
+      });
   }
 
   /** Việc chưa ghi (bản nháp trong phiên chat): lấy tên kỹ năng từ danh mục để bảng đọc được. */
