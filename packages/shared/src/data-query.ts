@@ -119,7 +119,7 @@ export const FILTERS_BY_INTENT: Record<QueryIntent, (keyof QueryFilters)[]> = {
  */
 export const QUERY_INTENT_HINT: Record<QueryIntent, string> = {
   TASK_LIST: 'còn việc nào chưa giao, việc BUG của tôi',
-  TASK_AGENDA: 'hôm nay tôi làm gì, việc đến hạn tuần này',
+  TASK_AGENDA: 'hôm nay tôi (cần/phải) làm gì, việc đến hạn tuần này — việc PHẢI LÀM',
   TASK_DETAIL: 'ST-6 đang thế nào',
   TASK_STATS: 'mỗi cột bao nhiêu việc',
   TASK_BLOCKED: 'việc nào đang bị chặn',
@@ -135,7 +135,7 @@ export const QUERY_INTENT_HINT: Record<QueryIntent, string> = {
   SPRINT_REPORT:
     'sprint trước làm được gì, việc nào bị đẩy sang sprint này, có thêm việc giữa chừng không',
   SPRINT_VELOCITY: 'vận tốc 3 sprint gần nhất, mỗi sprint nhóm làm được bao nhiêu giờ',
-  ACTIVITY_FEED: 'hôm qua ai sửa gì, hôm nay Huy làm gì',
+  ACTIVITY_FEED: 'hôm qua ai sửa gì, hôm nay Huy ĐÃ làm gì — việc ĐÃ XẢY RA (có chữ "đã")',
   NOTIFICATION_LIST: 'tôi có thông báo gì',
   AI_USAGE: 'tháng này tốn bao nhiêu tiền AI',
 };
@@ -176,6 +176,9 @@ const SPRINT_INTENTS: QueryIntent[] = [
   'CAPACITY_FREE',
 ];
 
+/** Ý định vốn chỉ về người hỏi — "của tôi" ở đây là thừa, không phải bộ lọc bị bỏ. */
+const SELF_INTENTS: QueryIntent[] = ['NOTIFICATION_LIST', 'AI_USAGE'];
+
 /** Cắt field thừa theo ý định trước khi kiểm schema. */
 /** Bộ lọc mang Ý người hỏi — cắt đi thì phải nói ra; các field khác LLM hay điền rác (tN, u0) nên cắt im. */
 const MEANINGFUL: string[] = [
@@ -198,19 +201,29 @@ export function pruneQuerySpec(raw: unknown): unknown {
   const dropped: string[] = [];
   const meaningful = (v: unknown) =>
     v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0);
+  // Giá trị không mang ý người hỏi → cắt im, không ghi chú (đo 28/09: "ai biết NestJS", "tôi có thông báo gì"
+  // bị ghi "không lọc được theo trạng thái, người" dù người dùng không hề hỏi vậy)
+  const implied = (k: string, v: unknown) =>
+    (k === 'status' && v !== 'DONE') ||
+    ((k === 'assignee' || k === 'user') &&
+      SELF_INTENTS.includes(intent) &&
+      (v === 'me' || (Array.isArray(v) && v.every((x) => x === 'me'))));
   if (!SPRINT_INTENTS.includes(intent) && spec.sprint !== undefined) {
     if (meaningful(spec.sprint) && spec.sprint !== '__all') dropped.push('sprint');
     delete spec.sprint;
   }
   if (spec.filters && typeof spec.filters === 'object') {
-    const filters = spec.filters as Record<string, unknown>;
+    // Schema Gemini bắt buộc nêu vài bộ lọc (được null) để model không bỏ sót — null = không dùng
+    const filters = Object.fromEntries(
+      Object.entries(spec.filters as Record<string, unknown>).filter(([, v]) => v !== null),
+    );
     // Chỉ cắt field HỢP LỆ nhưng không thuộc ý định; field lạ hoàn toàn vẫn để schema strict từ chối
     spec.filters = Object.fromEntries(
       Object.entries(filters).filter(([k, v]) => {
         const keep =
           !KNOWN_FILTER_KEYS.includes(k as keyof QueryFilters) ||
           allowed.includes(k as keyof QueryFilters);
-        if (!keep && MEANINGFUL.includes(k) && meaningful(v)) dropped.push(k);
+        if (!keep && MEANINGFUL.includes(k) && meaningful(v) && !implied(k, v)) dropped.push(k);
         return keep;
       }),
     );
