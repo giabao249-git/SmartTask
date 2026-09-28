@@ -193,6 +193,11 @@ export function ProjectDashboardView() {
                     </LineChart>
                   </ChartContainer>
                 )}
+                {burndown.data && burndown.data.gaps.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Thiếu số liệu {burndown.data.gaps.length} ngày làm việc ({fmtGaps(burndown.data.gaps)}) — đường thực tế chỉ nối các ngày có bản chụp; vận tốc vẫn tính từ ngày hoàn thành của việc.
+                  </p>
+                )}
                 {fc && (
                   <div className="grid grid-cols-3 gap-2 text-[11px]">
                     <Num label="Còn lại" value={`${fc.remainingHours}h`} />
@@ -276,6 +281,12 @@ function mergeBurndown(ideal: { date: string; ideal: number }[], actual: { date:
   for (const i of ideal) byDate.set(i.date, { date: i.date, ideal: i.ideal });
   for (const a of actual) byDate.set(a.date, { ...(byDate.get(a.date) ?? { date: a.date }), remaining: a.remaining });
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Tối đa 6 ngày dạng MM-DD, dài hơn thì thêm dấu … */
+function fmtGaps(days: string[]): string {
+  const shown = days.slice(0, 6).map((d) => d.slice(5));
+  return days.length > 6 ? `${shown.join(", ")}…` : shown.join(", ");
 }
 
 function riskLabel(l: string): string {

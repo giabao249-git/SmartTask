@@ -46,7 +46,7 @@
 
 | # | Lỗi | Bằng chứng | Mức |
 |---|---|---|---|
-| **L1** | **Burn-down không có dữ liệu, nên "Rủi ro cao" là báo động giả.** Seed có **0** dòng `burndown_snapshots`; cron 00:05 chỉ ghi khi API đang chạy lúc nửa đêm. Vận tốc chỉ đọc từ snapshot → **0 h/ngày** → ETA "—" → sprint đã chạy ≥ 3 ngày thì `riskOf` trả **HIGH**, dù đã có 2 việc (20 h) hoàn thành trong sprint. | `GET /sprints/{S1}/burndown` → `actual` 1 điểm (hôm nay), `velocity: 0`; `forecast` → `riskLevel: "HIGH"`, `eta: null`. Ảnh: [Dashboard trước khi đổi sprint](anh/cai-tien-sprint-intent/01-dashboard-sprint1-truoc.png) — đường thực tế chỉ là một chấm | 🔴 |
+| **L1** | **Vận tốc phụ thuộc cron snapshot.** Seed có **0** dòng `burndown_snapshots`; cron 00:05 chỉ ghi khi API đang chạy lúc nửa đêm. Vận tốc chỉ đọc từ snapshot → thiếu snapshot thì vận tốc sai: không có bản chụp nào ngoài "hôm nay" mà hôm nay xong 10 h thì ra **10 h/ngày** (đúng phải là 2 h/ngày trên 5 ngày làm việc). *Đính chính sau khi hiện thực A2 (28/09):* trên seed hiện tại, "Rủi ro cao" của Sprint 1 là **đúng** theo công thức — hai việc đã xong hoàn thành 16/09 và 19/09, trong 5 ngày làm việc gần nhất không xong việc nào; bản nháp đầu gọi đây là "báo động giả" là sai. | `GET /sprints/{S1}/burndown` → `actual` 1 điểm (hôm nay), `velocity: 0`. Ảnh: [Dashboard trước khi đổi sprint](anh/cai-tien-sprint-intent/01-dashboard-sprint1-truoc.png) — đường thực tế chỉ là một chấm | 🔴 |
 | **L2** | **Sprint đã đóng mất sạch lịch sử.** `close()` không chụp snapshot cuối và chuyển việc dở ra khỏi sprint → sau khi đóng, burn-down trả `actual: []`; forecast báo **`LOW`, còn 0 h, ETA = ngày kết thúc** — trong khi vừa đẩy **7 việc / 30,6 h** sang backlog. | `GET /sprints/{S1}/burndown` sau khi đóng: `"actual":[]`; `forecast`: `"remainingHours":0,"riskLevel":"LOW"` | 🔴 |
 | **L3** | **Link thông báo sprint dẫn tới trang 404.** `notifications.listener` ghi `link: /p/ST/sprints` (việc được giao: `/p/ST/t/ST-6`) nhưng web không có route `/p/...`; `NotificationsPanel` ưu tiên `n.link`. | Đăng nhập `minh@`, Cài đặt → Thông báo → bấm "Sprint 1 (ST) đã kết thúc" → `http://localhost:3003/p/ST/sprints` **404**. Ảnh: [404](anh/cai-tien-sprint-intent/19b-bam-thong-bao-sprint-404.png) | 🟠 |
 | **L4** | **Chuông trên thanh trên đang hiện thông báo GIẢ.** `AppShell.tsx` vẫn `import { MOCK_NOTIFICATIONS }`; popover hiện "Huy đạt 118%", "Đề xuất cân bằng tải mới từ AI Agent"… Thông báo thật "Sprint 1 đã kết thúc" **không có trong chuông**, chỉ thấy khi vào Cài đặt. Trước hội đồng, số "118%" không khớp bất cứ màn nào. | Ảnh: [chuông hiện dữ liệu giả](anh/cai-tien-sprint-intent/18-chuong-hien-thong-bao-gia.png) so với [trang thông báo thật](anh/cai-tien-sprint-intent/19-trang-thong-bao-that.png) | 🟠 |
@@ -174,7 +174,7 @@ Ký hiệu công sức: **S** ≤ nửa ngày · **M** 1–2 ngày · **L** 3+ n
 
 #### A2 · Burn-down có số thật ngay cả khi thiếu snapshot 🔴 — **S**
 
-- **Vấn đề:** L1 (báo động giả "Rủi ro cao"), L2 (sprint đóng mất lịch sử).
+- **Vấn đề:** L1 (vận tốc phụ thuộc cron), L2 (sprint đóng mất lịch sử).
 - **Cách làm:**
   1. **Vận tốc tính từ `completedAt` của việc**, không từ snapshot. Định nghĩa trong 04/04 §8 là "Completed(d) = giờ hoàn thành trong ngày" — mà giờ hoàn thành trong ngày *chính là* Σ ước lượng của việc có `completedAt` rơi vào ngày đó. Cùng công thức, bỏ được sự phụ thuộc vào cron. Sửa một chỗ trong `ForecastService`, giữ nguyên `domain/burndown.ts`.
   2. **Chụp snapshot lúc bắt đầu và lúc kết thúc** — lúc kết thúc chụp **bên trong transaction, trước khi chuyển việc dở**, để số cuối sprint (scope, còn lại, đã xong) được giữ lại.
@@ -327,7 +327,7 @@ Mọi ý định mới: schema zod trong `packages/shared`, filter có trong `FI
 
 | Hạng | Mã | Tên | Công sức | Vì sao xếp ở đây |
 |---|---|---|---|---|
-| 1 | **A2** | Burn-down có số thật | S | 🔴 Dashboard đang báo "Rủi ro cao" giả ở mọi CSDL vừa seed — hội đồng sẽ thấy đầu tiên |
+| 1 | **A2** | Burn-down có số thật | S | 🔴 Vận tốc và sprint đã đóng sai/mất số ở mọi CSDL không chạy cron — hội đồng sẽ thấy đầu tiên |
 | 2 | **A1** | Một nguồn số cho sprint | M | 🔴 Hai nơi hai số là lỗi; nền cho D1–D3 |
 | 3 | **A3** | Làm mới không vỡ, mã sprint không trôi | S | 🔴 Tính năng đã quảng cáo trong docs 14 đang hỏng |
 | 4 | **A4** | Chat không tự quyết mức rủi ro | S | 🔴 Lỗ hổng ranh giới AI — thứ đề tài lấy làm trục |
@@ -351,7 +351,7 @@ Mọi ý định mới: schema zod trong `packages/shared`, filter có trong `FI
 | ✔ | Mã | Việc | Công sức | Lược đồ CSDL | Endpoint mới | Quyết định (MVP 06/11 · nếu kịp · để sau · bỏ) | Đã làm |
 |---|---|---|---|---|---|---|---|
 | ☐ | A1 | Tra cứu sprint gọi đúng service màn hình; `TASK_STATS` không cộng trên `limit`; e2e "một câu hỏi, một số" | M | — | — | | |
-| ☐ | A2 | Vận tốc từ `completedAt`; snapshot lúc bắt đầu/kết thúc; forecast sprint đóng | S | — | — | | |
+| ☑ | A2 | Vận tốc từ `completedAt`; snapshot lúc bắt đầu/kết thúc; forecast sprint đóng | S | — | — | MVP | ✔ 28/09 `feature/UC-30-burndown-so-that` — vận tốc 10→2 h/ngày khi chỉ có snapshot hôm nay; sprint đóng giữ `final`; Dashboard báo ngày thiếu số liệu. [Ảnh](../05-hien-thuc/anh/sprint-v1/a2-sau-van-toc-tu-completedat.png) |
 | ☐ | A3 | `codeMap` lưu trong tin `DATA_QUERY`; mã `s` ổn định, có sprint đã đóng | S | — | — | | |
 | ☐ | A4 | Prompt CHAT tách "có kịp không" / "vì sao"; kiểm `RISK_EXPLANATION` trong chat | S | — | — | | |
 | ☐ | A5 | Link thông báo đúng route (+ chuyển hướng link cũ); chuông đọc thông báo thật | S | — | — | | |

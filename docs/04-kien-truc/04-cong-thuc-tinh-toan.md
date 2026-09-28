@@ -133,8 +133,11 @@ Remaining(d)  = Σ remaining(t) tại ngày d
 Completed(d)  = Scope(d) − Remaining(d) − Completed(d−1)     (giờ hoàn thành trong ngày)
 Ideal(d)      = Scope_0 × (1 − workdays(start..d) / workdays(start..end))
 Velocity      = mean(Completed theo ngày làm việc, 5 ngày gần nhất; nếu sprint < 5 ngày thì từ đầu sprint)
+                Completed(d) lấy thẳng từ completed_at của việc gốc trong sprint (không chờ snapshot) — sửa 28/09
 ETA           = today + ceil(Remaining / Velocity) ngày làm việc   (Velocity = 0 → không xác định)
 Risk          = ETA ≤ end − 1 → Thấp · |ETA − end| ≤ 1 → Trung bình · ETA > end + 1 hoặc (Velocity = 0 và sprint ≥ 3 ngày) → Cao
+Snapshot      = cron 00:05 + lúc bắt đầu + lúc kết thúc (trong transaction, TRƯỚC khi chuyển việc dở)
+Sprint CLOSED = không ETA, không mức rủi ro; số cuối trả trong forecast.final
 ScopeCreep    = Scope(d) > 1.10 × Scope_0
 Causes        = [task quá hạn, task chưa giao, người Quá tải, task bị chặn, task > 16 h chưa bắt đầu]   (đếm và liệt kê mã)
 ```
