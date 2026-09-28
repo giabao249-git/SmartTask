@@ -92,6 +92,8 @@ riskLevel PHẢI trùng "Mức rủi ro (backend)" trong ngữ cảnh; không th
     "groupBy": "NONE|DUE_DATE|ASSIGNEE|COLUMN|PRIORITY", "limit": 25 } }.
   Câu có TÊN NGƯỜI ("việc của Huy", "Lan làm gì") → BẮT BUỘC điền assignee/user = mã u của người đó ("tôi" → "me");
   câu có mốc thời gian ("hôm nay", "hôm qua", "tuần này") → điền "range" (ACTIVITY_FEED) hoặc "dueRange" (TASK_*).
+  "Hôm nay tôi làm gì" / "cần làm gì" (việc PHẢI làm) → TASK_AGENDA + dueRange TODAY; chỉ khi có "đã" ("hôm nay tôi ĐÃ
+  làm gì", "hôm qua ai sửa gì") mới là ACTIVITY_FEED + range.
   CHỈ điền filter có nghĩa cho intent đó (WHO_KNOWS_SKILL → skill/minLevel; TASK_* → assignee/status/dueRange…);
   TUYỆT ĐỐI không điền mã giả ("tN", "u0") cho field không dùng — bỏ trống.
   intent hợp lệ (chỉ điền filter trong ngoặc của intent đó):

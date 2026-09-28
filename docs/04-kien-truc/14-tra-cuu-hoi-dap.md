@@ -33,7 +33,7 @@ Người dùng ──▶ LLM ──▶ DATA_QUERY { intent, filters }   (KHÔNG 
 | Nhóm | intent | Câu hỏi ví dụ | Khối trả về |
 |---|---|---|---|
 | Công việc | `TASK_LIST` | "còn việc nào chưa giao" | `task_list` |
-| | `TASK_AGENDA` | "hôm nay tôi làm gì", "task tuần này" | `agenda` (nhóm theo ngày) |
+| | `TASK_AGENDA` | "hôm nay tôi (cần) làm gì", "task tuần này" — việc PHẢI làm | `agenda` (nhóm theo ngày). Với TODAY/THIS_WEEK và trạng thái mở, **gồm cả việc chưa xong đã quá hạn** (nhóm "Quá hạn · dd/mm") |
 | | `TASK_DETAIL` | "ST-6 đang thế nào" | `person_card` (thẻ việc) |
 | | `TASK_STATS` | "mỗi cột bao nhiêu việc" | `stat_row` + `bar_chart` + `table` |
 | | `TASK_BLOCKED` | "việc nào đang bị chặn" | `task_list` (kèm "chờ ST-x") |
@@ -48,7 +48,7 @@ Người dùng ──▶ LLM ──▶ DATA_QUERY { intent, filters }   (KHÔNG 
 | | `SPRINT_PROGRESS` | "sprint còn bao nhiêu giờ, có kịp không, ai gánh nhiều nhất sprint này" (lọc `assignee`) | `stat_row` (xong, còn lại, vận tốc, ngày làm việc còn, ETA, rủi ro, quá hạn) + `line_chart` (thực tế vs lý tưởng) + `note` nguyên nhân + `table` theo người (giờ còn lại / năng lực, cùng nguồn trang Sprint) — **nguyên văn** `ForecastService`, `SprintsService.summary` |
 | | `SPRINT_REPORT` | "sprint trước làm được gì, việc nào bị đẩy" (mặc định sprint đóng gần nhất) | `stat_row` + các `task_list` có tiêu đề: đã xong · bị chuyển đi lúc đóng · thêm sau khi bắt đầu · chuyển vào từ sprint trước |
 | | `SPRINT_VELOCITY` | "vận tốc 3 sprint gần nhất" (lọc `lastN` 1–10) | `stat_row` + `bar_chart` cột đôi cam kết/hoàn thành + `table` |
-| | `ACTIVITY_FEED` | "hôm qua ai sửa gì" (lọc `user`, `range` TODAY/YESTERDAY/THIS_WEEK theo múi giờ người hỏi) | `activity_list` — nhãn dùng chung với màn hình (`packages/shared/activity.ts`), giờ theo múi giờ người hỏi, dòng sprint có tên + số việc |
+| | `ACTIVITY_FEED` | "hôm qua ai sửa gì", "hôm nay tôi **đã** làm gì" (lọc `user`, `range` TODAY/YESTERDAY/THIS_WEEK theo múi giờ người hỏi) | `activity_list` — nhãn dùng chung với màn hình (`packages/shared/activity.ts`), giờ theo múi giờ người hỏi, dòng sprint có tên + số việc |
 | Khác | `NOTIFICATION_LIST` | "tôi có thông báo gì" | `stat_row` + `activity_list` |
 | | `AI_USAGE` | "tháng này tốn bao nhiêu tiền AI" | `stat_row` + `table` |
 
@@ -83,6 +83,11 @@ Khối hiện có: `stat_row`, `task_list`, `agenda`, `people_list`, `person_car
 ### 4.2 Không bỏ bộ lọc lặng lẽ (28/09/2026)
 
 `pruneQuerySpec` vẫn cắt bộ lọc không thuộc ý định (LLM hay điền `tN`, `u0` cho field không dùng — cắt im). Nhưng nếu phần bị cắt là bộ lọc **có nghĩa** với người hỏi (`assignee`, `user`, `status`, `taskType`, `priority`, `dueRange`, `q`, `range`, `sprint`), spec được gắn `ignoredFilters` và kết quả có thêm khối `note` "Loại câu hỏi này không lọc được theo … — kết quả dưới đây chưa áp dụng điều kiện đó". Khối `table`/`task_list` có `title` tuỳ chọn; `bar_chart` có cột `compare` + `compareLabel`.
+
+Bổ sung 28/09/2026 (đo với Gemini thật, đề xuất 02/07 F4–F6):
+- Bộ lọc `null` bị bỏ trước khi kiểm: `responseSchema` của Gemini **bắt buộc nêu** `minLevel`, `range`, `user` (được null) vì model hay bỏ sót dù câu hỏi có nêu ("mức 4", "hôm nay", "tôi đã làm gì").
+- Không ghi chú "không lọc được" cho giá trị không mang ý người hỏi: `status` khác `DONE`; `assignee`/`user` = `me` với ý định vốn chỉ về người hỏi (`NOTIFICATION_LIST`, `AI_USAGE`).
+- Chữ trong khối do backend dựng theo kiểu Việt: ngày `25/09`, giờ `13,6 h`, số `397.111`; nhãn mục đích AI tiếng Việt; `BUS_FACTOR` xếp "chỉ 1 người" trước "chưa ai"; `TASK_CANDIDATES` nói rõ khi hạn đã qua. Web: khối rỗng gọn một dòng, bảng > 8 dòng thu gọn, số căn phải bằng `tabular-nums` (không font mono), nhãn trục ngày `dd/mm`.
 
 ### 4.1 Một câu hỏi, một số (bổ sung 28/09/2026)
 

@@ -2,6 +2,7 @@ import {
   FILTERS_BY_INTENT,
   QUERY_INTENTS,
   QUERY_INTENT_HINT,
+  dataQuerySpecSchema,
   queryFiltersSchema,
 } from '@smarttask/shared';
 import { MASTER_PROMPT, PURPOSE_INSTRUCTIONS } from '../prompt/master-prompt';
@@ -33,5 +34,51 @@ describe('ý định tra cứu: một nguồn cho schema, prompt, bộ lọc', (
       expect(FILTERS_BY_INTENT[i]).toBeDefined();
       expect(prompt).toContain(`- ${i}: `);
     }
+  });
+});
+
+describe('pruneQuerySpec — ghi chú bộ lọc bị cắt chỉ khi người hỏi thật sự nêu', () => {
+  const parse = (q: unknown) => dataQuerySpecSchema.parse(q);
+
+  it('bộ lọc null (schema Gemini bắt buộc nêu) → coi như không dùng', () => {
+    const q = parse({
+      intent: 'WHO_KNOWS_SKILL',
+      filters: { skill: 'k1', minLevel: null, range: null },
+    });
+    expect(q.filters).toEqual({ skill: 'k1' });
+    expect(q.ignoredFilters).toBeUndefined();
+  });
+
+  it('status OPEN và "me" ở thông báo là mặc định, không ghi chú', () => {
+    expect(
+      parse({
+        intent: 'WHO_KNOWS_SKILL',
+        filters: { skill: 'k1', status: 'OPEN' },
+      }).ignoredFilters,
+    ).toBeUndefined();
+    expect(
+      parse({ intent: 'NOTIFICATION_LIST', filters: { assignee: ['me'] } })
+        .ignoredFilters,
+    ).toBeUndefined();
+  });
+
+  it('bộ lọc mang ý người hỏi vẫn được ghi chú', () => {
+    expect(
+      parse({
+        intent: 'MEMBER_LIST',
+        filters: { status: 'DONE', assignee: ['u2'] },
+      }).ignoredFilters,
+    ).toEqual(['status', 'assignee']);
+  });
+
+  it('responseSchema buộc Gemini nêu minLevel/range/user (được null)', () => {
+    const f = (
+      RESPONSE_SCHEMAS.CHAT as unknown as {
+        properties: {
+          query: { properties: { filters: { required: string[] } } };
+        };
+      }
+    ).properties.query.properties.filters;
+    expect(f.required).toEqual(['minLevel', 'range', 'user']);
   });
 });

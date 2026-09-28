@@ -114,48 +114,68 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
           // Sinh từ packages/shared — thêm ý định không phải sửa tay ở đây (docs 02/07 D5)
           intent: { type: 'string', enum: [...QUERY_INTENTS] },
           sprint: str('mã s, "__all" hoặc "__backlog"'),
-          filters: obj({
-            assignee: arr(str('mã u hoặc "me"')),
-            status: { type: 'string', enum: ['OPEN', 'DONE', 'ALL'] },
-            taskType: arr({
-              type: 'string',
-              enum: [...taskTypeSchema.options],
-            }),
-            priority: arr({
-              type: 'string',
-              enum: [...prioritySchema.options],
-            }),
-            dueRange: obj({
-              preset: {
+          filters: obj(
+            {
+              assignee: arr(str('mã u hoặc "me"')),
+              status: { type: 'string', enum: ['OPEN', 'DONE', 'ALL'] },
+              taskType: arr({
                 type: 'string',
-                enum: [...dueRangePresetSchema.options],
+                enum: [...taskTypeSchema.options],
+              }),
+              priority: arr({
+                type: 'string',
+                enum: [...prioritySchema.options],
+              }),
+              dueRange: obj({
+                preset: {
+                  type: 'string',
+                  enum: [...dueRangePresetSchema.options],
+                },
+                from: str('YYYY-MM-DD'),
+                to: str('YYYY-MM-DD'),
+              }),
+              unassignedOnly: { type: 'boolean' },
+              q: str('từ khoá tiêu đề'),
+              skill: str('mã k'),
+              minLevel: {
+                type: 'integer',
+                nullable: true,
+                description:
+                  'WHO_KNOWS_SKILL/BUS_FACTOR: "mức 4" → 4; không nêu → null',
               },
-              from: str('YYYY-MM-DD'),
-              to: str('YYYY-MM-DD'),
-            }),
-            unassignedOnly: { type: 'boolean' },
-            q: str('từ khoá tiêu đề'),
-            skill: str('mã k'),
-            minLevel: int('1–5'),
-            task: str('mã t'),
-            draft: str('mã bản nháp dN — TASK_CANDIDATES hỏi về việc chưa ghi'),
-            user: str('mã u hoặc "me"'),
-            groupUsageBy: { type: 'string', enum: ['day', 'purpose', 'user'] },
-            lastN: int('SPRINT_VELOCITY: số sprint đã đóng gần nhất, 1–10'),
-            range: {
-              type: 'string',
-              enum: ['TODAY', 'YESTERDAY', 'THIS_WEEK'],
-              description:
-                'ACTIVITY_FEED: BẮT BUỘC khi câu có mốc — "hôm nay" → TODAY, "hôm qua" → YESTERDAY, "tuần này" → THIS_WEEK',
+              task: str('mã t'),
+              draft: str(
+                'mã bản nháp dN — TASK_CANDIDATES hỏi về việc chưa ghi',
+              ),
+              user: {
+                type: 'string',
+                nullable: true,
+                description:
+                  'MEMBER_PROFILE/ACTIVITY_FEED: mã u, "tôi" → "me"; không nêu người → null',
+              },
+              groupUsageBy: {
+                type: 'string',
+                enum: ['day', 'purpose', 'user'],
+              },
+              lastN: int('SPRINT_VELOCITY: số sprint đã đóng gần nhất, 1–10'),
+              range: {
+                type: 'string',
+                nullable: true,
+                enum: ['TODAY', 'YESTERDAY', 'THIS_WEEK'],
+                description:
+                  'ACTIVITY_FEED: BẮT BUỘC khi câu có mốc — "hôm nay" → TODAY, "hôm qua" → YESTERDAY, "tuần này" → THIS_WEEK',
+              },
             },
-          }),
+            // Gemini bỏ sót các bộ lọc này dù câu hỏi có nêu (đo 28/09: "mức 4", "hôm nay", "tôi đã làm gì") → bắt buộc nêu, được null
+            ['minLevel', 'range', 'user'],
+          ),
           groupBy: {
             type: 'string',
             enum: ['NONE', 'DUE_DATE', 'ASSIGNEE', 'COLUMN', 'PRIORITY'],
           },
           limit: int('1–100, mặc định 25'),
         },
-        ['intent'],
+        ['intent', 'filters'],
       ),
       reply: str('văn bản hiển thị ≤ 600 ký tự'),
       sprint: {

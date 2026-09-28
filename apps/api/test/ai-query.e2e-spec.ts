@@ -197,6 +197,24 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
     ).toBe(true);
   });
 
+  it('TASK_AGENDA "hôm nay tôi làm gì": gồm cả việc chưa xong đã quá hạn; TASK_LIST "hạn hôm nay" thì không', async () => {
+    const agenda = await runQuery(dev, {
+      intent: 'TASK_AGENDA',
+      filters: { assignee: ['me'], dueRange: { preset: 'TODAY' } },
+    }).expect(200);
+    const labels = agenda.body.blocks
+      .find((b: { kind: string }) => b.kind === 'agenda')
+      .groups.map((g: { label: string }) => g.label);
+    expect(labels.some((l: string) => l.startsWith('Quá hạn'))).toBe(true);
+    expect(labels.some((l: string) => l.startsWith('Hôm nay'))).toBe(true);
+
+    const list = await runQuery(dev, {
+      intent: 'TASK_LIST',
+      filters: { assignee: ['me'], dueRange: { preset: 'TODAY' } },
+    }).expect(200);
+    expect(list.body.blocks[0].items).toHaveLength(1);
+  });
+
   it('bộ lọc: chỉ việc của tôi, chỉ BUG, chỉ chưa giao, chỉ quá hạn', async () => {
     const mine = await runQuery(dev, {
       intent: 'TASK_LIST',
@@ -748,7 +766,7 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
       .expect(200);
     const total = table.rows.reduce(
       (x: number, r: { cells: { remaining: string } }) =>
-        x + parseFloat(r.cells.remaining),
+        x + parseFloat(String(r.cells.remaining).replace(',', '.')),
       0,
     );
     expect(total).toBeCloseTo(fc.body.remainingHours, 0);
@@ -810,12 +828,13 @@ describe('Tra cứu dữ liệu cho Trợ lý AI (e2e)', () => {
       (b: { kind: string }) => b.kind === 'table',
     );
     expect(table.rows).toHaveLength(1);
+    // Chữ hiển thị theo kiểu Việt: 30.6 → "30,6 h"
+    const vi = (n: number) =>
+      `${n.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} h`;
     expect(table.rows[0].cells.committed).toBe(
-      `${Math.round(Number(closed.scopeHoursInitial) * 10) / 10} h`,
+      vi(Number(closed.scopeHoursInitial)),
     );
-    expect(table.rows[0].cells.completed).toBe(
-      `${Math.round(closed.completedHours * 10) / 10} h`,
-    );
+    expect(table.rows[0].cells.completed).toBe(vi(closed.completedHours));
     const chart = v.body.blocks.find(
       (b: { kind: string }) => b.kind === 'bar_chart',
     );

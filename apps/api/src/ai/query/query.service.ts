@@ -73,6 +73,13 @@ const CAUSE_LABEL: Record<ForecastCause['code'], (n: number) => string> = {
   SCOPE_CREEP: (n) => `phạm vi tăng > 10 % trong ${n} ngày`,
 };
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const PURPOSE_LABEL: Record<string, string> = {
+  CHAT: 'Trò chuyện',
+  DECOMPOSE: 'Phân rã yêu cầu',
+  EXPLAIN: 'Giải thích rủi ro',
+  ASSIGN: 'Gợi ý giao việc',
+  GENERAL: 'Chung',
+};
 const FILTER_LABEL: Record<string, string> = {
   assignee: 'người thực hiện',
   user: 'người',
@@ -146,6 +153,14 @@ export function trimQueryResult(result: QueryResult): QueryResult {
 const num = (v: unknown): number => (v == null ? 0 : Number(v));
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
+/** Chữ hiển thị theo kiểu Việt (docs 10): 13.6 → "13,6", 397111 → "397.111"; ngày → "25/09" */
+const vn = (v: unknown, digits = 1) =>
+  num(v).toLocaleString('vi-VN', { maximumFractionDigits: digits });
+const hrs = (v: unknown) => `${vn(v)} h`;
+const dm = (d: Date | string) => {
+  const s = typeof d === 'string' ? d.slice(0, 10) : iso(d);
+  return `${s.slice(8, 10)}/${s.slice(5, 7)}`;
+};
 const startOfDay = (d: Date) =>
   new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 /** Thứ Hai của tuần chứa `d` (giờ UTC). */
@@ -455,9 +470,14 @@ export class AiQueryService {
   ): { from?: Date; to?: Date; overdue?: boolean; noDue?: boolean } {
     const r = spec.filters.dueRange;
     if (!r) return {};
+    // Lịch việc "hôm nay/tuần này tôi làm gì": việc CHƯA XONG đã quá hạn vẫn là việc phải làm — đo 28/09 với Gemini,
+    // Huy có 3 việc quá hạn mà câu trả lời là "không có việc". Nhóm "Quá hạn · dd/mm" đã có sẵn trong khối agenda.
+    const carryOverdue =
+      spec.intent === 'TASK_AGENDA' &&
+      (spec.filters.status ?? 'OPEN') === 'OPEN';
     if (r.preset === 'TODAY')
       return {
-        from: startOfDay(at),
+        from: carryOverdue ? undefined : startOfDay(at),
         to: new Date(startOfDay(at).getTime() + DAY - 1),
       };
     if (r.preset === 'TOMORROW') {
@@ -466,7 +486,10 @@ export class AiQueryService {
     }
     if (r.preset === 'THIS_WEEK') {
       const s = startOfWeek(at);
-      return { from: s, to: new Date(s.getTime() + 7 * DAY - 1) };
+      return {
+        from: carryOverdue ? undefined : s,
+        to: new Date(s.getTime() + 7 * DAY - 1),
+      };
     }
     if (r.preset === 'NEXT_WEEK') {
       const s = new Date(startOfWeek(at).getTime() + 7 * DAY);
@@ -615,12 +638,12 @@ export class AiQueryService {
             ? [
                 {
                   icon: 'clock' as const,
-                  text: `${num(r.remainingHours)}h còn lại`,
+                  text: `${hrs(r.remainingHours)} còn lại`,
                 },
               ]
             : []),
           ...(r.dueDate
-            ? [{ icon: 'calendar' as const, text: `hạn ${iso(r.dueDate)}` }]
+            ? [{ icon: 'calendar' as const, text: `hạn ${dm(r.dueDate)}` }]
             : []),
           ...(blockers.length
             ? [{ icon: 'link' as const, text: `chờ ${blockers.join(', ')}` }]
@@ -831,7 +854,7 @@ export class AiQueryService {
                   .join(', ') || 'chưa giao',
             },
             ...(t.dueDate
-              ? [{ icon: 'calendar' as const, text: `hạn ${iso(t.dueDate)}` }]
+              ? [{ icon: 'calendar' as const, text: `hạn ${dm(t.dueDate)}` }]
               : []),
             ...(t.skills.length
               ? [
@@ -929,7 +952,7 @@ export class AiQueryService {
         meta: [
           {
             icon: 'clock',
-            text: `${m.user.taskAssignees.length} việc đang mở · ${Math.round(hours * 10) / 10}h còn lại`,
+            text: `${m.user.taskAssignees.length} việc đang mở · ${hrs(hours)} còn lại`,
           },
         ],
       };
@@ -1050,7 +1073,7 @@ export class AiQueryService {
                   ? [
                       {
                         icon: 'calendar' as const,
-                        text: `hạn ${iso(t.dueDate)}`,
+                        text: `hạn ${dm(t.dueDate)}`,
                       },
                     ]
                   : []),
@@ -1058,7 +1081,7 @@ export class AiQueryService {
                   ? [
                       {
                         icon: 'clock' as const,
-                        text: `${num(t.remainingHours)}h`,
+                        text: hrs(t.remainingHours),
                       },
                     ]
                   : []),
@@ -1106,17 +1129,17 @@ export class AiQueryService {
           : u >= settings.workload.thresholds.high
             ? 'info'
             : 'success';
-    const columns =
-      users[0]?.weeks.map((w) => `Tuần ${w.weekStart.slice(5)}`) ?? [];
+    const columns = users[0]?.weeks.map((w) => `Tuần ${dm(w.weekStart)}`) ?? [];
     const blocks: QueryBlock[] = [
       {
         kind: 'stat_row',
         items: [
           {
-            label: 'Spread nhóm',
+            // "Spread" là tên công thức (docs 04 §4) — người đọc cần biết nó đo gì
+            label: 'Chênh lệch tải trong nhóm',
             value: Math.round(spread * 100),
             unit: '%',
-            hint: `mục tiêu ≤ ${Math.round(settings.workload.fairnessTarget * 100)}%`,
+            hint: `nên ≤ ${Math.round(settings.workload.fairnessTarget * 100)}% · cao = dồn việc`,
           },
         ],
       },
@@ -1158,7 +1181,7 @@ export class AiQueryService {
       cells: {
         member: m.fullName,
         utilization: `${Math.round(m.utilizationBefore * 100)}%`,
-        free: `${Math.round(m.freeByDay.reduce((s, d) => s + d.freeHours, 0) * 10) / 10}h`,
+        free: hrs(m.freeByDay.reduce((s, d) => s + d.freeHours, 0)),
         skills: m.skills.map((s) => `${s.name} ${s.level}`).join(', ') || '—',
       },
     }));
@@ -1171,7 +1194,7 @@ export class AiQueryService {
       blocks: [
         {
           kind: 'note',
-          text: `Cửa sổ ${table.window.from} + ${table.window.days} ngày · ${table.tasks.length} việc chưa giao`,
+          text: `Giờ trống tính từ ${dm(table.window.from)}, ${table.window.days} ngày · ${table.tasks.length} việc chưa giao`,
           tone: 'muted',
         },
         {
@@ -1307,7 +1330,7 @@ export class AiQueryService {
       blocks: [
         {
           kind: 'note',
-          text: `${s.key ? `${s.key} · ` : ''}${s.title} · ${s.hours === null ? 'chưa ước lượng' : `${s.hours}h còn lại`}${s.difficulty ? ` · độ khó ${s.difficulty}` : ''}${s.dueDate ? ` · hạn ${s.dueDate}` : ' · chưa có hạn'} · cần: ${required}`,
+          text: `${s.key ? `${s.key} · ` : ''}${s.title} · ${s.hours === null ? 'chưa ước lượng' : `${hrs(s.hours)} còn lại`}${s.difficulty ? ` · độ khó ${s.difficulty}` : ''}${s.dueDate ? ` · hạn ${dm(s.dueDate)}${s.dueDate < iso(new Date()) ? ' (đã qua — không còn giờ trống trước hạn)' : ''}` : ' · chưa có hạn'} · cần: ${required}`,
           tone: 'muted',
         },
         {
@@ -1332,8 +1355,8 @@ export class AiQueryService {
             cells: {
               member: r.fullName,
               match: `${Math.round(r.skillMatch.avg * 100)}%${r.skillMatch.missing.length ? ` (thiếu ${r.skillMatch.missing.join(', ')})` : ''}`,
-              effort: r.hoursEff === null ? '—' : `${r.hoursEff}h`,
-              free: `${r.freeBeforeDue ?? r.freeTotal}h`,
+              effort: r.hoursEff === null ? '—' : hrs(r.hoursEff),
+              free: hrs(r.freeBeforeDue ?? r.freeTotal),
               util: `${Math.round(r.utilizationBefore * 100)}%`,
             },
           })),
@@ -1406,9 +1429,16 @@ export class AiQueryService {
         },
       },
     });
+    // Rủi ro thật là kỹ năng CHỈ MỘT người giữ (người đó nghỉ là mất); "chưa ai" là lỗ hổng tuyển dụng — xếp sau
     const risky = skills
       .filter((sk) => sk.userSkills.length <= 1)
+      .sort(
+        (a, b) =>
+          b.userSkills.length - a.userSkills.length ||
+          a.name.localeCompare(b.name, 'vi'),
+      )
       .slice(0, spec.limit);
+    const single = risky.filter((sk) => sk.userSkills.length === 1).length;
     return {
       source: {
         endpoint: 'GET /workspaces/:id/skill-matrix (busFactor)',
@@ -1419,17 +1449,20 @@ export class AiQueryService {
         ? [
             {
               kind: 'note',
-              text: `${risky.length} kỹ năng chỉ có ≤ 1 người đạt mức ${minLevel} — rủi ro khi người đó nghỉ.`,
+              text: `${single} kỹ năng chỉ một người đạt mức ${minLevel} — rủi ro khi người đó nghỉ${risky.length > single ? ` · ${risky.length - single} kỹ năng chưa ai đạt` : ''}.`,
               tone: 'warning',
             },
             {
               kind: 'table',
               columns: [
                 { key: 'skill', label: 'Kỹ năng' },
-                { key: 'holders', label: 'Số người đạt', align: 'right' },
+                { key: 'holders', label: 'Người đạt', align: 'right' },
               ],
               rows: risky.map((sk) => ({
-                cells: { skill: sk.name, holders: sk.userSkills.length },
+                cells: {
+                  skill: sk.name,
+                  holders: sk.userSkills.length ? 'chỉ 1 người' : 'chưa ai',
+                },
               })),
             },
           ]
@@ -1471,9 +1504,9 @@ export class AiQueryService {
             cells: {
               name: s.name,
               status: SPRINT_STATUS_LABEL[s.status] ?? s.status,
-              time: `${iso(s.startDate)} → ${iso(s.endDate)}`,
+              time: `${dm(s.startDate)} → ${dm(s.endDate)}`,
               tasks: `${s.doneCount}/${s.taskCount}`,
-              hours: `${round1(s.remainingHours)} h`,
+              hours: hrs(s.remainingHours),
             },
           })),
         },
@@ -1629,8 +1662,8 @@ export class AiQueryService {
             cells: {
               member: p.shortName ?? p.fullName,
               tasks: p.tasks,
-              remaining: `${round1(p.remainingHours)} h`,
-              capacity: `${round1(p.capacityHours)} h`,
+              remaining: hrs(p.remainingHours),
+              capacity: hrs(p.capacityHours),
               load:
                 p.capacityHours > 0
                   ? `${Math.round((p.remainingHours / p.capacityHours) * 100)}%`
@@ -1644,7 +1677,7 @@ export class AiQueryService {
                   cells: {
                     member: 'Chưa giao',
                     tasks: sum.unassigned.tasks,
-                    remaining: `${round1(sum.unassigned.hours)} h`,
+                    remaining: hrs(sum.unassigned.hours),
                     capacity: '—',
                     load: '—',
                   },
@@ -1721,9 +1754,7 @@ export class AiQueryService {
       items: xs.map((t) => ({
         ref: { type: 'task', id: t.id, key: t.key },
         title: t.title, // mã việc đã có ở ref.key — web tự in, không lặp
-        meta: [
-          { icon: 'clock', text: `${round1(t.estimateHours)} h ước lượng` },
-        ],
+        meta: [{ icon: 'clock', text: `${hrs(t.estimateHours)} ước lượng` }],
       })),
     });
     const blocks: QueryBlock[] = [
@@ -1749,13 +1780,13 @@ export class AiQueryService {
             label: 'Bị chuyển đi',
             value: s.carriedOut.length,
             unit: 'việc',
-            hint: `${sumH(s.carriedOut)} h`,
+            hint: hrs(sumH(s.carriedOut)),
           },
           {
             label: 'Thêm sau khi bắt đầu',
             value: s.addedAfterStart.length,
             unit: 'việc',
-            hint: `${sumH(s.addedAfterStart)} h`,
+            hint: hrs(sumH(s.addedAfterStart)),
           },
         ],
       },
@@ -1873,8 +1904,8 @@ export class AiQueryService {
             ref: { type: 'sprint' as const, id: r.id, key: r.name },
             cells: {
               name: r.name,
-              committed: `${r.committed} h`,
-              completed: `${r.completed} h`,
+              committed: hrs(r.committed),
+              completed: hrs(r.completed),
               ratio:
                 r.committed > 0
                   ? `${Math.round((r.completed / r.committed) * 100)}%`
@@ -2098,7 +2129,7 @@ export class AiQueryService {
         {
           kind: 'stat_row',
           items: [
-            { label: 'Lượt gọi 30 ngày', value: totalCalls },
+            { label: 'Lượt gọi 30 ngày qua', value: totalCalls },
             {
               label: 'Token',
               value: rows.reduce((s, r) => s + (r._sum.totalTokens ?? 0), 0),
@@ -2119,14 +2150,19 @@ export class AiQueryService {
             { key: 'tokens', label: 'Token', align: 'right' },
             { key: 'cost', label: 'VND', align: 'right' },
           ],
-          rows: rows.map((r) => ({
-            cells: {
-              purpose: r.purpose,
-              calls: r._count._all,
-              tokens: r._sum.totalTokens ?? 0,
-              cost: Math.round((r._sum.estimatedCost ?? 0) * 26263),
-            },
-          })),
+          rows: [...rows]
+            .sort(
+              (a, b) =>
+                (b._sum.estimatedCost ?? 0) - (a._sum.estimatedCost ?? 0),
+            )
+            .map((r) => ({
+              cells: {
+                purpose: PURPOSE_LABEL[r.purpose] ?? r.purpose,
+                calls: r._count._all,
+                tokens: r._sum.totalTokens ?? 0,
+                cost: Math.round((r._sum.estimatedCost ?? 0) * 26263),
+              },
+            })),
         },
       ] as QueryBlock[],
     };
