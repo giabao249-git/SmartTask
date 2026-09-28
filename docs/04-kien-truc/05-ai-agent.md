@@ -56,7 +56,7 @@ Khối trong prompt (thứ tự cố định — quan trọng cho cache):
 ```
 [TĨNH — dùng chung cả workspace]
  1. MASTER PROMPT (phiên bản v)            2. WORKSPACE PROMPT (v)
- 3. DANH BẠ THÀNH VIÊN  (u1 Lan · PM · React 4, NestJS 2 · 40h/tuần)   4. DANH MỤC KỸ NĂNG + ALIAS
+ 3. DANH BẠ THÀNH VIÊN  (u1 Lan · PM · k3 React 3 (4 việc, 1 làm lại) · 40h/tuần)   4. DANH MỤC KỸ NĂNG + ALIAS
  5. DỰ ÁN & SPRINT (p1 SmartTask · sprint s3 13/10–24/10)
 ════════ DỮ LIỆU HAY THAY ĐỔI
 [ĐỘNG — theo người dùng và thời điểm]
@@ -197,12 +197,14 @@ sequenceDiagram
 
 `ai_configs.purpose ∈ {DECOMPOSE, ASSIGN, EXPLAIN, CHAT}` (theo `AiConfig.purpose` của Table_Calendar — "một model chỉnh cho việc này là hỏng việc kia"): phân rã cần sáng tạo hơn (temperature 0,5), phân công cần bám schema và số liệu (0,2), giải thích rẻ (flash-lite). Chưa khai mục đích riêng → dùng cấu hình mặc định. Năng lực model (`supports_structured_output`, `supports_temperature`, `is_reasoning`, `cache_mode`) khai trong `ai_model_catalog` **chỉ cho model đã thử thật** — không đoán theo tên (bài học "gemini" chứa "mini").
 
+> **Cập nhật 28/09/2026 — kỹ năng trong ngữ cảnh là mức TỪ BẰNG CHỨNG, không phải tự khai** ([02/08](../02-phan-tich/08-ho-so-ky-nang-tu-bang-chung.md), công thức [04 §2b](04-cong-thuc-tinh-toan.md)). Cột kỹ năng ở DANH BẠ ghi "mức (số việc đã xong, số lần làm lại, PM xác nhận)"; kỹ năng chưa có bằng chứng kết luận không được đưa vào (chưa biết ≠ không biết). Validator: thiếu kỹ năng chỉ là **cảnh báo** kèm bằng chứng (`ASSIGN_SKILL_GAP`, `ASSIGN_SKILL_UNPROVEN`), không khoá duyệt. Schema Gemini bắt buộc nêu (được null) `sprint`, `targetDraftKeys`, `patch` ở gốc và `minLevel`, `range`, `user` trong bộ lọc tra cứu — model hay bỏ sót trường tuỳ chọn (đo 28/09, [02/07 F3, F6](../02-phan-tich/07-cai-tien-sprint-va-intent.md)).
+
 ## 11. Master prompt (bản nháp)
 
 ```
 Bạn là trợ lý quản trị dự án của SmartTask. Từ vựng: Workspace, Project, Sprint (start, end),
 Task (mã t, tiêu đề, giờ ước lượng, giờ còn lại, độ khó 1–5, kỹ năng yêu cầu, hạn, người thực hiện,
-phụ thuộc), Member (mã u, kỹ năng mức 1–5, năng lực giờ/tuần, mức sử dụng U, giờ trống theo ngày).
+phụ thuộc), Member (mã u, kỹ năng mức 1–5 TỪ BẰNG CHỨNG, năng lực giờ/tuần, mức sử dụng U, giờ trống theo ngày).
 
 BỐN NHÓM THẨM QUYỀN: 1 Chính sách (Master > Workspace) — không gì mâu thuẫn được; 2 Sự thật
 (dữ liệu và chỉ số hệ thống tính > điều AI đã biết > lời kể trong chat) — KHÔNG BAO GIỜ bị ghi đè;

@@ -5,6 +5,8 @@
 > **Đề tài 01:** Smart Task & Workload Management Platform with AI Agent.  
 > Ứng dụng web quản trị dự án Agile/Kanban thời gian thực; tích hợp Trợ lý AI (Google Gemini, DeepSeek V4 Flash) tự động phân rã yêu cầu (WBS), gợi ý ước lượng thời gian, tự động tính toán khối lượng công việc theo ma trận kỹ năng nhân sự và cảnh báo nguy cơ quá tải/cháy việc.
 
+> **Nhật ký phát triển theo sprint:** [Sprint v0](docs/05-hien-thuc/sprint-v0.md) — trang Sprint, tra cứu dữ liệu bằng Trợ lý AI, hồ sơ kỹ năng từ bằng chứng (thay mức tự khai), ghi giờ & đánh giá việc, tab Nhân sự. Quy trình nhánh: [quy tắc git](docs/00-quy-che/quy-tac-git.md).
+
 ---
 
 ## Mục lục
@@ -131,7 +133,7 @@ npm run db:deploy
 
 ### Bước 6: Nạp dữ liệu mẫu sạch & Khởi tạo tài khoản phân quyền (Seed Data)
 
-Chạy kịch bản seed để dọn sạch dữ liệu cũ và khởi tạo sẵn 6 tài khoản mẫu, danh mục kỹ năng, cấu hình AI (Gemini, DeepSeek V4 Flash), Workspace Demo, Dự án Demo và 10 Task mẫu:
+Chạy kịch bản seed để dọn sạch dữ liệu cũ và khởi tạo sẵn 6 tài khoản mẫu, danh mục kỹ năng, cấu hình AI (Gemini, DeepSeek V4 Flash), Workspace Demo, Dự án Demo với Sprint 1 (đang chạy), Sprint 2 (kế hoạch), 12 task mẫu, **và lịch sử** — 2 sprint đã đóng (0A, 0B), 18 việc đã xong có đánh giá của PM, giờ làm, một bug gắn việc gốc, một lần mở lại — để hồ sơ kỹ năng từ bằng chứng và vận tốc sprint có số liệu ngay:
 
 ```bash
 npm run db:seed
@@ -143,9 +145,13 @@ Khi hoàn tất, màn hình sẽ thông báo:
 👥 [3/6] Đang tạo 6 tài khoản mẫu với đầy đủ phân cấp Role...
 🏢 [4/6] Đang tạo Workspace "SmartTask Demo" và phân quyền thành viên...
 🤖 [5/6] Đang cấu hình AI Workspace (DeepSeek V4 Flash & Gemini)...
-📌 [6/6] Đang tạo Dự án ST "SmartTask v1", Sprints và 10 Task mẫu...
+📌 [6/6] Đang tạo Dự án ST "SmartTask v1", Sprints và 12 Task mẫu (+ lịch sử 2 sprint đã đóng)...
 ✨ QUY TRÌNH SEED DỮ LIỆU ĐÃ HOÀN TẤT THÀNH CÔNG!
 ```
+
+CSDL đã có dữ liệu và chỉ muốn **thêm lịch sử** (không xoá gì): `npm run prisma:seed:history -w apps/api` — chạy lại không sinh trùng.
+
+CSDL tạo trước 28/09/2026 cần áp migration mới (`tasks.origin_task_id`): `npm run db:deploy`.
 
 ---
 

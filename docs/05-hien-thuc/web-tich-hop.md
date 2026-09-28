@@ -147,3 +147,4 @@ Chụp màn hình tự động bằng Chrome headless qua `puppeteer-core` có s
 | **8** màn Backlog riêng | `e6fc66b` |
 | **8** sửa mã cột sai trong seed | `91f351d` |
 | **F1–F3** thẻ đề xuất rõ ràng (lỗi theo việc, sprint đích, giờ/năng lực, chỉ duyệt việc không lỗi); chat dùng sprint người dùng nêu; đầu ra Gemini không bỏ patch/sprint | nhánh `feature/UC-28-the-de-xuat-ro-rang` |
+| **Sprint v0** (28/09/2026) — trang Sprint, tra cứu AI, thẻ đề xuất, hồ sơ kỹ năng từ bằng chứng, ghi giờ/đánh giá, tab Nhân sự, chat hiện dần | nhánh `sprint_v0` — chi tiết [sprint-v0.md](sprint-v0.md) |
