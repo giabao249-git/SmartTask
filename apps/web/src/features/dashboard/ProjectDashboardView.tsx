@@ -20,7 +20,13 @@ import { WorkloadBadge } from "@/components/app/WorkloadBadge";
 import { api, describeError } from "@/lib/api";
 import { useBurndown, useDashboard, useForecast } from "@/lib/hooks/analytics";
 import { useCurrentProject } from "@/lib/hooks/use-project";
-import { riskToVariant } from "@/lib/status";
+import { causeLabel, riskToVariant, sprintStatusLabel } from "@/lib/status";
+import { useSprints } from "@/lib/hooks/queries";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useTasks } from "@/features/board/hooks";
+import { taskKeyOf } from "@/components/app/TaskCard";
+import Link from "next/link";
 import type { ExplainView } from "@/lib/types";
 import { toast } from "sonner";
 import { parseAction, ActionCard } from "@/features/assistant/ActionCard";
@@ -37,7 +43,13 @@ export function ProjectDashboardView() {
   const project = useCurrentProject();
   const router = useRouter();
   const dash = useDashboard(project.id);
-  const sprintId = project.activeSprint?.id ?? null;
+  const sprints = useSprints(project.id);
+  // Xem burn-down của sprint bất kỳ (mặc định sprint đang chạy, không có thì sprint đóng gần nhất)
+  const [pick, setPick] = React.useState<string | null>(null);
+  const fallback = project.activeSprint?.id ?? [...(sprints.data ?? [])].filter((x) => x.status === "CLOSED").sort((a, b) => (b.closedAt ?? b.endDate).localeCompare(a.closedAt ?? a.endDate))[0]?.id ?? null;
+  const sprintId = pick ?? fallback;
+  const picked = sprints.data?.find((x) => x.id === sprintId) ?? null;
+  const active = sprints.data?.find((x) => x.status === "ACTIVE") ?? null;
   const burndown = useBurndown(sprintId);
   const forecast = useForecast(sprintId);
   const [explain, setExplain] = React.useState<ExplainView | null>(null);
@@ -75,7 +87,11 @@ export function ProjectDashboardView() {
     <div className="space-y-6">
       <PageHeader
         title={`Dashboard · ${project.name}`}
-        description={project.activeSprint ? `${project.activeSprint.name} · ${project.activeSprint.startDate.slice(0, 10)} → ${project.activeSprint.endDate.slice(0, 10)}` : "Chưa có sprint đang chạy"}
+        description={
+          active
+            ? `${active.name} · ${active.startDate.slice(0, 10)} → ${active.endDate.slice(0, 10)}${active.goal ? ` — Mục tiêu: ${active.goal}` : ""}`
+            : "Chưa có sprint đang chạy"
+        }
         breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name }, { label: "Dashboard" }]}
       >
         <div className="flex items-center gap-2">
@@ -172,7 +188,28 @@ export function ProjectDashboardView() {
                     </Badge>
                   )}
                 </div>
-                <CardDescription className="text-xs">{project.activeSprint ? project.activeSprint.name : "Chưa có sprint đang chạy"}</CardDescription>
+                {(sprints.data ?? []).length > 0 ? (
+                  <Select
+                    value={sprintId ?? undefined}
+                    onValueChange={(v) => {
+                      setPick(v);
+                      setExplain(null);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs" aria-label="Chọn sprint xem burn-down">
+                      <SelectValue placeholder="Chọn sprint" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(sprints.data ?? []).map((x) => (
+                        <SelectItem key={x.id} value={x.id} className="text-xs">
+                          {x.name} · {sprintStatusLabel(x.status)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <CardDescription className="text-xs">Chưa có sprint</CardDescription>
+                )}
               </CardHeader>
               <CardContent className="p-4 pt-0 space-y-2">
                 {!sprintId ? (
@@ -205,16 +242,14 @@ export function ProjectDashboardView() {
                     <Num label="ETA" value={fc.eta ?? "—"} tone={fc.eta && fc.eta > fc.endDate ? "destructive" : undefined} />
                   </div>
                 )}
-                {fc && fc.causes.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
+                {fc && fc.causes.length > 0 && sprintId && (
+                  <div className="flex flex-wrap gap-1.5">
                     {fc.causes.map((c) => (
-                      <Badge key={c.code} variant="outline" className="text-[10px] font-mono">
-                        {c.code} ×{c.count}
-                      </Badge>
+                      <CauseChip key={c.code} cause={c} sprintId={sprintId} />
                     ))}
                   </div>
                 )}
-                {sprintId && project.canManage && (
+                {sprintId && picked?.status === "ACTIVE" && project.canManage && (
                   <Button variant="outline" size="sm" className="w-full h-7 text-xs gap-1.5" disabled={explainMut.isPending} onClick={() => explainMut.mutate()}>
                     <Sparkles className="h-3.5 w-3.5 text-info" /> {explainMut.isPending ? "AI đang phân tích…" : "Giải thích bằng AI"}
                   </Button>
@@ -246,6 +281,63 @@ export function ProjectDashboardView() {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Một nguyên nhân rủi ro, bấm ra đúng các việc/người mà backend đã đếm (ForecastService trả sẵn taskIds/userIds).
+ * Trước đây chỉ là chip mã máy "OVERDUE ×7" không bấm được.
+ */
+function CauseChip({ cause, sprintId }: { cause: { code: string; count: number; taskIds?: string[]; userIds?: string[] }; sprintId: string }) {
+  const project = useCurrentProject();
+  const [open, setOpen] = React.useState(false);
+  const tasks = useTasks(project.id, { sprintId }, { enabled: open && !!cause.taskIds?.length });
+  const rows = (tasks.data ?? []).filter((t) => cause.taskIds?.includes(t.id));
+  const people = project.members.filter((m) => cause.userIds?.includes(m.id));
+  const clickable = !!cause.taskIds?.length || !!cause.userIds?.length;
+  if (!clickable)
+    return (
+      <Badge variant="outline" className="text-[11px]">
+        {causeLabel(cause.code, cause.count)}
+      </Badge>
+    );
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-7 text-[11px] px-2">
+          {causeLabel(cause.code, cause.count)}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="start">
+        <p className="px-3 py-2 text-xs font-medium border-b border-border/60">{causeLabel(cause.code, cause.count)}</p>
+        {cause.userIds?.length ? (
+          <ul className="p-2 space-y-1 text-xs">
+            {people.map((m) => (
+              <li key={m.id} className="flex items-center gap-2">
+                <UserAvatar name={m.shortName ?? m.fullName} avatar={m.avatarUrl ?? undefined} size="sm" /> {m.shortName ?? m.fullName}
+              </li>
+            ))}
+          </ul>
+        ) : tasks.isPending ? (
+          <div className="p-3">
+            <Skeleton className="h-16 w-full" />
+          </div>
+        ) : (
+          <ul className="max-h-64 overflow-y-auto divide-y divide-border/60 text-xs">
+            {rows.map((t) => (
+              <li key={t.id}>
+                <Button asChild variant="ghost" className="w-full h-auto justify-start gap-2 rounded-none px-3 py-2 text-xs font-normal">
+                  <Link href={`/projects/${project.id}/tasks/${taskKeyOf(project.key, t)}`}>
+                    <span className="font-mono text-muted-foreground shrink-0">{taskKeyOf(project.key, t)}</span>
+                    <span className="truncate">{t.title}</span>
+                  </Link>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 

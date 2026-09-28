@@ -6,6 +6,7 @@ import { WorkspaceAccessService } from '../common/access/workspace-access.servic
 import { AppError } from '../common/app-error';
 import { PROJECT_EVENTS } from '../common/events/task.events';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorkloadService } from '../workload/workload.service';
 import { isoDate, toDate, weekStartOf } from '../workload/domain/calendar';
 import type {
   CreateProjectDto,
@@ -55,6 +56,7 @@ export class ProjectsService {
     private readonly wsAccess: WorkspaceAccessService,
     private readonly access: ProjectAccessService,
     private readonly events: EventEmitter2,
+    private readonly workload: WorkloadService,
   ) {}
 
   async list(userId: string, workspaceId: string, status?: ProjectStatus) {
@@ -518,6 +520,21 @@ export class ProjectsService {
       },
     });
     const memberIds = project.members.map((m) => m.userId);
+    // Snapshot tải chỉ cập nhật theo sự kiện/cron — đo được Dashboard báo 0 % trong khi tính trực tiếp là 39 %.
+    // Cũ hơn 1 giờ (hoặc chưa có) thì tính lại trước khi đọc, để Dashboard, màn Nhân sự và Trợ lý nói cùng một số.
+    const snaps = await this.prisma.workloadSnapshot.findMany({
+      where: {
+        workspaceId: project.workspaceId,
+        weekStart,
+        userId: { in: memberIds },
+      },
+      select: { computedAt: true },
+    });
+    const staleBefore = new Date(Date.now() - 3_600_000);
+    if (!snaps.length || snaps.some((x) => x.computedAt < staleBefore))
+      await this.workload
+        .snapshotWorkspace(project.workspaceId, memberIds)
+        .catch(() => undefined); // không tính lại được thì vẫn trả số cũ, không làm hỏng Dashboard
     const [workloadWeek, openAlerts] = await Promise.all([
       this.prisma.workloadSnapshot.findMany({
         where: {
