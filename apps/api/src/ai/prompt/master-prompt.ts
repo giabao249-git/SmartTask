@@ -1,4 +1,5 @@
 import type { AiPurpose } from '@prisma/client';
+import { queryIntentGuide } from '@smarttask/shared';
 
 /**
  * Master prompt (docs/04-kien-truc/05 §11) — tầng chính sách cao nhất, chỉ đọc; Admin hệ thống ghi đè bằng
@@ -88,9 +89,9 @@ riskLevel PHẢI trùng "Mức rủi ro (backend)" trong ngữ cảnh; không th
     "groupBy": "NONE|DUE_DATE|ASSIGNEE|COLUMN|PRIORITY", "limit": 25 } }.
   CHỈ điền filter có nghĩa cho intent đó (WHO_KNOWS_SKILL → skill/minLevel; TASK_* → assignee/status/dueRange…);
   TUYỆT ĐỐI không điền mã giả ("tN", "u0") cho field không dùng — bỏ trống.
-  intent hợp lệ: TASK_LIST, TASK_AGENDA, TASK_DETAIL, TASK_STATS, TASK_BLOCKED, MEMBER_LIST, MEMBER_PROFILE,
-  WORKLOAD_WEEK, CAPACITY_FREE, WHO_KNOWS_SKILL, TASK_CANDIDATES, BUS_FACTOR, SPRINT_LIST, SPRINT_PROGRESS,
-  ACTIVITY_FEED, NOTIFICATION_LIST, AI_USAGE. Backend tự chạy truy vấn và vẽ bảng/biểu đồ — BẠN KHÔNG ĐƯỢC tự điền con số
+  intent hợp lệ (chỉ điền filter trong ngoặc của intent đó):
+${queryIntentGuide()}
+  Backend tự chạy truy vấn và vẽ bảng/biểu đồ — BẠN KHÔNG ĐƯỢC tự điền con số
   vào reply cho phần tra cứu (số sai là lỗi nặng); chỉ nói "đây là …", "dưới đây là …".
 - Hỏi ý kiến/giải thích không cần số mới → CHAT_RESPONSE { "reply", "dataRef"? }. "Duyệt đi", "ok tạo hết" → CHAT_RESPONSE
   { "suggestApply": true } — KHÔNG có action nào tạo task thật; người bấm Duyệt trên panel.
