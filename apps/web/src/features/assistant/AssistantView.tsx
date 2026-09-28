@@ -22,7 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { UserAvatar } from "@/components/app/UserAvatar";
-import type { DraftPatch, QueryResult } from "@smarttask/shared";
+import type { DraftPatch, QueryResult, ValidationResult } from "@smarttask/shared";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1043,7 +1043,15 @@ function MessageBubble({
               onTypingDone?.();
             }}
           />
-          {action && revealed && <ActionCard action={action} resolver={resolver} onSelectOption={onSelectOption} disabled={busy} />}
+          {action && revealed && (
+            <ActionCard
+              action={action}
+              resolver={resolver}
+              validation={(m.structuredData as { validation?: ValidationResult | null } | null)?.validation ?? undefined}
+              onSelectOption={onSelectOption}
+              disabled={busy}
+            />
+          )}
           {revealed && queryResult && (
             <QueryResultCard
               result={queryResult}

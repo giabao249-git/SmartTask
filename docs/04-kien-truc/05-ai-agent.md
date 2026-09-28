@@ -87,7 +87,7 @@ Discriminated union theo `type`; luôn có `reply` (văn bản hiển thị) và
 | `UPDATE_TASK_DRAFT` | "Sửa cái thứ hai thành 6 giờ", dời hạn | `targetTask?: t`, `targetDraftKey?`, `patch`, `resolutionReason` |
 | `ASSIGN_PROPOSAL` | Giao / giao lại | `assignments[]: {task: t \| draftKey, assignee: u, start, due, reason, alternatives[]: {assignee: u, tradeoff}}`, `unassigned[]: {task, why}`, `fairnessEstimate`, `warnings[]` |
 | `REBALANCE_PROPOSAL` | "Ai quá tải, gỡ bớt" | `moves[]: {task: t, from: u, to: u, reason}` |
-| `RISK_EXPLANATION` | "Sprint có kịp không" | `riskLevel` (phải trùng số backend), `causes[]`, `recommendations[]` |
+| `RISK_EXPLANATION` | "Vì sao sprint chậm, nên làm gì" ("có kịp không" → `DATA_QUERY SPRINT_PROGRESS`, từ 28/09) | `riskLevel` (phải trùng số backend — kiểm ở **cả** nhánh EXPLAIN **và** chat), `causes[]`, `recommendations[]` |
 | `MEMORY_PROPOSAL` | Người nói điều nên nhớ lâu dài | `memory: {kind, content}` — chờ xác nhận ([06](06-tri-nho-ai.md)) |
 | `ASK_CLARIFICATION` | Mơ hồ: hai "Minh", không rõ sprint, thiếu hạn | `question`, `options[]: {code, label}` |
 | `CHAT_RESPONSE` | Trả lời câu hỏi từ ngữ cảnh, từ chối theo chính sách | `reply`, `dataRef?` (ví dụ `workload:week:u1` để UI vẽ thẻ số từ backend) |
@@ -134,7 +134,8 @@ Mọi dòng dưới đây đều: LLM trả structured action → Validator ki�
 | "Phân rã yêu cầu: xây dựng quên mật khẩu qua email" | `DECOMPOSE_PROPOSAL` | 1–25 task, ước lượng 0,5–40 h, kỹ năng trong danh mục, không vòng | tạo hàng loạt |
 | "Giao hết việc sprint 3, đừng dồn cho Lan" | `ASSIGN_PROPOSAL` | từng dòng: thành viên, nghỉ, kỹ năng, giờ trống, ≤ 110% | `assign/reschedule` từng task, ghi `ai_feedback` |
 | "Ai đang quá tải? Gỡ bớt cho Minh" | `REBALANCE_PROPOSAL` (moves[]) | như trên cho người nhận | `assign` từng task |
-| "Sprint này có kịp không? Vì sao chậm?" | `RISK_EXPLANATION` (số liệu lấy từ backend) | `riskLevel` phải trùng số backend | không ghi gì |
+| "Sprint này có kịp không?" | `DATA_QUERY` `SPRINT_PROGRESS` (ETA, vận tốc, mức rủi ro do backend tính) | reply không chứa số | không ghi gì |
+| "Vì sao chậm, nên làm gì?" | `RISK_EXPLANATION` — ngữ cảnh CHAT có mục MỨC RỦI RO SPRINT (backend) | `riskLevel` phải trùng số backend; lệch → gọi lại kèm lỗi, vẫn lệch thì thẻ ghi "chưa khớp số hệ thống" (validation lưu cùng tin) | không ghi gì |
 | "Tuần này tôi còn bao nhiêu giờ trống?", "Lan đang bao nhiêu %?" | `CHAT_RESPONSE` (đọc từ BẢNG NĂNG LỰC trong ngữ cảnh) + `dataRef` tuỳ chọn để UI vẽ thẻ số | — | không ghi gì |
 | "Từ giờ đừng giao Minh tuần cuối tháng" | `MEMORY_PROPOSAL` (+ đề xuất ghi vào `user_time_off`) | — | memory hoặc dữ liệu có cấu trúc, theo nút người chọn |
 | "Giao cho Bảo" (có hai Bảo) | `ASK_CLARIFICATION` (options u4, u9) | — | lượt sau mang `selectedCode` |

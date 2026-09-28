@@ -797,4 +797,52 @@ describe('AI chat theo phiên (e2e)', () => {
     expect(sprintCode(prompt, 'Sprint cũ')).toBeDefined(); // hỏi được "sprint trước"
     expect(prompt).toMatch(/Sprint cũ \| CLOSED/);
   });
+
+  it('rủi ro trong chat: mức do LLM tự chọn lệch số backend bị từ chối (cả lần gọi lại); chép đúng thì qua', async () => {
+    const levelIn = (text: string) =>
+      /MỨC RỦI RO SPRINT[^\n]*\n[^\n]*mức rủi ro (\w+)/.exec(text)?.[1];
+    const explain = (riskLevel: string) => ({
+      type: 'RISK_EXPLANATION',
+      reply: 'Sprint đang chậm vì còn việc chưa giao.',
+      riskLevel,
+      causes: [],
+      recommendations: ['Giao nốt việc chưa có người'],
+    });
+    const ask = (extra: Record<string, unknown> = {}) =>
+      api()
+        .post('/api/v1/ai/chat')
+        .set(auth(pm))
+        .send({ projectId, text: 'Vì sao sprint này rủi ro?', ...extra });
+
+    // LLM cứ khăng khăng "LOW" → hai lần đều bị kiểm, mức lưu kèm tin là "chưa khớp"
+    AiMockQueue.push(
+      (t) => explain(levelIn(t) === 'LOW' ? 'HIGH' : 'LOW'),
+      (t) => explain(levelIn(t) === 'LOW' ? 'HIGH' : 'LOW'),
+    );
+    const bad = await ask({ sprintId }).expect(200);
+    const expected = levelIn(AiMockQueue.lastPrompt!.userText);
+    expect(expected).toBeDefined(); // ngữ cảnh CHAT có số rủi ro của backend
+    expect(bad.body.validation.ok).toBe(false);
+    expect(bad.body.validation.errors[0]).toMatchObject({
+      code: 'AI_RESPONSE_INVALID',
+      data: { expected },
+    });
+    expect(bad.body.usage.attempts).toBe(2);
+    const stored = await prisma.chatMessage.findUniqueOrThrow({
+      where: { id: bad.body.message.id },
+      select: { structuredData: true },
+    });
+    expect(
+      (stored.structuredData as { validation: { ok: boolean } }).validation.ok,
+    ).toBe(false);
+
+    // Chép đúng mức trong ngữ cảnh → qua ngay lần đầu
+    AiMockQueue.push((t) => explain(levelIn(t)!));
+    const good = await ask({
+      sprintId,
+      sessionId: bad.body.sessionId,
+    }).expect(200);
+    expect(good.body.validation.ok).toBe(true);
+    expect(good.body.usage.attempts).toBe(1);
+  });
 });
