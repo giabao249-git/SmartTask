@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
 import { useAuth } from "@/lib/auth";
 import { readLastProject } from "@/lib/hooks/use-project";
+import { useSlideEnter } from "@/lib/hooks/use-enter-animation";
 import { useProject } from "@/lib/hooks/queries";
 import { NotificationsPanel, useBellCount } from "@/features/notifications/NotificationsPanel";
 import { cn } from "@/lib/utils";
@@ -36,7 +37,9 @@ const readLastWorkspace = () => {
   }
 };
 
-type SettingsTab = "profile" | "notifications" | "members" | "skills" | "settings" | "ai";
+/** Đúng thứ tự trên menu từ trên xuống — hiệu ứng đổi mục dựa vào thứ tự này để biết đi lên hay xuống. */
+const SETTINGS_TABS = ["profile", "notifications", "members", "skills", "settings", "ai"] as const;
+type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 /** Cài đặt & thông báo (UC-05/06/23/29): 3 phân nhóm rõ ràng (Cá nhân / Workspace / Hệ thống toàn cục) kèm RBAC */
 export function SettingsNotificationsView() {
@@ -49,7 +52,7 @@ export function SettingsNotificationsView() {
   const [wsId, setWsIdState] = React.useState<string | null>(() => params.get("ws") ?? readLastWorkspace());
   const [activeTab, setActiveTab] = React.useState<SettingsTab>(() => {
     const t = params.get("tab") as SettingsTab | null;
-    if (t && ["profile", "notifications", "members", "skills", "settings", "ai"].includes(t)) return t;
+    if (t && SETTINGS_TABS.includes(t)) return t;
     return "profile";
   });
 
@@ -86,6 +89,9 @@ export function SettingsNotificationsView() {
   const ws = auth.workspaces.find((w) => w.id === effective);
   const isAdmin = isSuperAdmin || ws?.role === "OWNER" || ws?.role === "ADMIN";
   const canEdit = isAdmin;
+
+  // Menu dọc tự viết (không dùng Tabs chung): đi xuống mục dưới thì nội dung trồi từ dưới lên, đi lên thì từ trên xuống
+  const contentRef = useSlideEnter<HTMLElement>(SETTINGS_TABS.indexOf(activeTab), { axis: "y" });
 
   // Change tab and optionally update URL
   const handleTabChange = (tab: SettingsTab) => {
@@ -279,7 +285,7 @@ export function SettingsNotificationsView() {
         </aside>
 
         {/* Nội dung chi tiết theo phân nhóm */}
-        <main className="flex-1 min-w-0 w-full">
+        <main ref={contentRef} className="flex-1 min-w-0 w-full">
           {activeTab === "profile" && <ProfileTab />}
 
           {activeTab === "notifications" && <NotificationsPanel />}

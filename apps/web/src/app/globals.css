@@ -105,6 +105,17 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Luôn chừa chỗ cho thanh cuộn dọc: đổi giữa trang/tab ngắn và dài (vd. Cài đặt → Danh mục kỹ năng) không còn
+   làm cả layout giật ngang ~15px khi thanh cuộn bật/tắt. */
+html {
+  scrollbar-gutter: stable;
+}
+/* Dialog/Select của Radix khoá cuộn rồi cộng margin-right = bề rộng thanh cuộn để bù. Chỗ đã được chừa sẵn ở trên
+   nên phần bù đó lại đẩy nội dung lệch trái — bỏ đi. */
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+}
+
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
@@ -130,5 +141,156 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .st-reveal {
     animation: none;
+  }
+}
+
+/* Đổi tab trong trang (component Tabs chung: Cấu hình, Nhân sự, Cài đặt AI, Admin, modal việc…): trượt vào theo hướng
+   tab vừa bấm. Cùng thông số với useSlideEnter (16px, 340ms, easeOutCubic) — khác hẳn kiểu cascade của chuyển trang. */
+@keyframes st-slide-next {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes st-slide-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* backwards chứ không both: both giữ lại transform (ma trận đơn vị) sau khi chạy xong → panel thành
+   stacking context mới vĩnh viễn, dễ làm lệch z-index dropdown / phần tử fixed bên trong */
+.st-tab-next {
+  animation: st-slide-next 340ms cubic-bezier(0.33, 1, 0.68, 1) backwards;
+}
+.st-tab-prev {
+  animation: st-slide-prev 340ms cubic-bezier(0.33, 1, 0.68, 1) backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .st-tab-next,
+  .st-tab-prev {
+    animation: none;
+  }
+}
+
+/* ── Popup (Radix: Dialog, AlertDialog, Sheet, Popover, DropdownMenu, Select, Tooltip) ──
+   Các component ui viết theo class của plugin tailwindcss-animate (animate-in, fade-in-0, zoom-in-95…) nhưng plugin
+   chưa từng được cài → popup bật ra tức thì. Dùng keyframes riêng theo data-state của Radix thay cho plugin.
+   Mở: easeOutCubic (êm cuối). Đóng: ngắn hơn, easeInCubic, forwards để giữ trạng thái ẩn tới khi Radix gỡ phần tử
+   (Radix chờ animationend của hiệu ứng đóng rồi mới unmount). */
+@keyframes st-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes st-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+/* Modal: trồi nhẹ + phóng từ 97%. Dùng `transform` — phần căn giữa của DialogContent là utility translate-x/y của
+   Tailwind v4 (thuộc tính `translate` riêng) nên không bị ghi đè. */
+@keyframes st-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+@keyframes st-modal-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+/* Menu/popover/select/tooltip: phóng ra từ phía nút bấm (transform-origin do Radix tính) và nhích nhẹ khỏi nút */
+@keyframes st-pop-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--st-pop-x, 0px), var(--st-pop-y, 0px)) scale(0.96);
+  }
+}
+@keyframes st-pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes st-sheet-in {
+  from {
+    transform: var(--st-sheet-from);
+  }
+}
+@keyframes st-sheet-out {
+  to {
+    transform: var(--st-sheet-from);
+  }
+}
+
+.st-overlay[data-state="open"] {
+  animation: st-fade-in 220ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+.st-overlay[data-state="closed"] {
+  animation: st-fade-out 160ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+}
+.st-modal[data-state="open"] {
+  animation: st-modal-in 260ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+.st-modal[data-state="closed"] {
+  animation: st-modal-out 160ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+}
+.st-pop {
+  transform-origin: var(--radix-popper-transform-origin, 50% 50%);
+}
+.st-pop[data-side="bottom"] {
+  --st-pop-y: -4px;
+}
+.st-pop[data-side="top"] {
+  --st-pop-y: 4px;
+}
+.st-pop[data-side="left"] {
+  --st-pop-x: 4px;
+}
+.st-pop[data-side="right"] {
+  --st-pop-x: -4px;
+}
+/* Tooltip dùng data-state delayed-open / instant-open thay cho open */
+.st-pop[data-state="open"],
+.st-pop[data-state="delayed-open"],
+.st-pop[data-state="instant-open"] {
+  animation: st-pop-in 180ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+.st-pop[data-state="closed"] {
+  animation: st-pop-out 120ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+}
+.st-sheet[data-state="open"] {
+  animation: st-sheet-in 320ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+.st-sheet[data-state="closed"] {
+  animation: st-sheet-out 220ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+}
+
+/* Popup tự viết không qua Radix (không có data-state), chỉ mount/unmount: chạy hiệu ứng mở lúc mount.
+   Mọc lên từ dưới — dùng cho khung nổi phía trên ô nhập (vd. gợi ý lệnh / ở Trợ lý AI). */
+.st-pop-rise {
+  --st-pop-y: 4px;
+  transform-origin: 50% 100%;
+  animation: st-pop-in 180ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-overlay,
+  .st-modal,
+  .st-pop,
+  .st-pop-rise,
+  .st-sheet {
+    animation: none !important;
   }
 }

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PageHeader } from "@/components/app/PageHeader";
 import { useAuth } from "@/lib/auth";
 import { useCurrentProject } from "@/lib/hooks/use-project";
+import { useSlideEnter } from "@/lib/hooks/use-enter-animation";
 import { useTasks } from "@/features/board/hooks";
 import { KanbanBoard } from "@/features/board/KanbanBoard";
 import { TaskListView } from "@/features/tasks/TaskListView";
@@ -59,6 +60,9 @@ function WorkBody() {
 
   const current = WORK_VIEWS.find((v) => v.key === f.view) ?? WORK_VIEWS[0];
   const { focus, toggle, off } = useWorkFocus();
+  // Đổi cách nhìn (Bảng/Danh sách/Timeline…) chỉ đổi ?view= chứ không đổi trang → trượt ngang theo hướng tab vừa bấm.
+  // Theo vị trí view chứ không theo cả URL, để gõ ô tìm kiếm hay đổi bộ lọc không làm nội dung nháy.
+  const viewRef = useSlideEnter<HTMLDivElement>(WORK_VIEWS.findIndex((v) => v.key === f.view), { axis: "x" });
 
   /** Phím F bật/tắt chế độ tập trung — bỏ qua khi đang gõ hoặc đang mở modal/menu. */
   React.useEffect(() => {
@@ -129,11 +133,13 @@ function WorkBody() {
 
       <WorkFilterBar counts={counts} syncing={tasks.isFetching} />
 
-      {f.view === "board" && <KanbanBoard />}
-      {f.view === "list" && <TaskListView />}
-      {f.view === "timeline" && <TimelineGanttView />}
-      {f.view === "eisenhower" && <EisenhowerMatrixView />}
-      {f.view === "backlog" && <BacklogView />}
+      <div ref={viewRef}>
+        {f.view === "board" && <KanbanBoard />}
+        {f.view === "list" && <TaskListView />}
+        {f.view === "timeline" && <TimelineGanttView />}
+        {f.view === "eisenhower" && <EisenhowerMatrixView />}
+        {f.view === "backlog" && <BacklogView />}
+      </div>
 
       {/* Chọn nhiều dùng chung cho Bảng và Danh sách nên thanh hành động đặt ở đây */}
       {(f.view === "board" || f.view === "list" || f.view === "backlog") && <BulkActionBar project={project} tasks={tasks.data ?? []} />}

@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/app/PageHeader";
 import { cn } from "@/lib/utils";
+import { usePageEnter } from "@/lib/hooks/use-enter-animation";
 import { ArrowLeft, Building2, Cpu, Gauge, RefreshCw, ShieldAlert, Users2 } from "lucide-react";
 import { BlastRadiusDrawer } from "./BlastRadiusDrawer";
 
@@ -46,6 +47,8 @@ export interface AiFinOpsCostItem {
 
 export function AdminConsoleView() {
   const auth = useAuth();
+  // /admin nằm ngoài AppShell nên tự gắn hiệu ứng vào trang; key cố định → chỉ chạy lúc vào trang
+  const mainRef = usePageEnter<HTMLElement>("admin");
   const [activeTab, setActiveTab] = React.useState("overview");
   const [stats, setStats] = React.useState<PlatformStats | null>(null);
   const [workspaces, setWorkspaces] = React.useState<AdminWorkspaceItem[]>([]);
@@ -194,7 +197,7 @@ export function AdminConsoleView() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 w-full max-w-screen-2xl mx-auto p-4 sm:p-6 space-y-6">
+      <main ref={mainRef} className="flex-1 w-full max-w-screen-2xl mx-auto p-4 sm:p-6 space-y-6">
         <PageHeader
           title="Quản trị nền tảng"
           description="Giám sát toàn sàn: vòng đời workspace, tài khoản, chi phí AI, hạ tầng và nhật ký kiểm toán."

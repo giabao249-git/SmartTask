@@ -741,7 +741,7 @@ export function AssistantView() {
           <div className="p-3 border-t border-border/60 bg-background flex flex-col gap-1.5 shrink-0">
             {/* Gợi ý lệnh khi gõ / */}
             {showSlashSuggestions && filteredCommands.length > 0 && (
-              <div className="p-1 mb-1 rounded-lg border border-border/70 bg-popover shadow-md space-y-0.5 animate-in fade-in-50 slide-in-from-bottom-1 text-xs">
+              <div className="p-1 mb-1 rounded-lg border border-border/70 bg-popover shadow-md space-y-0.5 st-pop-rise text-xs">
                 <div className="flex items-center justify-between px-2 py-1 text-[10px] text-muted-foreground border-b border-border/40 mb-1">
                   <span className="font-semibold uppercase tracking-wider text-[9px] text-foreground/80">
                     Gợi ý lệnh AI (chọn để điền)

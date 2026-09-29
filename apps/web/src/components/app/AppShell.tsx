@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { ShortcutsDialog } from "@/components/app/ShortcutsDialog";
 import { useModKey } from "@/lib/hooks/use-mod-key";
+import { usePageEnter } from "@/lib/hooks/use-enter-animation";
 import { TaskSearchGroup } from "@/features/search/TaskSearchGroup";
 import { PlatformBanner } from "@/components/app/PlatformBanner";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,8 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  // Chuyển trang: chỉ vùng nội dung chạy hiệu ứng (các khối hiện lần lượt), sidebar/header đứng yên
+  const mainRef = usePageEnter<HTMLElement>(pathname);
 
   // Zen / Arc Sidebar State
   const [isPinned, setIsPinned] = React.useState(false);
@@ -898,7 +901,7 @@ export function AppShell({ children }: AppShellProps) {
         <PlatformBanner />
 
         {/* Page Content Container: max-w-screen-2xl p-6 */}
-        <main className={cn("flex-1 w-full max-w-screen-2xl mx-auto p-4 sm:p-6 space-y-6", isAssistantPage && "space-y-0")}>
+        <main ref={mainRef} className={cn("flex-1 w-full max-w-screen-2xl mx-auto p-4 sm:p-6 space-y-6", isAssistantPage && "space-y-0")}>
           {children}
         </main>
       </div>
