@@ -28,6 +28,9 @@ infra/pgdata/
 .DS_Store
 Thumbs.db
 
+# Agent
+AGENTS.md
+
 # Nhật ký, tạm
 *.log
 npm-debug.log*

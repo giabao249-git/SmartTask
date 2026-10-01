@@ -13,6 +13,7 @@ import { useModKey } from "@/lib/hooks/use-mod-key";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Bot,
+  Inbox,
   Kanban,
   Keyboard,
   Navigation,
@@ -146,6 +147,34 @@ const buildSections = (mod: string): ShortcutSection[] => [
       {
         keys: ["Esc"],
         description: "Bỏ chọn; nếu không chọn gì thì bỏ trỏ thẻ; trong ô tạo nhanh thì đóng ô",
+      },
+    ],
+  },
+  {
+    title: "Danh sách Backlog",
+    icon: Inbox,
+    items: [
+      {
+        keys: ["C"],
+        description: "Mở ô tạo nhanh cho backlog — Enter tạo xong ô vẫn mở cho việc kế tiếp",
+        badge: "Tạo task",
+      },
+      {
+        keys: ["J", "K"],
+        description: "Trỏ xuống / lên việc kế tiếp trong danh sách (hoặc ↓ ↑)",
+      },
+      {
+        keys: ["Enter", "O"],
+        description: "Mở chi tiết việc đang trỏ",
+      },
+      {
+        keys: ["X"],
+        description: "Chọn / bỏ chọn việc đang trỏ để đưa vào sprint hàng loạt",
+        badge: "Hàng loạt",
+      },
+      {
+        keys: ["Esc"],
+        description: "Bỏ chọn; nếu không chọn gì thì bỏ trỏ; trong ô tạo nhanh thì đóng ô",
       },
     ],
   },

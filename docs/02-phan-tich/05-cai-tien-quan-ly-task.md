@@ -609,6 +609,7 @@ gọi tuần tự với giới hạn 50, đo thấy đủ nhanh mà giữ nguyê
 | ✅ | B6 | Swimlane theo người / ưu tiên | M | **đã làm 23/09** |
 | ✅ | B7 | Backlog tách khỏi sprint | M | **đã làm 23/09** |
 | ✅ | B8 | Lọc rỗng vẫn giữ bảng + nút “Xoá bộ lọc” | S |  **đã làm 23/09** |
+| ✅ | B9 | Tạo nhanh inline + phím tắt + tách rỗng ở màn Backlog; nút “Đề xuất phân công” (UC-39); hợp nhất contract `backlog=true` (boolean) và sắp `position` phẳng ở API | S | **đã làm 01/10** — `QuickCreateComposer` tách dùng chung với cột Kanban, `POSITION_STEP` Backlog = 1024 khớp backend |
 | ✅ | C1 | Bộ phím tắt toàn cục kiểu Jira/Linear | M | **đã làm 23/09** |
 | ✅ | C2 | Bảng lệnh (Ctrl/Super + K) tìm & tạo công việc | S | **đã làm 23/09** |
 | ✅ | C3 | Bớt request thừa khi mở Sheet | S |  **đã làm 23/09** |

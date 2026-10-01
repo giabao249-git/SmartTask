@@ -125,7 +125,7 @@ export class TasksService {
           ? {}
           : { parentId: null }),
       ...(q.sprintId ? { sprintId: q.sprintId } : {}),
-      ...(q.backlog === 'true' ? { sprintId: null } : {}),
+      ...(q.backlog ? { sprintId: null } : {}),
       ...(q.columnId ? { columnId: q.columnId } : {}),
       ...(q.priority ? { priority: q.priority } : {}),
       ...(q.type ? { type: q.type } : {}),
@@ -147,7 +147,10 @@ export class TasksService {
     const rows = await this.prisma.task.findMany({
       where,
       select: TASK_LIST_SELECT,
-      orderBy: [{ columnId: 'asc' }, { position: 'asc' }],
+      // Backlog là danh sách phẳng: sắp theo position người dùng; các cách nhìn khác cần theo cột trước
+      orderBy: q.backlog
+        ? [{ position: 'asc' }]
+        : [{ columnId: 'asc' }, { position: 'asc' }],
       take: 1000,
     });
     const items = rows

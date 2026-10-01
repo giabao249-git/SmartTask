@@ -63,6 +63,7 @@ Rà thêm sau đó còn ba endpoint nữa cùng cảnh: `POST /workspaces/:wsId/
 | B6 | Swimlane theo người / ưu tiên | Xem §D. |
 | B7 | Màn Backlog riêng | Cách nhìn thứ năm; kéo xếp thứ tự bằng `position`, đưa vào sprint hàng loạt bằng 1 request. |
 | B8 | **Sửa lỗi** lọc rỗng nuốt mất bảng | Tách hai trạng thái rỗng đúng [docs 10 §2](../04-kien-truc/10-quy-uoc-giao-dien.md): dự án chưa có việc → `EmptyState`; lọc ra 0 → vẫn vẽ đủ cột + `Alert` + nút Xoá bộ lọc. |
+| B9 | Tạo nhanh + phím tắt ở Backlog | Ô tạo nhanh dùng chung `QuickCreateComposer` với cột Kanban (Enter tạo liên tiếp, dán nhiều dòng, cú pháp `@người #nhãn`); việc tạo ra để trống `sprintId` nên nằm trong backlog. Phím tắt C/J/K/X/Enter/Esc kiểu Jira — mục “Danh sách Backlog” trong bảng phím tắt; tách hai trạng thái rỗng như B8; nút **Đề xuất phân công** (UC-39) cho PM/Leader. |
 
 ### Màn chi tiết
 

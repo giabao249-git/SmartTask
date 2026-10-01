@@ -268,10 +268,16 @@ export class DuplicateTaskDto {
 
 export class ListTasksQueryDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() sprintId?: string;
-  @ApiPropertyOptional({ description: '"backlog" = chưa thuộc sprint' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'true = chỉ việc chưa thuộc sprint nào (backlog)',
+  })
   @IsOptional()
-  @IsString()
-  backlog?: string;
+  @Transform(
+    ({ value }: { value: unknown }) => value === 'true' || value === true,
+  )
+  @IsBoolean()
+  backlog?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsUUID() assigneeId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() labelId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() columnId?: string;
