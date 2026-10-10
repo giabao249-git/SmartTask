@@ -337,9 +337,18 @@ export class ChatService {
             sessionId: session.id,
             role: ChatRole.ASSISTANT,
             text: action.reply ?? '',
+            // Tra cứu không tạo proposal, nên bảng mã phải đi cùng tin nhắn — nếu không "Làm mới"
+            // về sau không giải được s2/u4 trong truy vấn đã lưu (docs 14 §5)
             structuredData: (queryResult
-              ? { ...action, queryResult: trimQueryResult(queryResult) }
-              : action) as unknown as Prisma.InputJsonValue,
+              ? {
+                  ...action,
+                  queryResult: trimQueryResult(queryResult),
+                  codeMap: turn.ctx.codes.toJSON(),
+                }
+              : action.type === 'RISK_EXPLANATION'
+                ? // Mở lại phiên vẫn biết mức rủi ro có khớp số backend hay không
+                  { ...action, validation: turn.validation }
+                : action) as unknown as Prisma.InputJsonValue,
             schemaVersion: action.schemaVersion ?? 1,
             parseFailed: !!(action as { parseFailed?: boolean }).parseFailed,
           },
@@ -405,6 +414,7 @@ export class ChatService {
       projectId,
       workspaceId,
       sprintId: ctx.meta.sprintId,
+      sprintIsDefault: true,
     };
     if (action.type === 'UPDATE_TASK_DRAFT' && !action.targetTask) {
       const keys = [
@@ -531,6 +541,25 @@ export class ChatService {
         },
         action: keyed,
         validation: v,
+      };
+    }
+    // Mức rủi ro là SỐ backend tính (docs 05 §4): trong chat cũng kiểm như nhánh EXPLAIN, lệch thì
+    // từ chối (và LLM được gọi lại kèm lỗi) — không để mức do LLM tự chọn hiện ra như sự thật
+    if (action.type === 'RISK_EXPLANATION') {
+      const expected = ctx.facts.forecastRiskLevel;
+      return {
+        staged: { kind: 'none' },
+        action,
+        validation: expected
+          ? this.validator.validateExplain(action, expected)
+          : failed([
+              {
+                path: 'riskLevel',
+                code: 'SPRINT_NOT_ACTIVE',
+                message:
+                  'Chưa có sprint đang chạy hoặc đang chọn — không có mức rủi ro để giải thích',
+              },
+            ]),
       };
     }
     return { staged: { kind: 'none' }, action, validation: null };

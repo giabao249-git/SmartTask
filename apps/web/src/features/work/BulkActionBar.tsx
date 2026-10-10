@@ -31,6 +31,7 @@ import { useSprints } from "@/lib/hooks/queries";
 import type { ProjectDetail, TaskListItem, TaskPriority } from "@/lib/types";
 import { toast } from "sonner";
 import { MAX_BULK, useWorkSelection } from "./selection";
+import { sprintStatusLabel } from "@/lib/status";
 
 /** Một thao tác hàng loạt đã chọn xong tham số, chờ người dùng xác nhận. */
 interface PendingOp {
@@ -239,13 +240,14 @@ export function BulkActionBar({ project, tasks }: { project: ProjectDetail; task
                         ask({
                           label: "Đã đưa vào sprint",
                           detail: `Sprint → ${s.name}`,
-                          // Endpoint riêng cho cả lô: 1 request thay vì n (docs 11 §3.5)
-                          batch: (ids) => api.post(`/sprints/${s.id}/tasks`, { taskIds: ids }),
+                          // PM: endpoint gộp cho cả lô, 1 request thay vì n (docs 11 §3.5 — pj:PM).
+                          // Thành viên: PATCH từng việc mang version (pj:MEMBER) — trước đây gọi endpoint PM rồi 403
+                          batch: project.canManage ? (ids) => api.post(`/sprints/${s.id}/tasks`, { taskIds: ids }) : undefined,
                           run: (t) => mut.update.mutateAsync({ id: t.id, version: t.version, patch: { sprintId: s.id } }),
                         })
                       }
                     >
-                      {s.name} · {s.status}
+                      {s.name} · {sprintStatusLabel(s.status)}
                     </DropdownMenuItem>
                   ))}
                 <DropdownMenuSeparator />

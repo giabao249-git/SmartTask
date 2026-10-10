@@ -34,7 +34,11 @@ Nguồn: `~/Table_Calendar/docs/ai-scheduling-architecture/01-target-architectur
 | [09-cong-nghe.md](09-cong-nghe.md) | Danh mục công nghệ theo lớp, phiên bản, lý do, thay thế; miễn phí ↔ doanh nghiệp; lệnh cài đặt Tuần 07 | Đề cương Mục 5; Chương 1.6; Tuần 07 |
 | [10-quy-uoc-giao-dien.md](10-quy-uoc-giao-dien.md) | shadcn/ui là nguồn duy nhất: ba tầng component, cấm/bắt buộc, token, variant, ESLint chặn phần tử thô, thứ tự việc Frontend Lead | Tuần 06 mockup; Tuần 07–08 |
 | [11-chot-chuc-nang-va-api.md](11-chot-chuc-nang-va-api.md) | **Bản chốt** phạm vi 3 mức (MVP 24 UC / làm nếu kịp theo thứ tự / không làm), quy ước API, 146 operation REST, sự kiện socket, mã lỗi | Đề cương Mục 4, 7; OpenAPI Tuần 06; controller Tuần 07 |
+| [../02-phan-tich/07-cai-tien-sprint-va-intent.md](../02-phan-tich/07-cai-tien-sprint-va-intent.md) | Cải tiến Sprint (trang Sprint, bắt đầu/kết thúc, báo cáo, vận tốc) và tra cứu dữ liệu của Trợ lý AI; đo với Gemini thật (F1–F6) | Chương 4 (kết quả), UC-09/30/31/33/38 |
+| [../02-phan-tich/08-ho-so-ky-nang-tu-bang-chung.md](../02-phan-tich/08-ho-so-ky-nang-tu-bang-chung.md) | Hồ sơ kỹ năng từ bằng chứng thay mức tự khai; ghi giờ, đánh giá, bug gốc; tab Nhân sự | Chương 3 (thuật toán), UC-23/26/35/36 |
 | [12-chat-phien-va-ban-nhap.md](12-chat-phien-va-ban-nhap.md) | Chat theo phiên: danh mục intent, bản nháp lưu server theo phiên (sửa nhiều lượt, duyệt từng phần → xanh lá), khoá chống lạc/chồng lượt, danh tính + chính sách chọn người, API S9, hợp đồng UI rail bản nháp | Backend Phase 8 (chat), màn Trợ lý AI |
+| [13-quan-tri-nen-tang-platform-admin.md](13-quan-tri-nen-tang-platform-admin.md) | Phân hệ quản trị nền tảng (/admin): nhật ký kiểm toán HMAC, chi phí AI, sức khoẻ, bảo trì | Phân hệ Admin |
+| [14-tra-cuu-hoi-dap.md](14-tra-cuu-hoi-dap.md) | Tra cứu dữ liệu trong chat (`DATA_QUERY`): 19 ý định, bộ lọc, khối hiển thị, quyền theo người hỏi | Màn Trợ lý AI; UC-38 |
 
 ## Quy ước
 

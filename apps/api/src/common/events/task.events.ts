@@ -40,6 +40,12 @@ export interface SprintEventPayload {
   sprintId: string;
   actorId: string;
   movedTaskIds?: string[];
+  /** Việc đưa vào sprint đang chạy (scope tăng giữa chừng — mục "thêm sau khi bắt đầu" của báo cáo sprint) */
+  afterStart?: boolean;
+  /** Đóng sprint: việc dở chuyển về đâu (id sprint đích hoặc null = backlog) */
+  movedTo?: string | null;
+  /** Idempotency-Key của lần đóng — bấm lại cùng khoá thì trả kết quả cũ (docs 11 §2) */
+  idempotencyKey?: string;
   at: Date;
 }
 

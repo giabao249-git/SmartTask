@@ -3,17 +3,17 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import { Clock, ExternalLink, Info, RefreshCw, User, CalendarDays, Flag, Link2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, Clock, ExternalLink, Inbox, Info, RefreshCw, User, CalendarDays, Flag, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { EmptyState } from "@/components/app/EmptyState";
 import { api, describeError } from "@/lib/api";
 import type { BadgeVariant } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useRevealCount } from "./Typing";
 import type { BlockBadge, BlockItem, DataQuerySpec, QueryBlock, QueryResult, StatItem } from "@smarttask/shared";
 
 const TONE: Record<NonNullable<BlockBadge["tone"]>, BadgeVariant> = {
@@ -25,6 +25,15 @@ const TONE: Record<NonNullable<BlockBadge["tone"]>, BadgeVariant> = {
   danger: "destructive",
 };
 const ICON = { clock: Clock, user: User, calendar: CalendarDays, flag: Flag, link: Link2 } as const;
+
+/** "2026-09-15" → "15/09" cho nhãn trục biểu đồ; nhãn khác giữ nguyên */
+const axisDate = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v.slice(8, 10)}/${v.slice(5, 7)}` : String(v));
+/** Số trong ô bảng theo kiểu Việt: 397111 → "397.111", 5.4 → "5,4" */
+const cellText = (v: unknown) => (typeof v === "number" ? v.toLocaleString("vi-VN", { maximumFractionDigits: 2 }) : v == null || v === "" ? "—" : String(v));
+/** Bảng dài (BUS_FACTOR 22 dòng) đẩy câu trả lời khỏi màn hình — hiện trước chừng này dòng */
+const TABLE_PREVIEW = 8;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const fmtTime = (iso: string) => {
   const d = new Date(iso);
@@ -41,16 +50,25 @@ export function QueryResultCard({
   query,
   projectId,
   sessionId,
+  messageId,
+  animate = false,
 }: {
   result: QueryResult;
   /** Truy vấn gốc để chạy lại — lưu cùng tin nhắn nên "Làm mới" không cần hỏi LLM. */
   query?: DataQuerySpec;
   projectId: string;
   sessionId?: string | null;
+  /** Tin nhắn chứa truy vấn — backend dùng bảng mã của đúng lượt đó để giải s2/u4 */
+  messageId?: string;
+  /** Tin vừa đến: khối/dòng hiện dần từ trên xuống (kiểu Gemini); tin cũ mở lại thì hiện ngay */
+  animate?: boolean;
 }) {
   const [data, setData] = React.useState(result);
   const [busy, setBusy] = React.useState(false);
   React.useEffect(() => setData(result), [result]);
+  // Khối sau chỉ bắt đầu khi khối trước đã hiện hết dòng; "Làm mới" thì hiện ngay toàn bộ
+  const [shown, setShown] = React.useState(animate ? 1 : Number.MAX_SAFE_INTEGER);
+  const reveal = animate && data === result;
 
   const refresh = async () => {
     setBusy(true);
@@ -59,8 +77,11 @@ export function QueryResultCard({
       const fresh = await api.post<QueryResult>("/ai/query", {
         projectId,
         sessionId: sessionId ?? undefined,
+        // Tin tạm (chưa có id thật từ server) thì không gửi — backend tự lấy bảng mã mới nhất của phiên
+        messageId: messageId && UUID.test(messageId) ? messageId : undefined,
         query,
       });
+      setShown(Number.MAX_SAFE_INTEGER);
       setData(fresh);
     } catch (e) {
       const { code, message } = describeError(e);
@@ -72,34 +93,50 @@ export function QueryResultCard({
 
   return (
     <div className="mt-2 pt-2 border-t border-border/40 space-y-2">
-      {data.blocks.map((b, i) => (
-        <BlockView key={i} block={b} projectId={projectId} />
+      {data.blocks.slice(0, shown).map((b, i) => (
+        <div key={i} className={cn("space-y-1.5", reveal && "st-reveal")}>
+          {/* Một kết quả có nhiều danh sách (báo cáo sprint) thì mỗi khối cần tiêu đề */}
+          {(b.kind === "task_list" || b.kind === "table") && b.title && <p className="text-xs font-semibold text-foreground">{b.title}</p>}
+          <BlockView block={b} projectId={projectId} animate={reveal} onDone={() => setShown((x) => Math.max(x, i + 2))} />
+        </div>
       ))}
 
-      <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground pt-0.5">
-        <Info className="h-3 w-3" />
-        <span>
-          Số liệu lúc {fmtTime(data.generatedAt)} · {data.source.rowCount} bản ghi
-          {data.truncated ? ` · hiện ${data.truncated.shown}/${data.truncated.total}` : ""}
-        </span>
-        {query && (
-          <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] gap-1" disabled={busy} onClick={() => void refresh()}>
-            <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} /> Làm mới
-          </Button>
-        )}
-      </div>
+      {/* Dòng nguồn số liệu hiện sau khi khối CUỐI đã hiện hết (khối cuối báo xong → shown = số khối + 1) */}
+      {shown > data.blocks.length && (
+        <div className={cn("flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground pt-0.5", reveal && "st-reveal")}>
+          <Info className="h-3 w-3" />
+          <span>
+            Số liệu lúc {fmtTime(data.generatedAt)} · {data.source.rowCount} bản ghi
+            {data.truncated ? ` · hiện ${data.truncated.shown}/${data.truncated.total}` : ""}
+          </span>
+          {query && (
+            <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] gap-1" disabled={busy} onClick={() => void refresh()}>
+              <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} /> Làm mới
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function BlockView({ block, projectId }: { block: QueryBlock; projectId: string }) {
+const PROGRESSIVE = new Set(["task_list", "people_list", "activity_list", "agenda", "table", "heatmap"]);
+
+function BlockView({ block, projectId, animate = false, onDone }: { block: QueryBlock; projectId: string; animate?: boolean; onDone?: () => void }) {
   const router = useRouter();
+  // Khối không có dòng (số, biểu đồ, ghi chú) coi như hiện xong sau một nhịp
+  React.useEffect(() => {
+    if (PROGRESSIVE.has(block.kind)) return;
+    const t = setTimeout(() => onDone?.(), animate ? 260 : 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const open = (item: BlockItem | { ref?: { type: string; id: string } }) => {
     const ref = item.ref;
     if (!ref) return;
     if (ref.type === "task") router.push(`/projects/${projectId}/work?task=${ref.id}`);
-    else if (ref.type === "user") router.push(`/projects/${projectId}/people?tab=workload`);
-    else if (ref.type === "sprint") router.push(`/projects/${projectId}/settings?tab=sprints`);
+    else if (ref.type === "user") router.push(`/projects/${projectId}/people?member=${ref.id}`);
+    else if (ref.type === "sprint") router.push(`/projects/${projectId}/sprints?sprint=${ref.id}`);
     else if (ref.type === "notification") router.push(`/settings`);
   };
 
@@ -116,32 +153,10 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
     case "task_list":
     case "people_list":
     case "activity_list":
-      return (
-        <div className="space-y-1.5">
-          {block.items.map((it, i) => (
-            <ItemRow key={i} item={it} onOpen={() => open(it)} />
-          ))}
-        </div>
-      );
+      return <ItemList items={block.items} animate={animate} onDone={onDone} onOpen={open} />;
 
     case "agenda":
-      return (
-        <div className="space-y-2.5">
-          {block.groups.map((g, i) => (
-            <div key={i} className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className={cn("text-[11px] font-semibold", g.tone === "danger" ? "text-destructive" : "text-foreground")}>{g.label}</span>
-                <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono">
-                  {g.items.length}
-                </Badge>
-              </div>
-              {g.items.map((it, j) => (
-                <ItemRow key={j} item={it} onOpen={() => open(it)} />
-              ))}
-            </div>
-          ))}
-        </div>
-      );
+      return <AgendaBlock groups={block.groups} animate={animate} onDone={onDone} onOpen={open} />;
 
     case "person_card":
       return (
@@ -158,119 +173,92 @@ function BlockView({ block, projectId }: { block: QueryBlock; projectId: string 
       );
 
     case "table":
-      return (
-        <div className="overflow-x-auto rounded-md border border-border/60">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {block.columns.map((c) => (
-                  <TableHead key={c.key} className={cn("text-[10px]", c.align === "right" && "text-right", c.align === "center" && "text-center")}>
-                    {c.label}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {block.rows.map((r, i) => (
-                <TableRow key={i} className={cn("text-[11px]", r.ref && "cursor-pointer")} onClick={() => open(r)}>
-                  {block.columns.map((c) => (
-                    <TableCell key={c.key} className={cn(c.align === "right" && "text-right font-mono", c.align === "center" && "text-center")}>
-                      {r.cells[c.key] ?? "—"}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      );
+      return <TableBlock block={block} onOpen={open} animate={animate} onDone={onDone} />;
 
     case "heatmap":
-      return (
-        <div className="overflow-x-auto rounded-md border border-border/60">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-[10px]">Thành viên</TableHead>
-                {block.columns.map((c) => (
-                  <TableHead key={c} className="text-[10px] text-center">
-                    {c}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {block.rows.map((r, i) => (
-                <TableRow key={i} className="text-[11px]">
-                  <TableCell className="whitespace-nowrap">{r.label}</TableCell>
-                  {r.cells.map((cell, j) => (
-                    <TableCell key={j} className="text-center">
-                      <Badge variant={TONE[cell.tone ?? "muted"]} className="text-[10px] font-mono px-1.5 py-0">
-                        {cell.text}
-                      </Badge>
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      );
+      return <HeatmapBlock block={block} animate={animate} onDone={onDone} />;
 
     case "bar_chart": {
-      const config: ChartConfig = { value: { label: block.unit ?? "giá trị", color: "var(--chart-1)" } };
+      const config: ChartConfig = {
+        value: { label: block.unit ?? "giá trị", color: "hsl(var(--chart-1))" },
+        compare: { label: block.compareLabel ?? "so sánh", color: "hsl(var(--chart-2))" },
+      };
+      const paired = block.series.some((p) => p.compare != null);
       return (
-        <ChartContainer config={config} className="h-40 w-full">
-          <BarChart data={block.series} margin={{ left: -24, right: 4 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} />
-            <YAxis allowDecimals={false} fontSize={10} tickLine={false} axisLine={false} />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar dataKey="value" fill="var(--color-value)" radius={4} />
-          </BarChart>
-        </ChartContainer>
+        <div className="space-y-1">
+          <ChartContainer config={config} className="h-40 w-full">
+            <BarChart data={block.series} margin={{ left: -24, right: 4 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} tickFormatter={axisDate} />
+              <YAxis allowDecimals={false} fontSize={10} tickLine={false} axisLine={false} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              {paired && <Bar dataKey="compare" fill="var(--color-compare)" radius={4} />}
+              <Bar dataKey="value" fill="var(--color-value)" radius={4} />
+            </BarChart>
+          </ChartContainer>
+          {paired && (
+            <div className="flex justify-center gap-4 text-[10px] text-muted-foreground">
+              {(["compare", "value"] as const).map((k) => (
+                <span key={k} className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-sm" style={{ background: config[k].color }} />
+                  {config[k].label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       );
     }
 
     case "line_chart": {
       const config: ChartConfig = {
-        value: { label: block.unit ?? "giá trị", color: "var(--chart-1)" },
-        compare: { label: block.compareLabel ?? "so sánh", color: "var(--chart-2)" },
+        value: { label: block.unit ?? "giá trị", color: "hsl(var(--chart-1))" },
+        compare: { label: block.compareLabel ?? "so sánh", color: "hsl(var(--chart-2))" },
       };
       return (
         <ChartContainer config={config} className="h-40 w-full">
           <LineChart data={block.points} margin={{ left: -24, right: 4 }}>
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} tickFormatter={axisDate} minTickGap={16} />
             <YAxis fontSize={10} tickLine={false} axisLine={false} />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Line dataKey="value" stroke="var(--color-value)" dot={false} strokeWidth={2} />
+            <ChartTooltip content={<ChartTooltipContent labelFormatter={axisDate} />} />
+            {block.points.some((p) => p.compare != null) && <Line dataKey="compare" stroke="var(--color-compare)" strokeDasharray="4 4" dot={false} connectNulls />}
+            <Line dataKey="value" stroke="var(--color-value)" dot={{ r: 2 }} strokeWidth={2} connectNulls />
           </LineChart>
         </ChartContainer>
       );
     }
 
     case "note":
-      return (
-        <p className={cn("text-[11px] rounded-md px-2.5 py-1.5", block.tone === "warning" ? "bg-warning/10 text-warning-foreground" : "bg-muted/60 text-muted-foreground")}>
-          {block.text}
-        </p>
-      );
+      return <p className={cn("text-xs rounded-md px-2.5 py-1.5", block.tone === "warning" ? "bg-warning/10 text-warning-foreground" : "bg-muted/60 text-muted-foreground")}>{block.text}</p>;
 
     case "empty":
-      return <EmptyState title={block.title} description={block.description ?? ""} />;
+      // Trước: EmptyState cao 360px viền đứt — một câu "không có gì" chiếm cả màn chat
+      return (
+        <div className="flex items-start gap-2.5 rounded-md border border-dashed border-border/80 bg-background/60 px-3 py-2.5">
+          <Inbox className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="space-y-0.5">
+            <p className="text-xs font-medium text-foreground">{block.title}</p>
+            {block.description && <p className="text-[11px] text-muted-foreground">{block.description}</p>}
+          </div>
+        </div>
+      );
   }
 }
 
 function Stat({ stat }: { stat: StatItem }) {
   return (
     <div className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5">
-      <div className="text-[10px] text-muted-foreground truncate">{stat.label}</div>
-      <div className={cn("text-sm font-semibold tabular-nums", stat.tone === "danger" && "text-destructive", stat.tone === "warning" && "text-warning")}>
-        {stat.value}
+      {/* Cảnh báo = icon vàng cạnh nhãn; chữ vàng trên nền sáng không đạt tương phản AA (docs 10 §6) */}
+      <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
+        {stat.tone === "warning" && <AlertTriangle className="h-3 w-3 shrink-0 text-warning" aria-hidden />}
+        {stat.label}
+      </div>
+      <div className={cn("text-sm font-semibold tabular-nums", stat.tone === "danger" && "text-destructive")}>
+        {cellText(stat.value)}
         {stat.unit ? <span className="text-[10px] font-normal text-muted-foreground ml-0.5">{stat.unit}</span> : null}
       </div>
-      {stat.hint && <div className="text-[9px] text-muted-foreground truncate">{stat.hint}</div>}
+      {stat.hint && <div className="text-[10px] text-muted-foreground truncate">{stat.hint}</div>}
     </div>
   );
 }
@@ -283,28 +271,25 @@ function ItemRow({ item, onOpen }: { item: BlockItem; onOpen: () => void }) {
       tabIndex={clickable ? 0 : undefined}
       onClick={clickable ? onOpen : undefined}
       onKeyDown={clickable ? (e) => e.key === "Enter" && onOpen() : undefined}
-      className={cn(
-        "rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5 space-y-1",
-        clickable && "cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors",
-      )}
+      className={cn("rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5 space-y-1", clickable && "cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors")}
     >
       <div className="flex items-start gap-1.5 flex-wrap">
-        {item.ref?.key && <span className="font-mono text-[10px] text-muted-foreground">{item.ref.key}</span>}
-        <span className="text-[11px] font-medium text-foreground flex-1 min-w-0">{item.title}</span>
+        {item.ref?.key && <span className="font-mono text-[11px] text-muted-foreground">{item.ref.key}</span>}
+        <span className="text-xs font-medium text-foreground flex-1 min-w-0">{item.title}</span>
         {clickable && <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />}
       </div>
-      {item.subtitle && <p className="text-[10px] text-muted-foreground line-clamp-2">{item.subtitle}</p>}
+      {item.subtitle && <p className="text-[11px] text-muted-foreground line-clamp-2">{item.subtitle}</p>}
       {(item.badges?.length || item.meta?.length) && (
         <div className="flex items-center gap-1.5 flex-wrap">
           {item.badges?.map((b, i) => (
-            <Badge key={i} variant={TONE[b.tone ?? "muted"]} className="text-[9px] px-1 py-0">
+            <Badge key={i} variant={TONE[b.tone ?? "muted"]} className="text-[10px] px-1.5 py-0">
               {b.text}
             </Badge>
           ))}
           {item.meta?.map((m, i) => {
             const Icon = m.icon ? ICON[m.icon] : null;
             return (
-              <span key={i} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+              <span key={i} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                 {Icon && <Icon className="h-3 w-3" />}
                 {m.text}
               </span>
@@ -312,6 +297,128 @@ function ItemRow({ item, onOpen }: { item: BlockItem; onOpen: () => void }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+type TableQueryBlock = Extract<QueryBlock, { kind: "table" }>;
+
+function TableBlock({ block, onOpen, animate, onDone }: { block: TableQueryBlock; onOpen: (r: TableQueryBlock["rows"][number]) => void; animate: boolean; onDone?: () => void }) {
+  const [all, setAll] = React.useState(false);
+  const preview = all ? block.rows : block.rows.slice(0, TABLE_PREVIEW);
+  const n = useRevealCount(preview.length, animate, 70, onDone);
+  const rows = preview.slice(0, n);
+  const hidden = block.rows.length - rows.length;
+  return (
+    <div className="space-y-1">
+      <div className="overflow-x-auto rounded-md border border-border/60">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {block.columns.map((c) => (
+                <TableHead key={c.key} className={cn("text-[11px] h-8", c.align === "right" && "text-right", c.align === "center" && "text-center")}>
+                  {c.label}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r, i) => (
+              <TableRow key={i} className={cn("text-xs", r.ref && "cursor-pointer", animate && "st-reveal")} onClick={() => onOpen(r)}>
+                {block.columns.map((c) => (
+                  // Số căn phải bằng tabular-nums (không dùng font mono: lệch kiểu chữ với phần còn lại của bảng)
+                  <TableCell key={c.key} className={cn("py-1.5", c.align === "right" && "text-right tabular-nums whitespace-nowrap", c.align === "center" && "text-center")}>
+                    {cellText(r.cells[c.key])}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      {block.rows.length > TABLE_PREVIEW && n >= preview.length && (
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] gap-1 text-muted-foreground" onClick={() => setAll((v) => !v)}>
+          <ChevronDown className={cn("h-3 w-3 transition-transform", all && "rotate-180")} />
+          {all ? "Thu gọn" : `Xem thêm ${hidden} dòng`}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+type ItemsOpen = (item: BlockItem) => void;
+
+function ItemList({ items, animate, onDone, onOpen }: { items: BlockItem[]; animate: boolean; onDone?: () => void; onOpen: ItemsOpen }) {
+  const n = useRevealCount(items.length, animate, 90, onDone);
+  return (
+    <div className="space-y-1.5">
+      {items.slice(0, n).map((it, i) => (
+        <div key={i} className={cn(animate && "st-reveal")}>
+          <ItemRow item={it} onOpen={() => onOpen(it)} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type AgendaGroups = Extract<QueryBlock, { kind: "agenda" }>["groups"];
+
+function AgendaBlock({ groups, animate, onDone, onOpen }: { groups: AgendaGroups; animate: boolean; onDone?: () => void; onOpen: ItemsOpen }) {
+  // Dàn phẳng (nhãn nhóm + từng việc) để hiện dần theo đúng thứ tự đọc
+  const flat = groups.flatMap((g, gi) => [{ g, gi, item: null as BlockItem | null }, ...g.items.map((item) => ({ g, gi, item }))]);
+  const n = useRevealCount(flat.length, animate, 90, onDone);
+  return (
+    <div className="space-y-1.5">
+      {flat.slice(0, n).map((x, i) =>
+        x.item ? (
+          <div key={i} className={cn(animate && "st-reveal")}>
+            <ItemRow item={x.item} onOpen={() => onOpen(x.item!)} />
+          </div>
+        ) : (
+          <div key={i} className={cn("flex items-center gap-2", x.gi > 0 && "pt-1", animate && "st-reveal")}>
+            <span className={cn("text-xs font-semibold", x.g.tone === "danger" ? "text-destructive" : "text-foreground")}>{x.g.label}</span>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 tabular-nums">
+              {x.g.items.length}
+            </Badge>
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
+type HeatmapQueryBlock = Extract<QueryBlock, { kind: "heatmap" }>;
+
+function HeatmapBlock({ block, animate, onDone }: { block: HeatmapQueryBlock; animate: boolean; onDone?: () => void }) {
+  const n = useRevealCount(block.rows.length, animate, 80, onDone);
+  return (
+    <div className="overflow-x-auto rounded-md border border-border/60">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="text-[11px]">Thành viên</TableHead>
+            {block.columns.map((c) => (
+              <TableHead key={c} className="text-[11px] text-center">
+                {c}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {block.rows.slice(0, n).map((r, i) => (
+            <TableRow key={i} className={cn("text-xs", animate && "st-reveal")}>
+              <TableCell className="whitespace-nowrap">{r.label}</TableCell>
+              {r.cells.map((cell, j) => (
+                <TableCell key={j} className="text-center">
+                  <Badge variant={TONE[cell.tone ?? "muted"]} className="text-[11px] tabular-nums px-1.5 py-0">
+                    {cell.text}
+                  </Badge>
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

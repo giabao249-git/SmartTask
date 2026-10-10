@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AtSign, ChevronDown, Download, FileText, History, Loader2, Maximize2, MessageSquare, Paperclip, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { AtSign, ChevronDown, Clock, Download, FileText, History, Loader2, Maximize2, MessageSquare, Paperclip, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { ActivityList } from "@/features/activity/ActivityList";
 import { useTasks } from "@/features/board/hooks";
 import { Badge } from "@/components/ui/badge";
@@ -21,8 +21,10 @@ import { UserAvatar } from "@/components/app/UserAvatar";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
 import { describeError } from "@/lib/api";
 import type { ProjectDetail, TaskDetail, TaskListItem, TaskPriority, TaskType } from "@/lib/types";
-import { TASK_TYPES, typeToHint, typeToLabel } from "@/lib/status";
+import { TASK_TYPES, sprintStatusLabel, typeToHint, typeToLabel } from "@/lib/status";
+import { useSprints } from "@/lib/hooks/queries";
 import { TaskTypeBadge } from "./TaskTypeBadge";
+import { DerivedBugs, OriginPicker, ReviewCard, WorklogPanel } from "./TaskWorklog";
 import { AssigneePicker, LabelPicker, SkillPicker } from "./TaskFieldPickers";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -114,6 +116,7 @@ export function TaskDetailBody({
   onOpenFullPage?: () => void;
 }) {
   const m = useTaskMutations(project.id);
+  const sprints = useSprints(project.id);
   const [title, setTitle] = React.useState(task.title);
   const [description, setDescription] = React.useState(task.description ?? "");
   React.useEffect(() => {
@@ -235,6 +238,9 @@ export function TaskDetailBody({
           />
         </Field>
 
+        <ReviewCard task={task} project={project} />
+        <DerivedBugs task={task} projectId={project.id} />
+
         <Separator />
 
         <Tabs defaultValue="subtasks">
@@ -247,6 +253,9 @@ export function TaskDetailBody({
             </TabsTrigger>
             <TabsTrigger value="files" className="text-xs gap-1">
               <Paperclip className="h-3 w-3" /> Đính kèm ({task.attachmentCount})
+            </TabsTrigger>
+            <TabsTrigger value="worklog" className="text-xs gap-1">
+              <Clock className="h-3 w-3" /> Giờ làm
             </TabsTrigger>
             <TabsTrigger value="activity" className="text-xs gap-1">
               <History className="h-3 w-3" /> Hoạt động
@@ -290,6 +299,9 @@ export function TaskDetailBody({
                 </Button>
               </form>
             )}
+          </TabsContent>
+          <TabsContent value="worklog" className="pt-2">
+            <WorklogPanel task={task} project={project} />
           </TabsContent>
           <TabsContent value="comments" className="pt-2">
             <CommentsPanel taskId={task.id} project={project} />
@@ -346,12 +358,15 @@ export function TaskDetailBody({
                   <SelectItem value="__backlog" className="text-xs">
                     Backlog
                   </SelectItem>
-                  {project.activeSprint && (
-                    <SelectItem value={project.activeSprint.id} className="text-xs">
-                      {project.activeSprint.name} (đang chạy)
-                    </SelectItem>
-                  )}
-                  {task.sprint && task.sprint.id !== project.activeSprint?.id && (
+                  {/* Mọi sprint chưa đóng — trước đây chỉ có sprint đang chạy nên không lên kế hoạch được cho sprint sau */}
+                  {(sprints.data ?? [])
+                    .filter((s) => s.status !== "CLOSED")
+                    .map((s) => (
+                      <SelectItem key={s.id} value={s.id} className="text-xs">
+                        {s.name} · {sprintStatusLabel(s.status)}
+                      </SelectItem>
+                    ))}
+                  {task.sprint && !(sprints.data ?? []).some((s) => s.id === task.sprint?.id && s.status !== "CLOSED") && (
                     <SelectItem value={task.sprint.id} className="text-xs">
                       {task.sprint.name}
                     </SelectItem>
@@ -414,7 +429,7 @@ export function TaskDetailBody({
           <PropGroup
             title="Phân loại & liên kết"
             collapsible
-            count={[task.labels.length, task.requiredSkills.length, task.dependsOnIds.length].filter(Boolean).length}
+            count={[task.labels.length, task.requiredSkills.length, task.dependsOnIds.length, task.origin ? 1 : 0].filter(Boolean).length}
           >
             <Field label="Loại công việc" saving={isSaving("type")}>
               <Select
@@ -434,6 +449,11 @@ export function TaskDetailBody({
                 </SelectContent>
               </Select>
             </Field>
+            {task.type === "BUG" && (
+              <Field label="Sinh ra từ việc" saving={isSaving("originTaskId")}>
+                <OriginPicker task={task} project={project} disabled={!project.canEdit || isSaving("originTaskId")} onChange={(id) => patch({ originTaskId: id }, "Gắn việc gốc")} />
+              </Field>
+            )}
             <Field label="Nhãn" saving={isSaving("labels")}>
               <LabelPicker
                 value={task.labels.map((l) => l.id)}

@@ -29,7 +29,7 @@ export function ProjectSettingsView() {
           <AlertDescription className="text-[11px]">Chỉ đọc; mở lại ở tab Chung.</AlertDescription>
         </Alert>
       )}
-      <Tabs defaultValue={params.get("tab") ?? "sprints"} className="space-y-4">
+      <Tabs defaultValue={params.get("tab") ?? "columns"} className="space-y-4">
         <TabsList className="grid w-full lg:w-[720px] grid-cols-5">
           <TabsTrigger value="sprints" className="text-xs gap-1.5">
             <Flag className="h-3.5 w-3.5" /> Sprint

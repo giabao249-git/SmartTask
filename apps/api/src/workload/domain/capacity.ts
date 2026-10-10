@@ -148,6 +148,32 @@ export function weekCapacity(
   };
 }
 
+/**
+ * Năng lực hiệu dụng trong khoảng ngày [from, to] — cùng công thức EffCap của `weekCapacity` (docs 04 §3:
+ * Base − họp − nghỉ − admin), chỉ khác là cộng theo từng ngày làm việc để khớp cửa sổ sprint.
+ * Chưa trừ việc đã nhận ở dự án khác: đây là NĂNG LỰC, không phải giờ trống.
+ */
+export function capacityInRange(
+  from: Date,
+  to: Date,
+  baseHours: number,
+  events: BusyEvent[],
+  offs: TimeOff[],
+  cal: WorkCalendar,
+  wh: WorkHours,
+  adminOverhead: number,
+): number {
+  const perDay = hoursPerDay(baseHours, cal);
+  let total = 0;
+  for (const day of daysBetween(from, to)) {
+    if (!isWorkday(day, cal)) continue;
+    const off = timeOffHoursOnDay(day, offs, perDay);
+    const busy = Math.min(perDay - off, busyHoursOnDay(day, events, wh));
+    total += Math.max(0, perDay - off - busy - adminOverhead * perDay);
+  }
+  return round2(total);
+}
+
 export function freeHoursOnDay(
   day: Date,
   baseHours: number,

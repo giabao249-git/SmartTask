@@ -8,6 +8,7 @@ import {
 import { toDate, weekStartOf, workdaysBetween } from './calendar';
 import {
   busyHoursOnDay,
+  capacityInRange,
   focusBlocksOnDay,
   freeHoursOnDay,
   weekCapacity,
@@ -122,7 +123,13 @@ describe('hệ số (docs 04 §2–3)', () => {
     expect(skillGapFactor(lv, [{ skillId: 'react', minLevel: 3 }])).toBe(1);
     expect(skillGapFactor(lv, [{ skillId: 'react', minLevel: 4 }])).toBe(1.15);
     expect(skillGapFactor(lv, [{ skillId: 'nest', minLevel: 3 }])).toBe(1.3);
-    expect(skillGapFactor(lv, [{ skillId: 'docker', minLevel: 1 }])).toBe(1.3);
+    // chưa có bằng chứng về docker → trung tính; có bằng chứng mức 0 → thiếu 2 bậc
+    expect(skillGapFactor(lv, [{ skillId: 'docker', minLevel: 1 }])).toBe(1);
+    expect(
+      skillGapFactor(new Map([['docker', 0]]), [
+        { skillId: 'docker', minLevel: 1 },
+      ]),
+    ).toBe(1.3);
     expect(switchPenalty(1)).toBe(1);
     expect(switchPenalty(3)).toBeCloseTo(1.1);
   });
@@ -177,6 +184,51 @@ describe('năng lực hiệu dụng (docs 04 §3, §5)', () => {
     expect(c.timeOffHours).toBe(12);
     expect(c.meetingHours).toBe(2);
     expect(c.effCapacityHours).toBe(22);
+  });
+  it('năng lực theo khoảng ngày = EffCap của tuần khi khoảng trùng tuần; khoảng lẻ tính đúng ngày làm việc', () => {
+    const offs = [
+      {
+        fromDate: toDate('2026-10-13'),
+        toDate: toDate('2026-10-13'),
+        kind: 'PARTIAL' as const,
+        hoursPerDay: 4,
+      },
+    ];
+    const events = [ev('2026-10-14T09:00:00Z', '2026-10-14T11:00:00Z')];
+    const week = weekCapacity(
+      toDate('2026-10-12'),
+      40,
+      events,
+      offs,
+      cal,
+      wh,
+      0.1,
+    );
+    expect(
+      capacityInRange(
+        toDate('2026-10-12'),
+        toDate('2026-10-18'),
+        40,
+        events,
+        offs,
+        cal,
+        wh,
+        0.1,
+      ),
+    ).toBe(week.effCapacityHours);
+    // T4–T6 (ba ngày làm việc, không nghỉ; T4 có 2 h họp): 3 × (8 − 0,8) − 2
+    expect(
+      capacityInRange(
+        toDate('2026-10-14'),
+        toDate('2026-10-16'),
+        40,
+        events,
+        offs,
+        cal,
+        wh,
+        0.1,
+      ),
+    ).toBe(19.6);
   });
   it('EffCap ≤ 0 → mức sử dụng vô cực = quá tải; ngưỡng 70/90/110', () => {
     const t = { high: 0.7, full: 0.9, overload: 1.1 };
@@ -320,7 +372,8 @@ describe('burnout, khớp kỹ năng, công bằng', () => {
     );
     expect(m.items.map((i) => i.ratio)).toEqual([1, 0.5, 0]);
     expect(m.avg).toBe(0.5);
-    expect(m.missing).toEqual(['Docker']);
+    expect(m.missing).toEqual([]);
+    expect(m.unproven).toEqual(['Docker']);
   });
   it('Spread = max − median', () => {
     expect(spreadOf([0.4, 0.62, 1.05])).toBe(0.43);

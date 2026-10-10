@@ -42,7 +42,7 @@ export function NotificationsPanel({ compact = false, onNavigate }: { compact?: 
 
   const open = (n: NotificationView) => {
     if (!n.isRead) mut.markRead.mutate(n.id);
-    const link = n.link ?? (typeof n.data?.projectId === "string" ? `/projects/${n.data.projectId}/work${typeof n.data.taskId === "string" ? `?task=${n.data.taskId}` : ""}` : null);
+    const link = linkOf(n);
     if (link) {
       onNavigate?.();
       router.push(link);
@@ -98,6 +98,24 @@ export function NotificationsPanel({ compact = false, onNavigate }: { compact?: 
       </ScrollArea>
     </div>
   );
+}
+
+/**
+ * Đường dẫn để mở một thông báo. Thông báo lưu trước 28/09 mang link `/p/ST/t/ST-6`, `/p/ST/sprints` —
+ * web không có route `/p` (404) nên đổi sang route thật nhờ `data.projectId`.
+ */
+function linkOf(n: NotificationView): string | null {
+  const pid = typeof n.data?.projectId === "string" ? n.data.projectId : null;
+  const l = n.link;
+  if (l?.startsWith("/p/")) {
+    if (!pid) return null;
+    const task = /^\/p\/[^/]+\/t\/([A-Za-z0-9]+-\d+)(#.*)?$/.exec(l);
+    if (task) return `/projects/${pid}/tasks/${task[1]}${task[2] ?? ""}`;
+    if (/^\/p\/[^/]+\/sprints/.test(l)) return `/projects/${pid}/sprints${typeof n.data?.sprintId === "string" ? `?sprint=${n.data.sprintId}` : ""}`;
+    return `/projects/${pid}/dashboard`;
+  }
+  if (l) return l;
+  return pid ? `/projects/${pid}/work${typeof n.data?.taskId === "string" ? `?task=${n.data.taskId}` : ""}` : null;
 }
 
 /** Số chưa đọc cho chuông — AppShell dùng. */

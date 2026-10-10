@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, TaskType } from '@prisma/client';
+import { ACTIVITY_ACTION_LABEL, sprintActivityDetail } from '@smarttask/shared';
 import type {
   BlockItem,
   DataQuerySpec,
@@ -15,6 +16,14 @@ import { ProjectAccessService } from '../../common/access/project-access.service
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.schema';
 import { WorkloadService } from '../../workload/workload.service';
+import { evidenceText } from '../../metrics/domain/skill-evidence';
+import { SkillEvidenceService } from '../../metrics/skill-evidence.service';
+import { remainingOf } from '../../workload/domain/allocation';
+import {
+  ForecastService,
+  type ForecastCause,
+} from '../../forecast/forecast.service';
+import { SprintsService } from '../../sprints/sprints.service';
 import { CodeBook } from '../context/short-codes';
 
 const DAY = 86_400_000;
@@ -38,6 +47,72 @@ const TYPE_LABEL: Record<string, string> = {
   TASK: 'Task',
   BUG: 'Bug',
 };
+
+const SPRINT_STATUS_LABEL: Record<string, string> = {
+  PLANNED: 'Kế hoạch',
+  ACTIVE: 'Đang chạy',
+  CLOSED: 'Đã đóng',
+};
+const RISK_LABEL: Record<string, string> = {
+  LOW: 'Thấp',
+  MEDIUM: 'Trung bình',
+  HIGH: 'Cao',
+  UNKNOWN: 'Chưa rõ',
+};
+const RISK_TONE: Record<string, 'success' | 'warning' | 'danger' | 'muted'> = {
+  LOW: 'success',
+  MEDIUM: 'warning',
+  HIGH: 'danger',
+  UNKNOWN: 'muted',
+};
+/** Nguyên nhân đo được của ForecastService (docs 04 §8) bằng lời — số vẫn là số backend đếm. */
+const CAUSE_LABEL: Record<ForecastCause['code'], (n: number) => string> = {
+  OVERDUE: (n) => `${n} việc quá hạn`,
+  UNASSIGNED: (n) => `${n} việc chưa giao`,
+  OVERLOADED_MEMBER: (n) => `${n} người quá tải`,
+  BLOCKED: (n) => `${n} việc bị chặn`,
+  BIG_NOT_STARTED: (n) => `${n} việc lớn (> 16 h) chưa bắt đầu`,
+  SCOPE_CREEP: (n) => `phạm vi tăng > 10 % trong ${n} ngày`,
+};
+const round1 = (n: number) => Math.round(n * 10) / 10;
+const ROLE_LABEL: Record<string, string> = {
+  PM: 'PM',
+  MEMBER: 'Thành viên',
+};
+/** Kỹ năng có bằng chứng đạt ít nhất mức 1, xếp mức cao trước */
+const proven = <T extends { level: number; confidence: string }>(xs?: T[]) =>
+  (xs ?? [])
+    .filter((x) => x.confidence !== 'none' && x.level > 0)
+    .sort((a, b) => b.level - a.level);
+const PURPOSE_LABEL: Record<string, string> = {
+  CHAT: 'Trò chuyện',
+  DECOMPOSE: 'Phân rã yêu cầu',
+  EXPLAIN: 'Giải thích rủi ro',
+  ASSIGN: 'Gợi ý giao việc',
+  GENERAL: 'Chung',
+};
+const FILTER_LABEL: Record<string, string> = {
+  assignee: 'người thực hiện',
+  user: 'người',
+  status: 'trạng thái',
+  taskType: 'loại việc',
+  priority: 'ưu tiên',
+  dueRange: 'hạn',
+  q: 'từ khoá',
+  range: 'khoảng thời gian',
+  sprint: 'sprint',
+};
+
+/** 00:00 của ngày chứa `d` theo múi giờ `tz`, trả về mốc UTC — để "hôm nay/hôm qua" khớp giờ người hỏi. */
+function startOfLocalDay(d: Date, tz: string): Date {
+  const local = new Date(d.toLocaleString('en-US', { timeZone: tz }));
+  const offset =
+    local.getTime() -
+    new Date(d.toLocaleString('en-US', { timeZone: 'UTC' })).getTime();
+  return new Date(
+    Date.UTC(local.getFullYear(), local.getMonth(), local.getDate()) - offset,
+  );
+}
 
 /** Trần kích thước kết quả lưu kèm tin nhắn — tránh phình bảng chat_messages và prompt lượt sau. */
 const MAX_RESULT_BYTES = 48_000;
@@ -89,6 +164,14 @@ export function trimQueryResult(result: QueryResult): QueryResult {
 const num = (v: unknown): number => (v == null ? 0 : Number(v));
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
+/** Chữ hiển thị theo kiểu Việt (docs 10): 13.6 → "13,6", 397111 → "397.111"; ngày → "25/09" */
+const vn = (v: unknown, digits = 1) =>
+  num(v).toLocaleString('vi-VN', { maximumFractionDigits: digits });
+const hrs = (v: unknown) => `${vn(v)} h`;
+const dm = (d: Date | string) => {
+  const s = typeof d === 'string' ? d.slice(0, 10) : iso(d);
+  return `${s.slice(8, 10)}/${s.slice(5, 7)}`;
+};
 const startOfDay = (d: Date) =>
   new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 /** Thứ Hai của tuần chứa `d` (giờ UTC). */
@@ -118,6 +201,8 @@ const INTENT_PERMISSION: Record<QueryIntent, 'read' | 'manage'> = {
   BUS_FACTOR: 'read',
   SPRINT_LIST: 'read',
   SPRINT_PROGRESS: 'read',
+  SPRINT_REPORT: 'read',
+  SPRINT_VELOCITY: 'read',
   ACTIVITY_FEED: 'read',
   NOTIFICATION_LIST: 'read',
   AI_USAGE: 'manage', // sổ token là dữ liệu quản trị
@@ -137,6 +222,8 @@ export interface QueryContext {
   /** Bảng mã của phiên chat; thiếu thì nạp lại từ phiên (nút "Làm mới" gọi sau nhiều ngày). */
   codes?: CodeBook | null;
   sessionId?: string;
+  /** Tin nhắn chứa truy vấn gốc — bảng mã của đúng lượt đó được ưu tiên */
+  messageId?: string;
 }
 
 /**
@@ -153,6 +240,9 @@ export class AiQueryService {
     private readonly access: ProjectAccessService,
     private readonly workload: WorkloadService,
     private readonly config: ConfigService<Env, true>,
+    private readonly sprintsSvc: SprintsService,
+    private readonly forecast: ForecastService,
+    private readonly evidence: SkillEvidenceService,
   ) {}
 
   private assertRate(userId: string): void {
@@ -200,9 +290,19 @@ export class AiQueryService {
         ],
       };
 
-    if (HEAVY_INTENTS.includes(spec.intent))
-      return this.withTimeout(this.dispatch(spec, ctx, acc, at, base), base);
-    return this.dispatch(spec, ctx, acc, at, base);
+    const result = HEAVY_INTENTS.includes(spec.intent)
+      ? await this.withTimeout(this.dispatch(spec, ctx, acc, at, base), base)
+      : await this.dispatch(spec, ctx, acc, at, base);
+    // Bộ lọc có nghĩa bị cắt vì không thuộc ý định → nói ra, không lặng lẽ trả kết quả rộng hơn câu hỏi
+    if (spec.ignoredFilters?.length)
+      result.blocks.push({
+        kind: 'note',
+        tone: 'warning',
+        text: `Loại câu hỏi này không lọc được theo ${spec.ignoredFilters
+          .map((k) => FILTER_LABEL[k] ?? k)
+          .join(', ')} — kết quả dưới đây chưa áp dụng điều kiện đó.`,
+      });
+    return result;
   }
 
   /** Quá hạn thì trả ghi chú thay vì treo lượt chat (khoá phiên đang giữ). */
@@ -279,7 +379,11 @@ export class AiQueryService {
       case 'SPRINT_LIST':
         return { ...base, ...(await this.sprints(ctx)) };
       case 'SPRINT_PROGRESS':
-        return { ...base, ...(await this.sprintProgress(spec, ctx, at)) };
+        return { ...base, ...(await this.sprintProgress(spec, ctx)) };
+      case 'SPRINT_REPORT':
+        return { ...base, ...(await this.sprintReport(spec, ctx)) };
+      case 'SPRINT_VELOCITY':
+        return { ...base, ...(await this.sprintVelocity(spec, ctx)) };
       case 'ACTIVITY_FEED':
         return { ...base, ...(await this.activity(spec, ctx)) };
       case 'NOTIFICATION_LIST':
@@ -293,17 +397,43 @@ export class AiQueryService {
   }
 
   /**
-   * Nút "Làm mới" chạy lại truy vấn cũ: mã ngắn trong truy vấn chỉ có nghĩa theo bảng mã của phiên,
-   * nên nạp lại `code_map` mới nhất của phiên đó (phiên của người khác → không nạp).
+   * Nút "Làm mới" chạy lại truy vấn cũ: mã ngắn trong truy vấn chỉ có nghĩa theo bảng mã của lượt đã
+   * sinh ra nó. Thứ tự: bảng mã lưu trong chính tin nhắn đó → tin tra cứu mới nhất của phiên → proposal
+   * mới nhất (phiên có phân rã/nháp). Chỉ phiên của chính người hỏi.
    */
   private async codesOfSession(ctx: QueryContext): Promise<CodeBook | null> {
     if (!ctx.sessionId) return null;
-    const row = await this.prisma.aiProposal.findFirst({
-      where: { sessionId: ctx.sessionId, session: { userId: ctx.userId } },
-      orderBy: { createdAt: 'desc' },
-      select: { codeMap: true },
-    });
-    return row?.codeMap ? CodeBook.from(row.codeMap as never) : null;
+    const own = { sessionId: ctx.sessionId, session: { userId: ctx.userId } };
+    const mapOf = (sd: unknown) =>
+      sd && typeof sd === 'object' && 'codeMap' in sd
+        ? ((sd as { codeMap?: unknown }).codeMap ?? null)
+        : null;
+    if (ctx.messageId) {
+      const msg = await this.prisma.chatMessage.findFirst({
+        where: { id: ctx.messageId, ...own },
+        select: { structuredData: true },
+      });
+      const map = mapOf(msg?.structuredData);
+      if (map) return CodeBook.from(map as never);
+    }
+    const [msgs, proposal] = await Promise.all([
+      this.prisma.chatMessage.findMany({
+        where: { ...own, role: 'ASSISTANT' },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { structuredData: true, createdAt: true },
+      }),
+      this.prisma.aiProposal.findFirst({
+        where: own,
+        orderBy: { createdAt: 'desc' },
+        select: { codeMap: true, createdAt: true },
+      }),
+    ]);
+    const msg = msgs.find((m) => mapOf(m.structuredData));
+    const fromMsg = msg ? mapOf(msg.structuredData) : null;
+    if (fromMsg && (!proposal?.codeMap || msg!.createdAt >= proposal.createdAt))
+      return CodeBook.from(fromMsg as never);
+    return proposal?.codeMap ? CodeBook.from(proposal.codeMap as never) : null;
   }
 
   // ── Giải mã tham chiếu ─────────────────────────────────────
@@ -352,9 +482,14 @@ export class AiQueryService {
   ): { from?: Date; to?: Date; overdue?: boolean; noDue?: boolean } {
     const r = spec.filters.dueRange;
     if (!r) return {};
+    // Lịch việc "hôm nay/tuần này tôi làm gì": việc CHƯA XONG đã quá hạn vẫn là việc phải làm — đo 28/09 với Gemini,
+    // Huy có 3 việc quá hạn mà câu trả lời là "không có việc". Nhóm "Quá hạn · dd/mm" đã có sẵn trong khối agenda.
+    const carryOverdue =
+      spec.intent === 'TASK_AGENDA' &&
+      (spec.filters.status ?? 'OPEN') === 'OPEN';
     if (r.preset === 'TODAY')
       return {
-        from: startOfDay(at),
+        from: carryOverdue ? undefined : startOfDay(at),
         to: new Date(startOfDay(at).getTime() + DAY - 1),
       };
     if (r.preset === 'TOMORROW') {
@@ -363,7 +498,10 @@ export class AiQueryService {
     }
     if (r.preset === 'THIS_WEEK') {
       const s = startOfWeek(at);
-      return { from: s, to: new Date(s.getTime() + 7 * DAY - 1) };
+      return {
+        from: carryOverdue ? undefined : s,
+        to: new Date(s.getTime() + 7 * DAY - 1),
+      };
     }
     if (r.preset === 'NEXT_WEEK') {
       const s = new Date(startOfWeek(at).getTime() + 7 * DAY);
@@ -512,12 +650,12 @@ export class AiQueryService {
             ? [
                 {
                   icon: 'clock' as const,
-                  text: `${num(r.remainingHours)}h còn lại`,
+                  text: `${hrs(r.remainingHours)} còn lại`,
                 },
               ]
             : []),
           ...(r.dueDate
-            ? [{ icon: 'calendar' as const, text: `hạn ${iso(r.dueDate)}` }]
+            ? [{ icon: 'calendar' as const, text: `hạn ${dm(r.dueDate)}` }]
             : []),
           ...(blockers.length
             ? [{ icon: 'link' as const, text: `chờ ${blockers.join(', ')}` }]
@@ -539,21 +677,44 @@ export class AiQueryService {
     };
 
     if (spec.intent === 'TASK_STATS') {
+      // Thống kê phải tính trên TOÀN BỘ tập khớp lọc — `limit` chỉ dành cho danh sách hiển thị
+      const all = await this.prisma.task.findMany({
+        where,
+        select: {
+          id: true,
+          priority: true,
+          dueDate: true,
+          startDate: true,
+          createdAt: true,
+          completedAt: true,
+          progress: true,
+          remainingHours: true,
+          estimateHours: true,
+          column: { select: { name: true } },
+          _count: { select: { assignees: true } },
+        },
+      });
       const byColumn = new Map<string, number>();
       const byPriority = new Map<string, number>();
       let overdue = 0;
       let unassigned = 0;
       let hours = 0;
-      for (const r of rows) {
+      for (const r of all) {
         byColumn.set(r.column.name, (byColumn.get(r.column.name) ?? 0) + 1);
         byPriority.set(r.priority, (byPriority.get(r.priority) ?? 0) + 1);
         if (!r.completedAt && r.dueDate && r.dueDate.getTime() < today)
           overdue += 1;
-        if (r.assignees.length === 0) unassigned += 1;
-        hours += num(r.remainingHours) || num(r.estimateHours);
+        if (r._count.assignees === 0) unassigned += 1;
+        // Cùng cách tính "còn lại" với burn-down/forecast (docs 04 §1)
+        hours += remainingOf({
+          ...r,
+          estimateHours: r.estimateHours === null ? null : num(r.estimateHours),
+          remainingHours:
+            r.remainingHours === null ? null : num(r.remainingHours),
+        });
       }
       const stats: StatItem[] = [
-        { label: 'Công việc', value: total },
+        { label: 'Công việc', value: all.length },
         {
           label: 'Quá hạn',
           value: overdue,
@@ -705,7 +866,7 @@ export class AiQueryService {
                   .join(', ') || 'chưa giao',
             },
             ...(t.dueDate
-              ? [{ icon: 'calendar' as const, text: `hạn ${iso(t.dueDate)}` }]
+              ? [{ icon: 'calendar' as const, text: `hạn ${dm(t.dueDate)}` }]
               : []),
             ...(t.skills.length
               ? [
@@ -758,11 +919,6 @@ export class AiQueryService {
               select: { title: true, department: true },
               take: 1,
             },
-            userSkills: {
-              select: { level: true, skill: { select: { name: true } } },
-              orderBy: { level: 'desc' },
-              take: 4,
-            },
             taskAssignees: {
               where: {
                 task: {
@@ -778,6 +934,14 @@ export class AiQueryService {
       },
       orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
     });
+    const ws = await this.prisma.project.findUniqueOrThrow({
+      where: { id: ctx.projectId },
+      select: { workspaceId: true },
+    });
+    const profiles = await this.evidence.profiles(
+      ws.workspaceId,
+      rows.map((m) => m.user.id),
+    );
     const items: BlockItem[] = rows.map((m) => {
       const hours = m.user.taskAssignees.reduce(
         (sum, a) => sum + num(a.task.remainingHours),
@@ -794,16 +958,22 @@ export class AiQueryService {
         subtitle:
           [w?.title, w?.department].filter(Boolean).join(' · ') || m.user.email,
         badges: [
-          { text: m.role, tone: m.role === 'PM' ? 'info' : 'muted' },
-          ...m.user.userSkills.map((sk) => ({
-            text: `${sk.skill.name} ${sk.level}`,
-            tone: 'muted' as const,
-          })),
+          {
+            text: ROLE_LABEL[m.role] ?? m.role,
+            tone: m.role === 'PM' ? 'info' : 'muted',
+          },
+          // Kỹ năng theo bằng chứng (docs 02/08) — tự khai không hiện như sự thật
+          ...proven(profiles.get(m.user.id))
+            .slice(0, 4)
+            .map((sk) => ({
+              text: `${sk.name} ${sk.level}`,
+              tone: 'muted' as const,
+            })),
         ],
         meta: [
           {
             icon: 'clock',
-            text: `${m.user.taskAssignees.length} việc đang mở · ${Math.round(hours * 10) / 10}h còn lại`,
+            text: `${m.user.taskAssignees.length} việc đang mở · ${hrs(hours)} còn lại`,
           },
         ],
       };
@@ -836,15 +1006,6 @@ export class AiQueryService {
           fullName: true,
           shortName: true,
           email: true,
-          userSkills: {
-            select: {
-              level: true,
-              verifiedAt: true,
-              skill: { select: { name: true } },
-            },
-            orderBy: { level: 'desc' },
-            take: 8,
-          },
         },
       }),
       this.prisma.task.findMany({
@@ -868,6 +1029,13 @@ export class AiQueryService {
         },
       }),
     ]);
+    const ws = await this.prisma.project.findUniqueOrThrow({
+      where: { id: ctx.projectId },
+      select: { workspaceId: true },
+    });
+    const skillsOf = proven(
+      (await this.evidence.profiles(ws.workspaceId, [userId], at)).get(userId),
+    ).slice(0, 8);
     const today = startOfDay(at).getTime();
     const overdue = tasks.filter(
       (t) => t.dueDate && t.dueDate.getTime() < today,
@@ -884,8 +1052,8 @@ export class AiQueryService {
           },
           title: user.fullName,
           subtitle: user.email,
-          badges: user.userSkills.map((sk) => ({
-            text: `${sk.skill.name} ${sk.level}${sk.verifiedAt ? ' ✓' : ''}`,
+          badges: skillsOf.map((sk) => ({
+            text: `${sk.name} ${sk.level} · ${sk.tasks} việc${sk.verified ? ' ✓' : ''}`,
             tone: 'muted' as const,
           })),
         },
@@ -924,7 +1092,7 @@ export class AiQueryService {
                   ? [
                       {
                         icon: 'calendar' as const,
-                        text: `hạn ${iso(t.dueDate)}`,
+                        text: `hạn ${dm(t.dueDate)}`,
                       },
                     ]
                   : []),
@@ -932,7 +1100,7 @@ export class AiQueryService {
                   ? [
                       {
                         icon: 'clock' as const,
-                        text: `${num(t.remainingHours)}h`,
+                        text: hrs(t.remainingHours),
                       },
                     ]
                   : []),
@@ -980,17 +1148,17 @@ export class AiQueryService {
           : u >= settings.workload.thresholds.high
             ? 'info'
             : 'success';
-    const columns =
-      users[0]?.weeks.map((w) => `Tuần ${w.weekStart.slice(5)}`) ?? [];
+    const columns = users[0]?.weeks.map((w) => `Tuần ${dm(w.weekStart)}`) ?? [];
     const blocks: QueryBlock[] = [
       {
         kind: 'stat_row',
         items: [
           {
-            label: 'Spread nhóm',
+            // "Spread" là tên công thức (docs 04 §4) — người đọc cần biết nó đo gì
+            label: 'Chênh lệch tải trong nhóm',
             value: Math.round(spread * 100),
             unit: '%',
-            hint: `mục tiêu ≤ ${Math.round(settings.workload.fairnessTarget * 100)}%`,
+            hint: `nên ≤ ${Math.round(settings.workload.fairnessTarget * 100)}% · cao = dồn việc`,
           },
         ],
       },
@@ -1018,7 +1186,11 @@ export class AiQueryService {
   }
 
   private async capacity(spec: DataQuerySpec, ctx: QueryContext) {
-    const table = await this.workload.capacityTable(ctx.projectId, {});
+    // Có sprint (mã s) thì cửa sổ = sprint đó; không có thì 28 ngày tới như trước
+    const sprintId = this.sprintId(spec, ctx) ?? undefined;
+    const table = await this.workload.capacityTable(ctx.projectId, {
+      sprintId,
+    });
     const rows = table.members.slice(0, spec.limit).map((m) => ({
       ref: {
         type: 'user' as const,
@@ -1028,8 +1200,11 @@ export class AiQueryService {
       cells: {
         member: m.fullName,
         utilization: `${Math.round(m.utilizationBefore * 100)}%`,
-        free: `${Math.round(m.freeByDay.reduce((s, d) => s + d.freeHours, 0) * 10) / 10}h`,
-        skills: m.skills.map((s) => `${s.name} ${s.level}`).join(', ') || '—',
+        free: hrs(m.freeByDay.reduce((s, d) => s + d.freeHours, 0)),
+        skills:
+          proven(m.skills)
+            .map((s) => `${s.name} ${s.level}`)
+            .join(', ') || 'chưa có bằng chứng',
       },
     }));
     return {
@@ -1041,7 +1216,7 @@ export class AiQueryService {
       blocks: [
         {
           kind: 'note',
-          text: `Cửa sổ ${table.window.from} + ${table.window.days} ngày · ${table.tasks.length} việc chưa giao`,
+          text: `Giờ trống tính từ ${dm(table.window.from)}, ${table.window.days} ngày · ${table.tasks.length} việc chưa giao`,
           tone: 'muted',
         },
         {
@@ -1072,33 +1247,53 @@ export class AiQueryService {
         code: spec.filters.skill ?? null,
       });
     const minLevel = spec.filters.minLevel ?? 3;
-    const rows = await this.prisma.userSkill.findMany({
-      where: {
-        skillId,
-        level: { gte: minLevel },
-        user: { workspaceMembers: { some: { workspaceId } } },
-      },
-      orderBy: { level: 'desc' },
-      take: spec.limit,
-      select: {
-        level: true,
-        verifiedAt: true,
-        skill: { select: { name: true } },
-        user: { select: { id: true, fullName: true, shortName: true } },
-      },
-    });
-    const skillName =
-      rows[0]?.skill.name ??
-      (
-        await this.prisma.skill.findUnique({
-          where: { id: skillId },
-          select: { name: true },
-        })
-      )?.name ??
-      '';
+    const [skill, members] = await Promise.all([
+      this.prisma.skill.findUnique({
+        where: { id: skillId },
+        select: { name: true },
+      }),
+      this.prisma.workspaceMember.findMany({
+        where: { workspaceId },
+        select: {
+          userId: true,
+          user: { select: { fullName: true, shortName: true } },
+        },
+      }),
+    ]);
+    const skillName = skill?.name ?? '';
+    // Mức TỪ BẰNG CHỨNG: việc đã xong + đánh giá + làm lại + PM xác nhận (docs 02/08)
+    const profiles = await this.evidence.profiles(
+      workspaceId,
+      members.map((m) => m.userId),
+    );
+    const entryOf = (userId: string) =>
+      profiles.get(userId)?.find((e) => e.skillId === skillId);
+    const rows = members
+      .map((m) => ({ ...m, e: entryOf(m.userId) }))
+      .filter((m) => m.e && m.e.level >= minLevel)
+      .sort((a, b) => b.e!.level - a.e!.level || b.e!.tasks - a.e!.tasks)
+      .slice(0, spec.limit);
+    // Người TỰ KHAI đủ mức nhưng chưa có bằng chứng: nêu riêng để PM biết mà cho làm thử, không tính là "biết"
+    const claimed = members
+      .map((m) => ({ ...m, e: entryOf(m.userId) }))
+      .filter(
+        (m) =>
+          m.e && m.e.confidence === 'none' && (m.e.declared ?? 0) >= minLevel,
+      );
+    const claimedNote: QueryBlock[] = claimed.length
+      ? [
+          {
+            kind: 'note',
+            text: `Tự khai ${skillName} ≥ ${minLevel} nhưng chưa có việc nào làm chứng: ${claimed
+              .map((m) => m.user.shortName ?? m.user.fullName)
+              .join(', ')}.`,
+            tone: 'muted',
+          },
+        ]
+      : [];
     return {
       source: {
-        endpoint: 'GET /workspaces/:id/skill-matrix',
+        endpoint: 'GET /workspaces/:id/skill-profiles',
         params: { skill: skillName, minLevel },
         rowCount: rows.length,
       },
@@ -1109,39 +1304,39 @@ export class AiQueryService {
               items: rows.map((r) => ({
                 ref: {
                   type: 'user' as const,
-                  id: r.user.id,
+                  id: r.userId,
                   key: r.user.shortName ?? r.user.fullName,
                 },
                 title: r.user.fullName,
+                subtitle: evidenceText(r.e),
                 badges: [
                   {
-                    text: `${r.skill.name} mức ${r.level}`,
+                    text: `${skillName} mức ${r.e!.level}`,
                     tone:
-                      r.level >= 4 ? ('success' as const) : ('muted' as const),
+                      r.e!.level >= 4
+                        ? ('success' as const)
+                        : ('muted' as const),
                   },
-                  ...(r.verifiedAt
-                    ? [{ text: 'đã xác nhận', tone: 'info' as const }]
+                  ...(r.e!.verified
+                    ? [{ text: 'PM xác nhận', tone: 'info' as const }]
                     : []),
                 ],
               })),
             },
+            ...claimedNote,
           ]
         : [
             {
               kind: 'empty',
-              title: `Chưa ai khai ${skillName} từ mức ${minLevel}`,
+              title: `Chưa ai có bằng chứng ${skillName} từ mức ${minLevel}`,
               description:
-                'Nhờ thành viên cập nhật ở màn Nhân sự › Kỹ năng của tôi.',
+                'Mức kỹ năng tính từ việc đã xong, đánh giá của PM và số lần phải làm lại — không dùng mức tự khai.',
             },
+            ...claimedNote,
           ]) as QueryBlock[],
     };
   }
 
-  /**
-   * "Ai làm được việc này?" — cho một task THẬT (`filters.task`) hoặc một BẢN NHÁP đang mở trong phiên
-   * (`filters.draft`). Trả bảng SỰ THẬT từng người (khớp kỹ năng, giờ hiệu dụng, giờ trống trước hạn,
-   * mức dùng) để LLM và người đọc tự cân nhắc — backend không chọn hộ, không loại ai khỏi bảng.
-   */
   private async taskCandidates(
     spec: DataQuerySpec,
     ctx: QueryContext,
@@ -1177,7 +1372,7 @@ export class AiQueryService {
       blocks: [
         {
           kind: 'note',
-          text: `${s.key ? `${s.key} · ` : ''}${s.title} · ${s.hours === null ? 'chưa ước lượng' : `${s.hours}h còn lại`}${s.difficulty ? ` · độ khó ${s.difficulty}` : ''}${s.dueDate ? ` · hạn ${s.dueDate}` : ' · chưa có hạn'} · cần: ${required}`,
+          text: `${s.key ? `${s.key} · ` : ''}${s.title} · ${s.hours === null ? 'chưa ước lượng' : `${hrs(s.hours)} còn lại`}${s.difficulty ? ` · độ khó ${s.difficulty}` : ''}${s.dueDate ? ` · hạn ${dm(s.dueDate)}${s.dueDate < iso(new Date()) ? ' (đã qua — không còn giờ trống trước hạn)' : ''}` : ' · chưa có hạn'} · cần: ${required}`,
           tone: 'muted',
         },
         {
@@ -1202,8 +1397,8 @@ export class AiQueryService {
             cells: {
               member: r.fullName,
               match: `${Math.round(r.skillMatch.avg * 100)}%${r.skillMatch.missing.length ? ` (thiếu ${r.skillMatch.missing.join(', ')})` : ''}`,
-              effort: r.hoursEff === null ? '—' : `${r.hoursEff}h`,
-              free: `${r.freeBeforeDue ?? r.freeTotal}h`,
+              effort: r.hoursEff === null ? '—' : hrs(r.hoursEff),
+              free: hrs(r.freeBeforeDue ?? r.freeTotal),
               util: `${Math.round(r.utilizationBefore * 100)}%`,
             },
           })),
@@ -1262,23 +1457,37 @@ export class AiQueryService {
     workspaceId: string,
   ) {
     const minLevel = spec.filters.minLevel ?? 3;
-    const skills = await this.prisma.skill.findMany({
-      where: { workspaceId, isActive: true },
-      select: {
-        id: true,
-        name: true,
-        userSkills: {
-          where: {
-            level: { gte: minLevel },
-            user: { workspaceMembers: { some: { workspaceId } } },
-          },
-          select: { userId: true },
-        },
-      },
-    });
+    const [catalog, members] = await Promise.all([
+      this.prisma.skill.findMany({
+        where: { workspaceId, isActive: true },
+        select: { id: true, name: true },
+      }),
+      this.prisma.workspaceMember.findMany({
+        where: { workspaceId },
+        select: { userId: true },
+      }),
+    ]);
+    // "Người giữ" kỹ năng = có BẰNG CHỨNG đạt mức, không phải tự khai (docs 02/08)
+    const levels = await this.evidence.levels(
+      workspaceId,
+      members.map((m) => m.userId),
+    );
+    const skills = catalog.map((sk) => ({
+      ...sk,
+      userSkills: [...levels]
+        .filter(([, m]) => (m.get(sk.id) ?? 0) >= minLevel)
+        .map(([userId]) => ({ userId })),
+    }));
+    // Rủi ro thật là kỹ năng CHỈ MỘT người giữ (người đó nghỉ là mất); "chưa ai" là lỗ hổng tuyển dụng — xếp sau
     const risky = skills
       .filter((sk) => sk.userSkills.length <= 1)
+      .sort(
+        (a, b) =>
+          b.userSkills.length - a.userSkills.length ||
+          a.name.localeCompare(b.name, 'vi'),
+      )
       .slice(0, spec.limit);
+    const single = risky.filter((sk) => sk.userSkills.length === 1).length;
     return {
       source: {
         endpoint: 'GET /workspaces/:id/skill-matrix (busFactor)',
@@ -1289,17 +1498,20 @@ export class AiQueryService {
         ? [
             {
               kind: 'note',
-              text: `${risky.length} kỹ năng chỉ có ≤ 1 người đạt mức ${minLevel} — rủi ro khi người đó nghỉ.`,
+              text: `${single} kỹ năng chỉ một người đạt mức ${minLevel} — rủi ro khi người đó nghỉ${risky.length > single ? ` · ${risky.length - single} kỹ năng chưa ai đạt` : ''}.`,
               tone: 'warning',
             },
             {
               kind: 'table',
               columns: [
                 { key: 'skill', label: 'Kỹ năng' },
-                { key: 'holders', label: 'Số người đạt', align: 'right' },
+                { key: 'holders', label: 'Người đạt', align: 'right' },
               ],
               rows: risky.map((sk) => ({
-                cells: { skill: sk.name, holders: sk.userSkills.length },
+                cells: {
+                  skill: sk.name,
+                  holders: sk.userSkills.length ? 'chỉ 1 người' : 'chưa ai',
+                },
               })),
             },
           ]
@@ -1315,20 +1527,11 @@ export class AiQueryService {
 
   // ── Sprint & hoạt động ─────────────────────────────────────
 
+  /** Cùng nguồn với tab Sprint (`GET /projects/:id/sprints`) — không tự đếm lại. */
   private async sprints(ctx: QueryContext) {
-    const rows = await this.prisma.sprint.findMany({
-      where: { projectId: ctx.projectId },
-      orderBy: { startDate: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        startDate: true,
-        endDate: true,
-        goal: true,
-        _count: { select: { tasks: true } },
-      },
-    });
+    const rows = (await this.sprintsSvc.list(ctx.userId, ctx.projectId))
+      .slice()
+      .sort((x, y) => y.startDate.getTime() - x.startDate.getTime());
     return {
       source: {
         endpoint: 'GET /projects/:id/sprints',
@@ -1342,15 +1545,17 @@ export class AiQueryService {
             { key: 'name', label: 'Sprint' },
             { key: 'status', label: 'Trạng thái' },
             { key: 'time', label: 'Thời gian' },
-            { key: 'tasks', label: 'Việc', align: 'right' },
+            { key: 'tasks', label: 'Xong / việc', align: 'right' },
+            { key: 'hours', label: 'Giờ còn lại', align: 'right' },
           ],
           rows: rows.map((s) => ({
             ref: { type: 'sprint' as const, id: s.id, key: s.name },
             cells: {
               name: s.name,
-              status: s.status,
-              time: `${iso(s.startDate)} → ${iso(s.endDate)}`,
-              tasks: s._count.tasks,
+              status: SPRINT_STATUS_LABEL[s.status] ?? s.status,
+              time: `${dm(s.startDate)} → ${dm(s.endDate)}`,
+              tasks: `${s.doneCount}/${s.taskCount}`,
+              hours: hrs(s.remainingHours),
             },
           })),
         },
@@ -1358,24 +1563,31 @@ export class AiQueryService {
     };
   }
 
-  private async sprintProgress(
-    spec: DataQuerySpec,
-    ctx: QueryContext,
-    at: Date,
-  ) {
+  /**
+   * Tiến độ một sprint — số lấy NGUYÊN VĂN từ `ForecastService` (cùng nguồn với Dashboard) và
+   * `SprintsService.list` (cùng nguồn với tab Sprint). Không tự cộng giờ ở đây.
+   */
+  private async sprintProgress(spec: DataQuerySpec, ctx: QueryContext) {
+    const empty = (text: string) => ({
+      source: {
+        endpoint: 'GET /projects/:id/sprints',
+        params: {},
+        rowCount: 0,
+      },
+      blocks: [{ kind: 'note', text, tone: 'muted' }] as QueryBlock[],
+    });
+    if (spec.sprint === '__all')
+      return empty(
+        'Tiến độ chỉ có nghĩa cho từng sprint — hãy hỏi về một sprint cụ thể (hoặc bỏ trống để xem sprint đang chạy).',
+      );
+    if (spec.sprint === '__backlog')
+      return empty('Backlog không phải sprint nên không có tiến độ.');
     const id = this.sprintId(spec, ctx);
     const sprint = await this.prisma.sprint.findFirst({
       where: id
         ? { id, projectId: ctx.projectId }
         : { projectId: ctx.projectId, status: 'ACTIVE' },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        startDate: true,
-        endDate: true,
-        scopeHoursInitial: true,
-      },
+      select: { id: true, name: true, status: true },
     });
     if (!sprint)
       return {
@@ -1388,123 +1600,472 @@ export class AiQueryService {
           { kind: 'empty', title: 'Chưa có sprint đang chạy' },
         ] as QueryBlock[],
       };
-    const tasks = await this.prisma.task.findMany({
-      where: { sprintId: sprint.id, deletedAt: null },
-      select: {
-        completedAt: true,
-        remainingHours: true,
-        estimateHours: true,
-        dueDate: true,
+    const [bd, fc, list] = await Promise.all([
+      this.forecast.burndown(ctx.userId, sprint.id),
+      this.forecast.forecast(ctx.userId, sprint.id),
+      this.sprintsSvc.list(ctx.userId, ctx.projectId),
+    ]);
+    const row = list.find((x) => x.id === sprint.id);
+    const active = sprint.status === 'ACTIVE';
+    const closed = sprint.status === 'CLOSED';
+    const overdue = fc.causes.find((c) => c.code === 'OVERDUE')?.count ?? 0;
+    const stats: StatItem[] = [
+      {
+        label: sprint.name,
+        value: SPRINT_STATUS_LABEL[sprint.status] ?? sprint.status,
       },
-    });
-    const done = tasks.filter((t) => t.completedAt).length;
-    const remaining = tasks.reduce(
-      (sum, t) =>
-        sum +
-        (t.completedAt ? 0 : num(t.remainingHours) || num(t.estimateHours)),
-      0,
-    );
-    const daysLeft = Math.max(
-      0,
-      Math.ceil((sprint.endDate.getTime() - startOfDay(at).getTime()) / DAY),
-    );
-    const overdue = tasks.filter(
-      (t) =>
-        !t.completedAt &&
-        t.dueDate &&
-        t.dueDate.getTime() < startOfDay(at).getTime(),
-    ).length;
+      {
+        label: 'Xong',
+        value: `${row?.doneCount ?? 0}/${row?.taskCount ?? 0}`,
+        unit: 'việc',
+      },
+      closed
+        ? {
+            label: 'Còn lại lúc đóng',
+            value: fc.final ? round1(fc.final.remainingHours) : '—',
+            unit: fc.final ? 'h' : undefined,
+            hint: fc.final ? undefined : 'đóng trước khi có bản chụp cuối',
+          }
+        : { label: 'Giờ còn lại', value: round1(fc.remainingHours), unit: 'h' },
+      { label: 'Vận tốc', value: fc.velocity, unit: 'h/ngày' },
+    ];
+    if (active)
+      stats.push(
+        { label: 'Còn', value: fc.workdaysLeft, unit: 'ngày làm việc' },
+        { label: 'ETA', value: fc.eta ?? '—' },
+        {
+          label: 'Rủi ro',
+          value: RISK_LABEL[fc.riskLevel] ?? fc.riskLevel,
+          tone: RISK_TONE[fc.riskLevel],
+        },
+        {
+          label: 'Quá hạn',
+          value: overdue,
+          tone: overdue ? 'danger' : 'muted',
+        },
+      );
+    const byDate = new Map<
+      string,
+      { label: string; value: number | null; compare: number | null }
+    >();
+    for (const p of bd.ideal)
+      byDate.set(p.date, { label: p.date, value: null, compare: p.ideal });
+    for (const p of bd.actual)
+      byDate.set(p.date, {
+        label: p.date,
+        compare: byDate.get(p.date)?.compare ?? null,
+        value: p.remaining,
+      });
+    const blocks: QueryBlock[] = [
+      { kind: 'stat_row', items: stats },
+      {
+        kind: 'line_chart',
+        unit: 'h còn lại',
+        compareLabel: 'Lý tưởng',
+        points: [...byDate.values()].sort((x, y) =>
+          x.label.localeCompare(y.label),
+        ),
+      },
+    ];
+    if (fc.causes.length)
+      blocks.push({
+        kind: 'note',
+        tone: 'warning',
+        text: `Nguyên nhân đo được: ${fc.causes
+          .map((c) => CAUSE_LABEL[c.code](c.count))
+          .join(' · ')}.`,
+      });
+    if (bd.gaps.length)
+      blocks.push({
+        kind: 'note',
+        tone: 'muted',
+        text: `Thiếu bản chụp ${bd.gaps.length} ngày làm việc — đường thực tế chỉ nối các ngày có số liệu.`,
+      });
+    // Theo người (docs 02/07 D1) — cùng nguồn với trang Sprint (SprintsService.summary). Xếp theo giờ còn lại
+    // chỉ để đọc cho dễ; không có cột điểm, không có chữ "nên".
+    if (!closed) {
+      const sum = await this.sprintsSvc.summary(ctx.userId, sprint.id);
+      const only = (spec.filters.assignee ?? [])
+        .map((c) => this.userId(c, ctx))
+        .filter((x): x is string => !!x);
+      const people = sum.byAssignee.filter((p) =>
+        only.length ? only.includes(p.userId) : p.tasks > 0,
+      );
+      blocks.push({
+        kind: 'table',
+        title: `Theo người · năng lực ${sum.window.from.slice(8, 10)}/${sum.window.from.slice(5, 7)} → ${sum.window.to.slice(8, 10)}/${sum.window.to.slice(5, 7)} · xếp theo giờ còn lại`,
+        columns: [
+          { key: 'member', label: 'Người' },
+          { key: 'tasks', label: 'Việc', align: 'right' },
+          { key: 'remaining', label: 'Giờ còn lại', align: 'right' },
+          { key: 'capacity', label: 'Năng lực', align: 'right' },
+          { key: 'load', label: 'Mức', align: 'right' },
+        ],
+        rows: [
+          ...people.map((p) => ({
+            ref: {
+              type: 'user' as const,
+              id: p.userId,
+              key: p.shortName ?? p.fullName,
+            },
+            cells: {
+              member: p.shortName ?? p.fullName,
+              tasks: p.tasks,
+              remaining: hrs(p.remainingHours),
+              capacity: hrs(p.capacityHours),
+              load:
+                p.capacityHours > 0
+                  ? `${Math.round((p.remainingHours / p.capacityHours) * 100)}%`
+                  : '—',
+            },
+          })),
+          ...(only.length || !sum.unassigned.tasks
+            ? []
+            : [
+                {
+                  cells: {
+                    member: 'Chưa giao',
+                    tasks: sum.unassigned.tasks,
+                    remaining: hrs(sum.unassigned.hours),
+                    capacity: '—',
+                    load: '—',
+                  },
+                },
+              ]),
+        ],
+      });
+    }
     return {
       source: {
-        endpoint: 'GET /sprints/:id/burndown',
+        endpoint: 'GET /sprints/:id/forecast + /burndown',
         params: { sprintId: sprint.id },
-        rowCount: tasks.length,
+        rowCount: row?.taskCount ?? 0,
       },
+      blocks,
+    };
+  }
+
+  /**
+   * Báo cáo một sprint (docs 02/07 D2 — các mục của Sprint report Jira): mặc định sprint đã đóng gần nhất.
+   * Số và danh sách lấy nguyên văn SprintsService.summary — cùng nguồn với báo cáo trên trang Sprint.
+   */
+  private async sprintReport(spec: DataQuerySpec, ctx: QueryContext) {
+    const id =
+      spec.sprint && spec.sprint !== '__all'
+        ? this.sprintId(spec, ctx)
+        : undefined;
+    if (spec.sprint === '__backlog')
+      return {
+        source: {
+          endpoint: 'GET /sprints/:id/summary',
+          params: {},
+          rowCount: 0,
+        },
+        blocks: [
+          {
+            kind: 'note',
+            text: 'Backlog không phải sprint nên không có báo cáo.',
+            tone: 'muted',
+          },
+        ] as QueryBlock[],
+      };
+    const sprint = id
+      ? await this.prisma.sprint.findFirst({
+          where: { id, projectId: ctx.projectId },
+          select: { id: true },
+        })
+      : await this.prisma.sprint.findFirst({
+          where: { projectId: ctx.projectId, status: 'CLOSED' },
+          orderBy: { closedAt: 'desc' },
+          select: { id: true },
+        });
+    if (!sprint)
+      return {
+        source: {
+          endpoint: 'GET /sprints/:id/summary',
+          params: {},
+          rowCount: 0,
+        },
+        blocks: [
+          {
+            kind: 'empty',
+            title: 'Chưa có sprint nào đã đóng',
+            description: 'Báo cáo có sau khi kết thúc sprint đầu tiên.',
+          },
+        ] as QueryBlock[],
+      };
+    const s = await this.sprintsSvc.summary(ctx.userId, sprint.id);
+    const sumH = (xs: { estimateHours: number }[]) =>
+      round1(xs.reduce((x, t) => x + t.estimateHours, 0));
+    const list = (title: string, xs: typeof s.completed): QueryBlock => ({
+      kind: 'task_list',
+      title: `${title} (${xs.length})`,
+      items: xs.map((t) => ({
+        ref: { type: 'task', id: t.id, key: t.key },
+        title: t.title, // mã việc đã có ở ref.key — web tự in, không lặp
+        meta: [{ icon: 'clock', text: `${hrs(t.estimateHours)} ước lượng` }],
+      })),
+    });
+    const blocks: QueryBlock[] = [
+      {
+        kind: 'stat_row',
+        items: [
+          {
+            label: s.sprint.name,
+            value: SPRINT_STATUS_LABEL[s.sprint.status] ?? s.sprint.status,
+          },
+          {
+            label: 'Cam kết lúc bắt đầu',
+            value: round1(s.committedHours),
+            unit: 'h',
+          },
+          {
+            label: 'Hoàn thành',
+            value: round1(s.completedHours),
+            unit: 'h',
+            hint: `${s.doneCount}/${s.taskCount} việc`,
+          },
+          {
+            label: 'Bị chuyển đi',
+            value: s.carriedOut.length,
+            unit: 'việc',
+            hint: hrs(sumH(s.carriedOut)),
+          },
+          {
+            label: 'Thêm sau khi bắt đầu',
+            value: s.addedAfterStart.length,
+            unit: 'việc',
+            hint: hrs(sumH(s.addedAfterStart)),
+          },
+        ],
+      },
+    ];
+    if (s.sprint.status !== 'CLOSED')
+      blocks.push({
+        kind: 'note',
+        text: 'Sprint chưa đóng — số tính tới hiện tại.',
+        tone: 'muted',
+      });
+    blocks.push(list('Đã xong', s.completed));
+    if (s.carriedOut.length)
+      blocks.push(list('Bị chuyển đi lúc đóng', s.carriedOut));
+    if (s.addedAfterStart.length)
+      blocks.push(list('Thêm sau khi bắt đầu', s.addedAfterStart));
+    if (s.carriedIn.length)
+      blocks.push(list('Chuyển vào từ sprint trước', s.carriedIn));
+    return {
+      source: {
+        endpoint: 'GET /sprints/:id/summary',
+        params: { sprintId: sprint.id },
+        rowCount: s.taskCount,
+      },
+      blocks,
+    };
+  }
+
+  /**
+   * Vận tốc giữa các sprint (docs 02/07 D3 — cơ chế Velocity chart của Jira): cam kết lúc bắt đầu so với giờ
+   * hoàn thành của N sprint đã đóng gần nhất. Nguồn GET /projects/:id/sprints (cùng thẻ Vận tốc trên trang Sprint).
+   */
+  private async sprintVelocity(spec: DataQuerySpec, ctx: QueryContext) {
+    const n = spec.filters.lastN ?? 3;
+    const rows = (await this.sprintsSvc.list(ctx.userId, ctx.projectId))
+      .filter((s) => s.status === 'CLOSED')
+      .sort(
+        (a, b) => (a.closedAt?.getTime() ?? 0) - (b.closedAt?.getTime() ?? 0),
+      )
+      .slice(-n)
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        committed: round1(num(s.scopeHoursInitial)),
+        completed: round1(s.completedHours),
+      }));
+    const source = {
+      endpoint: 'GET /projects/:id/sprints',
+      params: { lastN: n },
+      rowCount: rows.length,
+    };
+    if (!rows.length)
+      return {
+        source,
+        blocks: [
+          {
+            kind: 'empty',
+            title: 'Chưa có sprint nào đã đóng',
+            description: 'Vận tốc có sau khi kết thúc sprint đầu tiên.',
+          },
+        ] as QueryBlock[],
+      };
+    const sumC = rows.reduce((x, r) => x + r.committed, 0);
+    const sumD = rows.reduce((x, r) => x + r.completed, 0);
+    return {
+      source,
       blocks: [
         {
           kind: 'stat_row',
           items: [
-            { label: sprint.name, value: sprint.status },
-            { label: 'Xong', value: `${done}/${tasks.length}`, unit: 'việc' },
             {
-              label: 'Giờ còn lại',
-              value: Math.round(remaining * 10) / 10,
-              unit: 'h',
+              label: 'Số sprint',
+              value: rows.length,
+              hint:
+                n > rows.length
+                  ? `mới có ${rows.length}/${n} sprint đã đóng`
+                  : undefined,
             },
-            { label: 'Còn', value: daysLeft, unit: 'ngày' },
             {
-              label: 'Quá hạn',
-              value: overdue,
-              tone: overdue ? 'danger' : 'muted',
+              label: 'Hoàn thành TB',
+              value: round1(sumD / rows.length),
+              unit: 'h/sprint',
+            },
+            {
+              label: 'Cam kết TB',
+              value: round1(sumC / rows.length),
+              unit: 'h/sprint',
+            },
+            {
+              label: 'Hoàn thành / cam kết',
+              value: sumC > 0 ? Math.round((sumD / sumC) * 100) : '—',
+              unit: sumC > 0 ? '%' : undefined,
             },
           ],
         },
         {
-          kind: 'line_chart',
-          unit: 'h',
-          compareLabel: 'Scope ban đầu',
-          points: [
-            {
-              label: iso(sprint.startDate),
-              value: sprint.scopeHoursInitial ?? 0,
-            },
-            { label: iso(at), value: Math.round(remaining * 10) / 10 },
-            { label: iso(sprint.endDate), value: 0 },
+          // Cột đôi cam kết | hoàn thành — giống thẻ Vận tốc trên trang Sprint (đường với 1 sprint chỉ là một chấm)
+          kind: 'bar_chart',
+          unit: 'Hoàn thành (h)',
+          compareLabel: 'Cam kết (h)',
+          series: rows.map((r) => ({
+            label: r.name,
+            value: r.completed,
+            compare: r.committed,
+          })),
+        },
+        {
+          kind: 'table',
+          columns: [
+            { key: 'name', label: 'Sprint' },
+            { key: 'committed', label: 'Cam kết', align: 'right' },
+            { key: 'completed', label: 'Hoàn thành', align: 'right' },
+            { key: 'ratio', label: 'Tỉ lệ', align: 'right' },
           ],
+          rows: rows.map((r) => ({
+            ref: { type: 'sprint' as const, id: r.id, key: r.name },
+            cells: {
+              name: r.name,
+              committed: hrs(r.committed),
+              completed: hrs(r.completed),
+              ratio:
+                r.committed > 0
+                  ? `${Math.round((r.completed / r.committed) * 100)}%`
+                  : '—',
+            },
+          })),
         },
       ] as QueryBlock[],
     };
   }
 
   private async activity(spec: DataQuerySpec, ctx: QueryContext) {
-    const rows = await this.prisma.activityLog.findMany({
-      where: { projectId: ctx.projectId },
-      orderBy: { createdAt: 'desc' },
-      take: spec.limit,
-      select: {
-        id: true,
-        action: true,
-        createdAt: true,
-        source: true,
-        actor: { select: { fullName: true, shortName: true } },
-        task: {
-          select: {
-            number: true,
-            title: true,
-            project: { select: { key: true } },
+    const me0 = await this.prisma.user.findUnique({
+      where: { id: ctx.userId },
+      select: { timezone: true },
+    });
+    const tz = me0?.timezone || 'Asia/Ho_Chi_Minh';
+    const actorId = this.userId(spec.filters.user, ctx);
+    const today = startOfLocalDay(new Date(), tz);
+    // Thứ trong tuần theo giờ địa phương: mốc 00:00 địa phương + 12 h vẫn nằm trong cùng ngày ở mọi múi giờ ±12
+    const range =
+      spec.filters.range === 'TODAY'
+        ? { gte: today }
+        : spec.filters.range === 'YESTERDAY'
+          ? { gte: new Date(today.getTime() - DAY), lt: today }
+          : spec.filters.range === 'THIS_WEEK'
+            ? {
+                gte: new Date(
+                  today.getTime() -
+                    ((new Date(today.getTime() + 12 * 3_600_000).getUTCDay() +
+                      6) %
+                      7) *
+                      DAY,
+                ),
+              }
+            : undefined;
+    const [rows, sprints, me] = await Promise.all([
+      this.prisma.activityLog.findMany({
+        where: {
+          projectId: ctx.projectId,
+          ...(actorId ? { actorId } : {}),
+          ...(range ? { createdAt: range } : {}),
+        },
+        orderBy: { createdAt: 'desc' },
+        take: spec.limit,
+        select: {
+          id: true,
+          action: true,
+          diff: true,
+          createdAt: true,
+          source: true,
+          actor: { select: { fullName: true, shortName: true } },
+          task: {
+            select: {
+              number: true,
+              title: true,
+              project: { select: { key: true } },
+            },
           },
         },
-      },
+      }),
+      this.prisma.sprint.findMany({
+        where: { projectId: ctx.projectId },
+        select: { id: true, name: true },
+      }),
+      Promise.resolve(me0),
+    ]);
+    const sprintName = new Map(sprints.map((s) => [s.id, s.name]));
+    // Giờ theo múi giờ người hỏi, cùng kiểu "dd/MM HH:mm" với màn Dashboard (trước đây in UTC)
+    const when = new Intl.DateTimeFormat('en-GB', {
+      timeZone: me?.timezone || 'Asia/Ho_Chi_Minh',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
     });
+    const fmt = (d: Date) => when.format(d).replace(',', '');
     return {
       source: {
         endpoint: 'GET /projects/:id/activity',
-        params: { limit: spec.limit },
+        params: {
+          limit: spec.limit,
+          ...(actorId ? { actorId } : {}),
+          ...(spec.filters.range ? { range: spec.filters.range } : {}),
+        },
         rowCount: rows.length,
       },
       blocks: (rows.length
         ? [
             {
               kind: 'activity_list',
-              items: rows.map((r) => ({
-                title: `${r.actor?.shortName ?? r.actor?.fullName ?? 'Hệ thống'} · ${r.action}`,
-                subtitle: r.task
-                  ? `${r.task.project.key}-${r.task.number} ${r.task.title}`
-                  : undefined,
-                meta: [
-                  {
-                    icon: 'clock' as const,
-                    text: r.createdAt
-                      .toISOString()
-                      .slice(0, 16)
-                      .replace('T', ' '),
-                  },
-                ],
-                badges:
-                  r.source !== 'MANUAL'
-                    ? [{ text: r.source, tone: 'info' as const }]
-                    : undefined,
-              })),
+              items: rows.map((r) => {
+                const d = (r.diff ?? {}) as { sprintId?: string };
+                const sprint = sprintActivityDetail(
+                  r.action,
+                  r.diff,
+                  d.sprintId ? sprintName.get(d.sprintId) : undefined,
+                );
+                return {
+                  title: `${r.actor?.shortName ?? r.actor?.fullName ?? 'Hệ thống'} ${ACTIVITY_ACTION_LABEL[r.action] ?? r.action}`,
+                  subtitle: r.task
+                    ? `${r.task.project.key}-${r.task.number} ${r.task.title}`
+                    : (sprint ?? undefined),
+                  meta: [{ icon: 'clock' as const, text: fmt(r.createdAt) }],
+                  badges:
+                    r.source !== 'MANUAL'
+                      ? [{ text: r.source, tone: 'info' as const }]
+                      : undefined,
+                };
+              }),
             },
           ]
         : [{ kind: 'empty', title: 'Chưa có hoạt động' }]) as QueryBlock[],
@@ -1617,7 +2178,7 @@ export class AiQueryService {
         {
           kind: 'stat_row',
           items: [
-            { label: 'Lượt gọi 30 ngày', value: totalCalls },
+            { label: 'Lượt gọi 30 ngày qua', value: totalCalls },
             {
               label: 'Token',
               value: rows.reduce((s, r) => s + (r._sum.totalTokens ?? 0), 0),
@@ -1638,14 +2199,19 @@ export class AiQueryService {
             { key: 'tokens', label: 'Token', align: 'right' },
             { key: 'cost', label: 'VND', align: 'right' },
           ],
-          rows: rows.map((r) => ({
-            cells: {
-              purpose: r.purpose,
-              calls: r._count._all,
-              tokens: r._sum.totalTokens ?? 0,
-              cost: Math.round((r._sum.estimatedCost ?? 0) * 26263),
-            },
-          })),
+          rows: [...rows]
+            .sort(
+              (a, b) =>
+                (b._sum.estimatedCost ?? 0) - (a._sum.estimatedCost ?? 0),
+            )
+            .map((r) => ({
+              cells: {
+                purpose: PURPOSE_LABEL[r.purpose] ?? r.purpose,
+                calls: r._count._all,
+                tokens: r._sum.totalTokens ?? 0,
+                cost: Math.round((r._sum.estimatedCost ?? 0) * 26263),
+              },
+            })),
         },
       ] as QueryBlock[],
     };

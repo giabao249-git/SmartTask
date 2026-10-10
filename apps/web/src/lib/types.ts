@@ -124,6 +124,25 @@ export interface ProposalItem {
   status: DraftItemStatus;
   taskId: string | null;
   edited: boolean;
+  /** Chi tiết để hiển thị (mô tả, loại, ưu tiên, độ khó, lý do, việc con, kỹ năng kèm mức) */
+  detail?: {
+    description?: string;
+    taskType?: TaskType;
+    priority?: TaskPriority;
+    difficulty?: number;
+    reason?: string;
+    subtasks?: number;
+    skills?: { code: string; minLevel: number }[];
+    patch?: Record<string, unknown>;
+  };
+  /** Lỗi/cảnh báo của Validator gắn đúng mục này (câu tiếng Việt, đã có tên người và số giờ) */
+  issues?: ProposalIssue[];
+}
+
+export interface ProposalIssue {
+  severity: "error" | "warning";
+  code: string;
+  message: string;
 }
 
 export interface CodeMap {
@@ -150,6 +169,8 @@ export interface ProposalView {
   appliedMap: Record<string, string>;
   applied: { taskIds: string[]; tasks: { draftKey: string; taskId: string; key: string }[] } | null;
   validation: ValidationResult | null;
+  /** Vấn đề không thuộc riêng mục nào (sprint, cả đề xuất) */
+  generalIssues?: ProposalIssue[];
   codeMap: CodeMap | null;
   appliedById: string | null;
   appliedAt: string | null;
@@ -375,6 +396,49 @@ export interface SprintView {
   status: "PLANNED" | "ACTIVE" | "CLOSED";
   taskCount?: number;
   totalHours?: number;
+  /** GET /projects/:id/sprints: việc gốc đã xong, giờ ước lượng / còn lại (việc gốc chưa xoá) */
+  doneCount?: number;
+  estimateHours?: number;
+  remainingHours?: number;
+  startedAt?: string | null;
+  closedAt?: string | null;
+  /** Cam kết chốt lúc bắt đầu (Decimal → chuỗi) và giờ hoàn thành (Σ ước lượng việc đã xong) */
+  scopeHoursInitial?: string | number | null;
+  completedHours?: number;
+}
+
+/** Một việc trong tóm tắt sprint (GET /sprints/:id/summary) */
+export interface SprintTaskBrief {
+  id: string;
+  key: string;
+  number: number;
+  title: string;
+  estimateHours: number;
+  remainingHours: number;
+  completedAt: string | null;
+  assigneeIds: string[];
+}
+
+/** GET /sprints/:id/summary — số backend tính; web chỉ hiển thị (docs 02/07 C1) */
+export interface SprintSummaryView {
+  sprint: { id: string; name: string; goal: string | null; status: SprintView["status"]; startDate: string; endDate: string; startedAt: string | null; closedAt: string | null };
+  window: { from: string; to: string };
+  taskCount: number;
+  doneCount: number;
+  committedHours: number;
+  scopeHours: number;
+  completedHours: number;
+  remainingHours: number;
+  capacityHours: number;
+  byAssignee: { userId: string; fullName: string; shortName: string | null; avatarUrl: string | null; tasks: number; remainingHours: number; capacityHours: number }[];
+  unassigned: { tasks: number; hours: number };
+  /** 3 sprint đã đóng gần nhất — cam kết vs hoàn thành, trung bình do backend tính */
+  velocity: { sprints: { id: string; name: string; committedHours: number; completedHours: number }[]; avgCompletedHours: number | null };
+  completed: SprintTaskBrief[];
+  open: SprintTaskBrief[];
+  carriedOut: SprintTaskBrief[];
+  carriedIn: SprintTaskBrief[];
+  addedAfterStart: SprintTaskBrief[];
 }
 
 export interface QuotaView {
@@ -449,6 +513,41 @@ export interface TaskDetail extends TaskListItem {
   parent: { id: string; number: number; title: string } | null;
   subtasks: TaskListItem[];
   dependentIds: string[];
+  /** Chỉ BUG: bug sinh ra từ việc nào (bằng chứng "làm lại" cho hồ sơ kỹ năng) */
+  origin?: { id: string; key: string; title: string } | null;
+  /** Bug được gắn là sinh ra từ việc này */
+  derivedBugs?: { id: string; key: string; title: string; done: boolean }[];
+}
+
+export interface TimeEntryView {
+  id: string;
+  userId: string;
+  user: { fullName: string; shortName: string | null; avatarUrl: string | null };
+  workDate: string;
+  hours: number;
+  note: string | null;
+  canEdit: boolean;
+}
+
+export interface WorklogView {
+  entries: TimeEntryView[];
+  totalHours: number;
+  estimateHours: number | null;
+}
+
+export interface TaskReviewView {
+  visible: boolean;
+  canReview: boolean;
+  done: boolean;
+  review: {
+    rating: number;
+    difficultyActual: number;
+    actualHoursConfirmed: number | null;
+    comment: string | null;
+    createdAt: string;
+    reviewer: { id: string; fullName: string; shortName: string | null };
+    selfReview: boolean;
+  } | null;
 }
 
 export interface TaskListResponse {
@@ -538,7 +637,8 @@ export interface CapacityTableView {
     fullName: string;
     shortName: string | null;
     role: string;
-    skills: { skillId: string; name: string; level: number }[];
+    /** Mức TỪ BẰNG CHỨNG (docs 02/08); `declared` = tự khai, chỉ để đối chiếu */
+    skills: { skillId: string; name: string; level: number; declared: number | null; tasks: number; failed: number; confidence: SkillConfidence; evidence: string }[];
     utilizationBefore: number;
     levelBefore: WorkloadLevelApi;
     projectsOpen: number;
@@ -554,7 +654,7 @@ export interface CapacityTableView {
     dueDate: string | null;
     dependsOnIds: string[];
     requiredSkills: { skillId: string; name: string; minLevel: number }[];
-    perUser: { userId: string; hoursEff: number; skillMatch: { avg: number; missing: string[] }; freeBeforeDue: number | null }[];
+    perUser: { userId: string; hoursEff: number; skillMatch: { avg: number; missing: string[]; unproven: string[]; items: { skillId: string; name: string; required: number; level: number; unproven: boolean }[] }; freeBeforeDue: number | null }[];
   }[];
   spread: number;
 }
@@ -577,6 +677,8 @@ export interface BurndownView {
   actual: { date: string; scope: number; remaining: number; completed: number }[];
   velocity: number;
   scopeCreepDays: string[];
+  /** Ngày làm việc không có snapshot — nói rõ thay vì vẽ như rỗng */
+  gaps: string[];
 }
 
 export interface ForecastView {
@@ -589,6 +691,10 @@ export interface ForecastView {
   riskLevel: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
   sprintAgeWorkdays: number;
   causes: { code: string; count: number; taskIds?: string[]; userIds?: string[] }[];
+  /** Sprint đã đóng: số chụp lúc đóng (null nếu đóng trước khi có bản chụp này) */
+  final: { date: string; scopeHours: number; remainingHours: number; closedAt: string | null } | null;
+  /** Ngày làm việc còn lại, tính cả hôm nay (0 khi sprint không chạy) */
+  workdaysLeft: number;
 }
 
 export interface ExplainView {
@@ -795,4 +901,69 @@ export interface AiCallLogPage {
   limit: number;
   total: number;
   items: AiCallLogItem[];
+}
+
+export type SkillConfidence = "none" | "low" | "medium" | "high";
+
+/** Một dòng hồ sơ kỹ năng TỪ BẰNG CHỨNG (GET /projects/:id/skill-profiles) */
+export interface SkillEvidenceView {
+  skillId: string;
+  name: string;
+  level: number;
+  confidence: SkillConfidence;
+  tasks: number;
+  passed: number;
+  failed: number;
+  reviewed: number;
+  verified: boolean;
+  lastAt: string | null;
+  declared: number | null;
+  evidence: string;
+}
+
+export interface MemberProfileView {
+  id: string;
+  fullName: string;
+  shortName: string | null;
+  avatarUrl: string | null;
+  role: ProjectRole;
+  /** VIEWER của workspace: chỉ xem, không nhận việc */
+  viewer: boolean;
+  skills: SkillEvidenceView[];
+  /** Chỉ chính người đó và PM nhận được; người khác = null */
+  performance: {
+    windowWeeks: number;
+    doneTasks: number;
+    onTimeRate: number | null;
+    avgRating: number | null;
+    ear: number;
+    reopenCount: number;
+    overdueOpen: number;
+    openTasks: number;
+  } | null;
+}
+
+export interface EvidenceItemView {
+  skillId: string;
+  skill: string;
+  source: "task" | "verified";
+  task: { id: string; key: string; title: string } | null;
+  required: number;
+  demonstrated: number;
+  passed: boolean;
+  weight: number;
+  rating: number | null;
+  reopened: number;
+  bugs: number;
+  at: string;
+}
+
+export interface PendingReviewView {
+  id: string;
+  key: string;
+  title: string;
+  completedAt: string;
+  skills: string[];
+  assignees: { id: string; fullName: string; shortName: string | null; avatarUrl: string | null }[];
+  selfAssigned: boolean;
 }

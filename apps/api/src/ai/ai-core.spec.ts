@@ -1,3 +1,4 @@
+import { claimsChange } from './ai.service';
 import {
   decryptSecret,
   encryptSecret,
@@ -156,6 +157,14 @@ describe('ResponseParser (thuần, không ném lỗi)', () => {
     });
   });
 
+  it('trường bắt buộc-được-null của schema Gemini (sprint/patch null, targetDraftKeys []) → bỏ trước khi kiểm', () => {
+    const r = parseStructuredAction(
+      '{"type":"DATA_QUERY","reply":"Đây là danh sách.","sprint":null,"targetDraftKeys":[],"patch":null,"query":{"intent":"TASK_LIST"}}',
+    );
+    expect(r.parseFailed).toBe(false);
+    expect(r.action.type).toBe('DATA_QUERY');
+  });
+
   it('UPDATE_TASK_DRAFT không có gì để sửa (trả lời câu hỏi) → CHAT_RESPONSE', () => {
     const r = parseStructuredAction(
       '{"type":"UPDATE_TASK_DRAFT","reply":"Lan phù hợp nhất","targetDraftKeys":["d2"],"tasks":[],"warnings":[]}',
@@ -165,6 +174,20 @@ describe('ResponseParser (thuần, không ném lỗi)', () => {
       type: 'CHAT_RESPONSE',
       reply: 'Lan phù hợp nhất',
     });
+  });
+});
+
+describe('claimsChange — CHAT_RESPONSE không được nói đã làm', () => {
+  const chat = (reply: string, suggestApply?: boolean) =>
+    ({ type: 'CHAT_RESPONSE', schemaVersion: 1, reply, suggestApply }) as never;
+  it('bắt câu khẳng định đã ghi/đề xuất', () => {
+    expect(claimsChange(chat('Đã cập nhật task d2 với độ khó 4.'))).toBe(true);
+    expect(claimsChange(chat('Tôi đã đề xuất giao ST-6 cho Minh.'))).toBe(true);
+    expect(claimsChange(chat('Tôi đã điều chỉnh d2 thành 8 giờ.'))).toBe(true);
+  });
+  it('bỏ qua câu trả lời thường và "Duyệt đi"', () => {
+    expect(claimsChange(chat('Lan phù hợp nhất cho việc này.'))).toBe(false);
+    expect(claimsChange(chat('Bấm Duyệt để tạo.', true))).toBe(false);
   });
 });
 

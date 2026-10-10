@@ -227,3 +227,73 @@ export function typeToHint(t: TaskType | string): string {
 }
 
 export const TASK_TYPES: TaskType[] = ["STORY", "TASK", "BUG"];
+
+/** Trạng thái sprint — nhãn tiếng Việt và màu dùng chung mọi màn (tab Sprint, ô lọc, thanh hàng loạt, chat). */
+export function sprintStatusLabel(s: string): string {
+  switch (s) {
+    case "ACTIVE":
+      return "Đang chạy";
+    case "PLANNED":
+      return "Kế hoạch";
+    case "CLOSED":
+      return "Đã đóng";
+    default:
+      return s;
+  }
+}
+
+export function sprintStatusVariant(s: string): BadgeVariant {
+  return s === "ACTIVE" ? "success" : s === "PLANNED" ? "info" : "secondary";
+}
+
+/** Nguyên nhân rủi ro do ForecastService đo (docs 04 §8) — câu tiếng Việt thay cho mã máy "OVERDUE ×7". */
+export function causeLabel(code: string, n: number): string {
+  switch (code) {
+    case "OVERDUE":
+      return `${n} việc quá hạn`;
+    case "UNASSIGNED":
+      return `${n} việc chưa giao`;
+    case "OVERLOADED_MEMBER":
+      return `${n} người quá tải`;
+    case "BLOCKED":
+      return `${n} việc bị chặn`;
+    case "BIG_NOT_STARTED":
+      return `${n} việc lớn chưa bắt đầu`;
+    case "SCOPE_CREEP":
+      return `phạm vi tăng ${n} ngày`;
+    default:
+      return `${code} ×${n}`;
+  }
+}
+
+/** Mức tải từ API (NORMAL/HIGH/FULL/OVERLOAD) → chữ tiếng Việt; trước đây badge in thẳng "NORMAL". */
+export function workloadLevelLabel(level: string): string {
+  return ({ NORMAL: "Bình thường", HIGH: "Cao", FULL: "Đầy", OVERLOAD: "Quá tải" } as Record<string, string>)[level] ?? level;
+}
+
+/** Vai trong dự án */
+export function projectRoleLabel(role: string): string {
+  return ({ PM: "PM", MEMBER: "Thành viên" } as Record<string, string>)[role] ?? role;
+}
+
+/** Thành phần điểm burnout (docs 04 §4) → chữ người đọc được */
+export function riskFactorLabel(key: string): string {
+  return (
+    (
+      {
+        utilization: "Mức sử dụng",
+        overtime: "Làm thêm giờ",
+        consecutiveHigh: "Nhiều tuần liên tiếp cao tải",
+        earTrend: "Đang chậm dần so với chính mình",
+        overdue: "Việc quá hạn",
+        switching: "Chuyển qua lại nhiều dự án",
+        meetings: "Họp nhiều",
+      } as Record<string, string>
+    )[key] ?? key
+  );
+}
+
+/** Độ tin cậy của mức kỹ năng từ bằng chứng (docs 02/08) */
+export function confidenceLabel(c: string): string {
+  return ({ none: "chưa có bằng chứng", low: "ít bằng chứng", medium: "bằng chứng vừa", high: "nhiều bằng chứng" } as Record<string, string>)[c] ?? c;
+}

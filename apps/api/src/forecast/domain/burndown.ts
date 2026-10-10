@@ -53,6 +53,56 @@ export function velocityOf(
   return Math.round((sum / window.length) * 100) / 100;
 }
 
+/**
+ * Giờ hoàn thành theo từng ngày trong [from, to], suy thẳng từ `completedAt` của việc.
+ * Completed(d) ở docs 04 §8 chính là Σ ước lượng của việc xong trong ngày d — nên không cần chờ
+ * cron snapshot mới có vận tốc. Ngày không có việc xong vẫn có mặt (giờ = 0) để trung bình đúng.
+ */
+export function dailyCompleted(
+  tasks: Array<{ estimateHours: number | null; completedAt: Date | null }>,
+  from: Date,
+  to: Date,
+): Snapshot[] {
+  const byDay = new Map<number, number>();
+  for (const t of tasks) {
+    if (!t.completedAt) continue;
+    const k = toDate(t.completedAt).getTime();
+    byDay.set(k, (byDay.get(k) ?? 0) + (t.estimateHours ?? 0));
+  }
+  const out: Snapshot[] = [];
+  for (
+    let d = toDate(from);
+    d.getTime() <= toDate(to).getTime();
+    d = addDays(d, 1)
+  )
+    out.push({
+      date: d,
+      scopeHours: 0,
+      remainingHours: 0,
+      completedHours: byDay.get(d.getTime()) ?? 0,
+    });
+  return out;
+}
+
+/** Ngày làm việc trong [from, to] chưa có snapshot — để giao diện nói rõ "thiếu số liệu" thay vì vẽ như rỗng. */
+export function snapshotGaps(
+  snapshots: Snapshot[],
+  from: Date,
+  to: Date,
+  cal: WorkCalendar,
+): string[] {
+  const have = new Set(snapshots.map((s) => toDate(s.date).getTime()));
+  const out: string[] = [];
+  for (
+    let d = toDate(from);
+    d.getTime() <= toDate(to).getTime();
+    d = addDays(d, 1)
+  )
+    if (isWorkday(d, cal) && !have.has(d.getTime()))
+      out.push(d.toISOString().slice(0, 10));
+  return out;
+}
+
 /** ETA = hôm nay + ceil(remaining / velocity) ngày làm việc; velocity 0 → null */
 export function etaOf(
   remaining: number,

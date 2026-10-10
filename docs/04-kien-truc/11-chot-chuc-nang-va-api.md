@@ -139,8 +139,9 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 | `POST /projects/:id/sprints` | pj:PM | `{ name, goal?, startDate, endDate }` | `201 sprint` | M | 09 |
 | `GET · PATCH /sprints/:id` | pj:MEMBER · pj:PM | `{ name?, goal?, startDate?, endDate? }` | `sprint` | M | 09 |
 | `POST /sprints/:id/start` | pj:PM | — | `sprint` (409 `SPRINT_ALREADY_ACTIVE`) | M | 09 |
-| `POST /sprints/:id/close` | pj:PM | `{ moveOpenTo: "backlog" \| sprintId }` | `sprint` + `{ movedTaskIds }` | M | 09 |
+| `POST /sprints/:id/close` | pj:PM | `{ moveOpenTo: "backlog" \| sprintId }` + header `Idempotency-Key` (tuỳ chọn, hiện thực 28/09 — khoá lưu trong nhật ký `sprint.closed`) | `sprint` + `{ movedTaskIds, movedTo }` | M | 09 |
 | `POST /sprints/:id/tasks` | pj:PM | `{ taskIds[] }` (kéo từ backlog) | `task[]` | M | 09 |
+| `GET /sprints/:id/summary` | pj:MEMBER | — | `{ sprint, window, taskCount, doneCount, committedHours, scopeHours, completedHours, remainingHours, capacityHours, byAssignee[{ userId, tasks, remainingHours, capacityHours }], unassigned, completed[], open[], carriedOut[], carriedIn[], addedAfterStart[] }` — số backend tính, không xếp hạng (thêm 28/09, đề xuất 02/07 C1) | M | 09, 30 |
 | `GET /sprints/:id/burndown` | pj:MEMBER | — | `{ ideal[], actual[], velocity, scopeCreepDays[] }` | M | 30 |
 | `GET /sprints/:id/forecast` | pj:MEMBER | — | `{ eta, riskLevel, remainingHours, velocity, causes[] }` (backend tính) | M | 31 |
 | `POST /sprints/:id/forecast/explain` | pj:PM | — | `{ action: RISK_EXPLANATION, cachedUntil }` | M | 31 |
@@ -165,8 +166,9 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 | `GET · PUT /tasks/:id/dependencies` | pj:MEMBER | `{ version, dependsOnIds[] }` | `dependency[]` (422 `DEPENDENCY_CYCLE`) | S1 | 11 |
 | `GET /me/tasks?status=&dueTo=` | auth | — | `task[]` xuyên dự án | M | 15 |
 | `GET /workspaces/:wsId/tasks/search?q=&limit=` | member | — | `task[]` (⌘K) | M | 15 |
-| `GET · POST /tasks/:id/time-entries` · `PATCH · DELETE /time-entries/:id` | assignee · pj:PM | `{ workDate, hours, note? }` | `timeEntry[]` | S5 | 35 |
-| `PUT /tasks/:id/review` | pj:PM | `{ rating, difficultyActual, actualHoursConfirmed?, comment? }` | `review` | S5 | 36 |
+| `GET · POST /tasks/:id/time-entries` · `PATCH · DELETE /time-entries/:id` | assignee · pj:PM | `{ workDate, hours, note? }` | `{ entries[], totalHours, estimateHours }` — **đã làm 28/09**; không ghi ngày tương lai, ≤ 24 h/người/ngày, sửa/xoá: người ghi · PM | S5 | 35 |
+| `GET /projects/:id/reviews/pending` | pj:PM | — | việc đã xong 60 ngày chưa đánh giá `{ id, key, title, completedAt, skills[], assignees[], selfAssigned }[]` — **28/09** | S5 | 36 |
+| `GET · PUT /tasks/:id/review` | GET: pj:MEMBER · PUT: pj:PM | `{ rating, difficultyActual, actualHoursConfirmed?, comment? }` | `{ visible, canReview, done, review }` — **đã làm 28/09**; chỉ việc đã xong; nội dung chỉ người được giao và PM thấy | S5 | 36 |
 
 ### 3.7 Bình luận, đính kèm
 
@@ -202,6 +204,8 @@ Cột **Mức**: M = MVP (1.1) · S = làm nếu kịp (1.2, số thứ tự) . 
 | `POST /workload/alerts/:id/ack` | pj:PM | `{ note? }` | `alert` | M | 25 |
 | `POST /projects/:id/workload/recompute` | pj:PM | — | `202` (chạy lại, phát `workload:updated`) | M | 24 |
 | `GET /projects/:id/capacity-table?sprintId=&taskIds=` | pj:PM | — | **bảng sự thật**: `{ members[{ userId, skills[], utilizationBefore, freeByDay[{ date, freeHours, focusBlocks }], metrics{ ear, onTimeRate, sampleSize }, projectsOpen }], tasks[{ taskId, hoursEff per user, skillMatch per user }] }` — không xếp hạng | S4 | 26, 39 |
+| `GET /projects/:id/skill-profiles` | pj:MEMBER (đọc) | — | `[{ id, fullName, role, skills[{ skillId, name, level, confidence, tasks, passed, failed, reviewed, verified, lastAt, declared, evidence }], performance | null }]` — mức **từ bằng chứng** ([02/08](../02-phan-tich/08-ho-so-ky-nang-tu-bang-chung.md)); `performance` (đúng hạn, rating, EAR, mở lại) chỉ cho chính người đó và PM | S5 | 23, 26 |
+| `GET /projects/:id/skill-profiles/:userId/evidence?skillId=` | pj:MEMBER (đọc) | — | các việc làm nên mức: `{ task, required, demonstrated, passed, weight, rating (ẩn với người khác), reopened, bugs, at }[]` | S5 | 23 |
 | `GET /users/:userId/metrics?weeks=8` | self · pj:PM | — | `metricsWeekly[]` | S5 | 35, 36 |
 
 ### 3.10 Lịch bận

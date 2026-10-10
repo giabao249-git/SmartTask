@@ -42,3 +42,8 @@ apps/api/uploads/
 docs/**/CHƯƠNG*.docx
 .~lock.*#
 .next-build
+
+# Hồ sơ học phần (đề cương, báo cáo, quản lý công việc) — giữ trên đĩa, không theo dõi trong git
+docs/01-de-cuong/
+docs/06-bao-cao/
+docs/07-quan-ly/

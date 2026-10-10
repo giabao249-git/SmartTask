@@ -88,6 +88,7 @@ erDiagram
           uuid project_id FK
           uuid sprint_id FK
           uuid parent_id FK
+          uuid origin_task_id FK "BUG sinh ra từ việc nào (28/09)"
           uuid column_id FK
           int number
           string title

@@ -8,6 +8,6 @@ import { WorkloadService } from './workload.service';
   imports: [MetricsModule],
   controllers: [WorkloadController],
   providers: [WorkloadService, WorkloadListener],
-  exports: [WorkloadService],
+  exports: [WorkloadService, MetricsModule],
 })
 export class WorkloadModule {}

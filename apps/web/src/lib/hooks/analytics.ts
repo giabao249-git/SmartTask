@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { BurndownView, CapacityTableView, DashboardView, ExplainView, ForecastView, SkillMatrixView, WeekLoadView, WorkloadView } from "@/lib/types";
+import type { BurndownView, CapacityTableView, DashboardView, EvidenceItemView, ExplainView, ForecastView, MemberProfileView, PendingReviewView, SkillMatrixView, SprintSummaryView, WeekLoadView, WorkloadView } from "@/lib/types";
 
 /** Số liệu do backend tính (docs 04) — web chỉ hiển thị, không tính lại. */
 export function useDashboard(projectId: string) {
@@ -35,6 +35,30 @@ export function useBurndown(sprintId: string | null) {
 
 export function useForecast(sprintId: string | null) {
   return useQuery({ queryKey: ["sprints", sprintId, "forecast"], queryFn: () => api.get<ForecastView>(`/sprints/${sprintId}/forecast`), enabled: !!sprintId });
+}
+
+/** Tóm tắt sprint: cam kết, năng lực nhóm, theo người, việc bị đẩy/thêm giữa chừng (GET /sprints/:id/summary). */
+export function useSprintSummary(sprintId: string | null) {
+  return useQuery({ queryKey: ["sprints", sprintId, "summary"], queryFn: () => api.get<SprintSummaryView>(`/sprints/${sprintId}/summary`), enabled: !!sprintId });
+}
+
+/** Hồ sơ kỹ năng từ bằng chứng của thành viên dự án (docs 02/08) */
+export function useSkillProfiles(projectId: string) {
+  return useQuery({ queryKey: ["projects", projectId, "skill-profiles"], queryFn: () => api.get<MemberProfileView[]>(`/projects/${projectId}/skill-profiles`) });
+}
+
+/** Các việc làm nên mức kỹ năng của một người — tải khi mở phần "vì sao" */
+export function useSkillEvidence(projectId: string, userId: string | null, skillId?: string) {
+  return useQuery({
+    queryKey: ["projects", projectId, "skill-profiles", userId, "evidence", skillId ?? ""],
+    queryFn: () => api.get<EvidenceItemView[]>(`/projects/${projectId}/skill-profiles/${userId}/evidence`, { skillId }),
+    enabled: !!userId,
+  });
+}
+
+/** Việc đã xong chưa đánh giá (PM) */
+export function usePendingReviews(projectId: string, enabled: boolean) {
+  return useQuery({ queryKey: ["projects", projectId, "reviews", "pending"], queryFn: () => api.get<PendingReviewView[]>(`/projects/${projectId}/reviews/pending`), enabled });
 }
 
 export type { ExplainView };

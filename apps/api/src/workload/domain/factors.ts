@@ -23,7 +23,10 @@ export function skillGapFactor(
 ): number {
   let worst = 0;
   for (const r of required) {
-    const lv = userLevels.get(r.skillId) ?? 0;
+    // Chưa có bằng chứng (không có trong map) ≠ không biết → trung tính (docs 02/08).
+    // Có bằng chứng mà mức 0 (toàn phải làm lại) vẫn là thiếu 2 bậc.
+    if (!userLevels.has(r.skillId)) continue;
+    const lv = userLevels.get(r.skillId)!;
     const gap = Math.max(0, r.minLevel - lv);
     worst = Math.max(worst, lv === 0 ? 2 : gap);
   }

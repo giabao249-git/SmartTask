@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
-import { percentToWorkload, levelToVariant, type WorkloadLevel } from "@/lib/status";
+import { percentToWorkload, levelToVariant, workloadLevelLabel, type WorkloadLevel } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
 interface WorkloadBadgeProps {
@@ -34,7 +34,7 @@ export function WorkloadBadge({
       variant={variant}
       className={cn("text-[11px] font-medium px-2 py-0.5", className)}
     >
-      {level || "Bình thường"}
+      {level ? workloadLevelLabel(level) : "Bình thường"}
     </Badge>
   );
 }

@@ -424,6 +424,94 @@ describe('Dự án, sprint, task (e2e)', () => {
       .expect(201);
   });
 
+  it('tóm tắt sprint: việc bị đẩy đi lúc đóng, thêm sau khi bắt đầu, giờ theo người cộng đúng, năng lực nhóm', async () => {
+    const list = await api()
+      .get(`/api/v1/projects/${projectId}/sprints`)
+      .set(auth(pm))
+      .expect(200);
+    const s2 = list.body.find((x: { name: string }) => x.name === 'Sprint 2');
+    // Sprint 1 đã đóng ở ca trước: hai việc gốc bị đẩy về backlog
+    const closed = await api()
+      .get(`/api/v1/sprints/${sprintId}/summary`)
+      .set(auth(viewer))
+      .expect(200);
+    expect(closed.body.sprint.status).toBe('CLOSED');
+    expect(closed.body.carriedOut.map((t: { id: string }) => t.id)).toEqual(
+      expect.arrayContaining([t1.id, t2.id]),
+    );
+    // Sprint 2 đang chạy: đưa t1 vào giữa chừng → "thêm sau khi bắt đầu"
+    await api()
+      .post(`/api/v1/sprints/${s2.id}/tasks`)
+      .set(auth(pm))
+      .send({ taskIds: [t1.id] })
+      .expect(201);
+    let sum = await api()
+      .get(`/api/v1/sprints/${s2.id}/summary`)
+      .set(auth(dev))
+      .expect(200);
+    for (let i = 0; i < 20 && !sum.body.addedAfterStart.length; i++) {
+      await new Promise((r) => setTimeout(r, 100)); // nhật ký ghi bất đồng bộ
+      sum = await api()
+        .get(`/api/v1/sprints/${s2.id}/summary`)
+        .set(auth(dev))
+        .expect(200);
+    }
+    expect(sum.body.addedAfterStart.map((t: { id: string }) => t.id)).toContain(
+      t1.id,
+    );
+    // Thành viên đổi sprint từng việc (PATCH mang version) sau khi bắt đầu cũng là phạm vi tăng
+    const cur = await api()
+      .get(`/api/v1/tasks/${t2.id}`)
+      .set(auth(dev))
+      .expect(200);
+    await api()
+      .patch(`/api/v1/tasks/${t2.id}`)
+      .set(auth(dev))
+      .send({ version: cur.body.version, sprintId: s2.id })
+      .expect(200);
+    let ids: string[] = [];
+    for (let i = 0; i < 20 && !ids.includes(t2.id); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const r = await api()
+        .get(`/api/v1/sprints/${s2.id}/summary`)
+        .set(auth(dev))
+        .expect(200);
+      ids = r.body.addedAfterStart.map((t: { id: string }) => t.id);
+      sum = r;
+    }
+    expect(ids).toEqual(expect.arrayContaining([t1.id, t2.id]));
+    const again = await api()
+      .get(`/api/v1/projects/${projectId}/sprints`)
+      .set(auth(pm))
+      .expect(200);
+    expect(sum.body.taskCount).toBe(
+      again.body.find((x: { id: string }) => x.id === s2.id).taskCount,
+    );
+    const people = sum.body.byAssignee as {
+      remainingHours: number;
+      capacityHours: number;
+    }[];
+    const byPeople = people.reduce((x, p) => x + p.remainingHours, 0);
+    expect(byPeople + sum.body.unassigned.hours).toBeCloseTo(
+      sum.body.remainingHours,
+      1,
+    );
+    expect(sum.body.capacityHours).toBeCloseTo(
+      people.reduce((x, p) => x + p.capacityHours, 0),
+      1,
+    );
+    expect(sum.body.capacityHours).toBeGreaterThan(0);
+    expect(Object.keys(sum.body)).not.toContain('bestUserId'); // không xếp hạng
+    // Vận tốc tham chiếu: sprint đã đóng gần nhất, cam kết lúc bắt đầu (13 h) và giờ hoàn thành khớp danh sách
+    const closedRow = again.body.find((x: { id: string }) => x.id === sprintId);
+    expect(sum.body.velocity.sprints[0]).toMatchObject({
+      name: 'Sprint 1',
+      committedHours: 13,
+      completedHours: closedRow.completedHours,
+    });
+    expect(sum.body.velocity.avgCompletedHours).toBe(closedRow.completedHours);
+  });
+
   it('việc của tôi, tìm kiếm ⌘K, by-key, dashboard, gỡ thành viên mất assignee', async () => {
     const mine = await api().get('/api/v1/me/tasks').set(auth(dev)).expect(200);
     expect(mine.body.map((t: { id: string }) => t.id)).toEqual(
@@ -465,5 +553,45 @@ describe('Dự án, sprint, task (e2e)', () => {
       .set(auth(dev))
       .send({ version: t.body.version, title: 'x' })
       .expect(403);
+  });
+
+  it('đóng sprint bấm hai lần cùng Idempotency-Key → trả kết quả lần đầu; không khoá → 409', async () => {
+    const list = await api()
+      .get(`/api/v1/projects/${projectId}/sprints`)
+      .set(auth(pm))
+      .expect(200);
+    const active = list.body.find(
+      (x: { status: string }) => x.status === 'ACTIVE',
+    );
+    const key = 'close-once-7f3a';
+    const first = await api()
+      .post(`/api/v1/sprints/${active.id}/close`)
+      .set(auth(pm))
+      .set('Idempotency-Key', key)
+      .send({ moveOpenTo: 'backlog' })
+      .expect(201);
+    // Nhật ký (nơi giữ khoá) ghi bất đồng bộ — chờ cho chắc
+    let again = await api()
+      .post(`/api/v1/sprints/${active.id}/close`)
+      .set(auth(pm))
+      .set('Idempotency-Key', key)
+      .send({ moveOpenTo: 'backlog' });
+    for (let i = 0; i < 20 && again.status !== 201; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      again = await api()
+        .post(`/api/v1/sprints/${active.id}/close`)
+        .set(auth(pm))
+        .set('Idempotency-Key', key)
+        .send({ moveOpenTo: 'backlog' });
+    }
+    expect(again.status).toBe(201);
+    expect(again.body.movedTaskIds).toEqual(first.body.movedTaskIds);
+    expect(again.body.status).toBe('CLOSED');
+    const other = await api()
+      .post(`/api/v1/sprints/${active.id}/close`)
+      .set(auth(pm))
+      .send({ moveOpenTo: 'backlog' })
+      .expect(409);
+    expect(other.body.code).toBe('SPRINT_NOT_ACTIVE');
   });
 });

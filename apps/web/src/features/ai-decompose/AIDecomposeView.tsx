@@ -15,7 +15,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { api, describeError, isApiError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useSkills, useSprints } from "@/lib/hooks/queries";
-import { draftItemToVariant } from "@/lib/status";
+import { draftItemToVariant, sprintStatusLabel } from "@/lib/status";
 import type { ApplyResponse, ProposalView, TurnUsage } from "@/lib/types";
 import type { ValidationResult } from "@smarttask/shared";
 import { toast } from "sonner";
@@ -122,7 +122,7 @@ export function AIDecomposeView() {
                 </SelectItem>
                 {(sprints.data ?? []).filter((s) => s.status !== "CLOSED").map((s) => (
                   <SelectItem key={s.id} value={s.id} className="text-xs">
-                    {s.name} · {s.status}
+                    {s.name} · {sprintStatusLabel(s.status)}
                   </SelectItem>
                 ))}
               </SelectContent>

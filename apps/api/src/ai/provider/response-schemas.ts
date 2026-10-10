@@ -1,4 +1,10 @@
 import type { AiPurpose } from '@prisma/client';
+import {
+  QUERY_INTENTS,
+  dueRangePresetSchema,
+  prioritySchema,
+  taskTypeSchema,
+} from '@smarttask/shared';
 
 /**
  * JSON Schema đầu ra theo mục đích — ép nhà cung cấp trả đúng cấu trúc (Gemini `responseSchema`, Ollama `format`).
@@ -105,71 +111,79 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
       // DATA_QUERY: chỉ ý định + bộ lọc; backend chạy truy vấn và vẽ khối (docs 14)
       query: obj(
         {
-          intent: {
-            type: 'string',
-            enum: [
-              'TASK_LIST',
-              'TASK_AGENDA',
-              'TASK_DETAIL',
-              'TASK_STATS',
-              'TASK_BLOCKED',
-              'MEMBER_LIST',
-              'MEMBER_PROFILE',
-              'WORKLOAD_WEEK',
-              'CAPACITY_FREE',
-              'WHO_KNOWS_SKILL',
-              'TASK_CANDIDATES',
-              'BUS_FACTOR',
-              'SPRINT_LIST',
-              'SPRINT_PROGRESS',
-              'ACTIVITY_FEED',
-              'NOTIFICATION_LIST',
-              'AI_USAGE',
-            ],
-          },
+          // Sinh từ packages/shared — thêm ý định không phải sửa tay ở đây (docs 02/07 D5)
+          intent: { type: 'string', enum: [...QUERY_INTENTS] },
           sprint: str('mã s, "__all" hoặc "__backlog"'),
-          filters: obj({
-            assignee: arr(str('mã u hoặc "me"')),
-            status: { type: 'string', enum: ['OPEN', 'DONE', 'ALL'] },
-            taskType: arr({ type: 'string', enum: ['STORY', 'TASK', 'BUG'] }),
-            priority: arr({
-              type: 'string',
-              enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'],
-            }),
-            dueRange: obj({
-              preset: {
+          filters: obj(
+            {
+              assignee: arr(str('mã u hoặc "me"')),
+              status: { type: 'string', enum: ['OPEN', 'DONE', 'ALL'] },
+              taskType: arr({
                 type: 'string',
-                enum: [
-                  'TODAY',
-                  'TOMORROW',
-                  'THIS_WEEK',
-                  'NEXT_WEEK',
-                  'OVERDUE',
-                  'NO_DUE',
-                ],
+                enum: [...taskTypeSchema.options],
+              }),
+              priority: arr({
+                type: 'string',
+                enum: [...prioritySchema.options],
+              }),
+              dueRange: obj({
+                preset: {
+                  type: 'string',
+                  enum: [...dueRangePresetSchema.options],
+                },
+                from: str('YYYY-MM-DD'),
+                to: str('YYYY-MM-DD'),
+              }),
+              unassignedOnly: { type: 'boolean' },
+              q: str('từ khoá tiêu đề'),
+              skill: str('mã k'),
+              minLevel: {
+                type: 'integer',
+                nullable: true,
+                description:
+                  'WHO_KNOWS_SKILL/BUS_FACTOR: "mức 4" → 4; không nêu → null',
               },
-              from: str('YYYY-MM-DD'),
-              to: str('YYYY-MM-DD'),
-            }),
-            unassignedOnly: { type: 'boolean' },
-            q: str('từ khoá tiêu đề'),
-            skill: str('mã k'),
-            minLevel: int('1–5'),
-            task: str('mã t'),
-            draft: str('mã bản nháp dN — TASK_CANDIDATES hỏi về việc chưa ghi'),
-            user: str('mã u hoặc "me"'),
-            groupUsageBy: { type: 'string', enum: ['day', 'purpose', 'user'] },
-          }),
+              task: str('mã t'),
+              draft: str(
+                'mã bản nháp dN — TASK_CANDIDATES hỏi về việc chưa ghi',
+              ),
+              user: {
+                type: 'string',
+                nullable: true,
+                description:
+                  'MEMBER_PROFILE/ACTIVITY_FEED: mã u, "tôi" → "me"; không nêu người → null',
+              },
+              groupUsageBy: {
+                type: 'string',
+                enum: ['day', 'purpose', 'user'],
+              },
+              lastN: int('SPRINT_VELOCITY: số sprint đã đóng gần nhất, 1–10'),
+              range: {
+                type: 'string',
+                nullable: true,
+                enum: ['TODAY', 'YESTERDAY', 'THIS_WEEK'],
+                description:
+                  'ACTIVITY_FEED: BẮT BUỘC khi câu có mốc — "hôm nay" → TODAY, "hôm qua" → YESTERDAY, "tuần này" → THIS_WEEK',
+              },
+            },
+            // Gemini bỏ sót các bộ lọc này dù câu hỏi có nêu (đo 28/09: "mức 4", "hôm nay", "tôi đã làm gì") → bắt buộc nêu, được null
+            ['minLevel', 'range', 'user'],
+          ),
           groupBy: {
             type: 'string',
             enum: ['NONE', 'DUE_DATE', 'ASSIGNEE', 'COLUMN', 'PRIORITY'],
           },
           limit: int('1–100, mặc định 25'),
         },
-        ['intent'],
+        ['intent', 'filters'],
       ),
       reply: str('văn bản hiển thị ≤ 600 ký tự'),
-      sprint: str('mã s'),
+      sprint: {
+        type: 'string',
+        nullable: true,
+        description:
+          'DECOMPOSE/CREATE: mã s của sprint người dùng nêu ("cho sprint 2"); không nêu hoặc type khác → null',
+      },
       tasks: arr(draftTask),
       drafts: arr(
         obj(
@@ -186,28 +200,57 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
       targetTask: str(
         'CHỈ mã task thật dạng tN khi sửa task đã có; bản nháp dN phải đặt ở targetDraftKeys. Không dùng thì BỎ HẲN trường này, không gửi chuỗi rỗng',
       ),
-      targetDraftKeys: arr(str('draftKey đang mở, dạng dN')),
+      targetDraftKeys: arr(
+        str('draftKey đang mở, dạng dN'),
+        'UPDATE_TASK_DRAFT/DISCARD_DRAFT: bản nháp cần sửa/bỏ; type khác → []',
+      ),
       all: { type: 'boolean', description: 'DISCARD_DRAFT: bỏ mọi nháp' },
-      patch: obj({
-        title: str(),
-        taskType: { type: 'string', enum: ['STORY', 'TASK', 'BUG'] },
-        subtasks: arr(obj({ title: str(), estimateHours: num() }, ['title'])),
-        description: { type: 'string', nullable: true },
-        estimateHours: { type: 'number', nullable: true },
-        priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] },
-        difficulty: int(),
-        requiredSkills: arr(obj({ skill: str(), minLevel: int() }, ['skill'])),
-        dependsOn: arr(str()),
-        suggestedAssignee: {
-          type: 'string',
-          nullable: true,
-          description: 'mã u; null = bỏ giao',
-        },
-        start: { type: 'string', nullable: true, description: 'YYYY-MM-DD' },
-        due: { type: 'string', nullable: true, description: 'YYYY-MM-DD' },
-        sprint: { type: 'string', nullable: true, description: 'mã s' },
-      }),
-      // UPDATE_TASK_DRAFT BẮT BUỘC có patch; không có gì để đổi nghĩa là không phải UPDATE_TASK_DRAFT
+      // Đo với Gemini 28/09: không có mô tả thì model hay bỏ hẳn patch rồi vẫn viết "đã điều chỉnh" trong reply
+      patch: {
+        ...obj({
+          title: str(),
+          taskType: { type: 'string', enum: ['STORY', 'TASK', 'BUG'] },
+          subtasks: arr(obj({ title: str(), estimateHours: num() }, ['title'])),
+          description: { type: 'string', nullable: true },
+          estimateHours: { type: 'number', nullable: true },
+          priority: {
+            type: 'string',
+            enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'],
+          },
+          difficulty: int(),
+          requiredSkills: arr(
+            obj({ skill: str(), minLevel: int() }, ['skill']),
+          ),
+          dependsOn: arr(str()),
+          suggestedAssignee: {
+            type: 'string',
+            nullable: true,
+            description: 'mã u; null = bỏ giao',
+          },
+          start: { type: 'string', nullable: true, description: 'YYYY-MM-DD' },
+          due: { type: 'string', nullable: true, description: 'YYYY-MM-DD' },
+          sprint: { type: 'string', nullable: true, description: 'mã s' },
+        }),
+        description:
+          'UPDATE_TASK_DRAFT: BẮT BUỘC — chỉ các trường cần đổi, ví dụ {"estimateHours":8,"difficulty":4}; type khác → null',
+        nullable: true,
+        // Gemini mặc định sinh theo ABC và hay bỏ trường sau (đo 28/09: "8 giờ và độ khó 4" → thiếu difficulty)
+        propertyOrdering: [
+          'estimateHours',
+          'difficulty',
+          'suggestedAssignee',
+          'due',
+          'start',
+          'priority',
+          'sprint',
+          'title',
+          'description',
+          'taskType',
+          'requiredSkills',
+          'dependsOn',
+          'subtasks',
+        ],
+      },
       resolutionReason: str(),
       assignments: arr(
         obj(
@@ -254,14 +297,38 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
       dataRef: str(),
       suggestApply: { type: 'boolean' },
     },
-    ['type', 'reply'],
+    // Gemini bỏ hẳn trường tuỳ chọn dù người dùng đã nêu (đo 28/09: "cho sprint 2", "đổi 8 giờ" → không có
+    // sprint/patch) → bắt buộc phải nêu, được phép null; parser bỏ null trước khi kiểm zod
+    ['type', 'reply', 'sprint', 'targetDraftKeys', 'patch'],
   ),
   GENERAL: obj({ type: str(), reply: str() }, ['type', 'reply']),
 };
 
-/** Chuyển sang dạng Gemini `Schema` (type viết hoa, bỏ khoá không hỗ trợ). */
+/** Trường dữ liệu quyết định phải sinh TRƯỚC `reply` (Gemini sinh theo `propertyOrdering`). */
+const BEFORE_REPLY = [
+  'type',
+  'sprint',
+  'targetDraftKeys',
+  'targetTask',
+  'patch',
+];
+
+/**
+ * Chuyển sang dạng Gemini `Schema` (type viết hoa, bỏ khoá không hỗ trợ). Đo 28/09: `reply` đứng đầu thì model
+ * "hứa" trước ("đã điều chỉnh d2") rồi bỏ trống patch/sprint; đặt `reply` CUỐI thì model lặp chữ tới hết token
+ * (JSON hỏng) → đưa vài trường quyết định lên trước `reply`, phần còn lại giữ thứ tự.
+ */
 export function toGeminiSchema(schema: JsonSchema): JsonSchema {
   const out: JsonSchema = {};
+  const props = schema.properties as Record<string, JsonSchema> | undefined;
+  if (props && 'reply' in props) {
+    const first = BEFORE_REPLY.filter((k) => k in props);
+    out.propertyOrdering = [
+      ...first,
+      'reply',
+      ...Object.keys(props).filter((k) => k !== 'reply' && !first.includes(k)),
+    ];
+  }
   for (const [k, v] of Object.entries(schema)) {
     if (k === 'type' && typeof v === 'string') out.type = v.toUpperCase();
     else if (k === 'properties' && v && typeof v === 'object')
@@ -273,7 +340,15 @@ export function toGeminiSchema(schema: JsonSchema): JsonSchema {
       );
     else if (k === 'items' && v && typeof v === 'object')
       out.items = toGeminiSchema(v as JsonSchema);
-    else if (['enum', 'required', 'description', 'nullable'].includes(k))
+    else if (
+      [
+        'enum',
+        'required',
+        'description',
+        'nullable',
+        'propertyOrdering',
+      ].includes(k)
+    )
       out[k] = v;
   }
   return out;

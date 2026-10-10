@@ -127,19 +127,18 @@ enum SupportAccessStatus {
 
 // ───────────────────────── Tài khoản ─────────────────────────
 
-
 model User {
-  id                  String    @id @default(uuid()) @db.Uuid
-  email               String    @unique @db.Citext
-  passwordHash        String    @map("password_hash")
-  fullName            String    @map("full_name")
-  shortName           String?   @map("short_name")
-  avatarUrl           String?   @map("avatar_url")
-  timezone            String    @default("Asia/Ho_Chi_Minh")
-  weeklyCapacityHours Int?      @map("weekly_capacity_hours") // null = dùng mặc định workspace
-  notificationPrefs   Json      @default("{}") @map("notification_prefs")
+  id                  String        @id @default(uuid()) @db.Uuid
+  email               String        @unique @db.Citext
+  passwordHash        String        @map("password_hash")
+  fullName            String        @map("full_name")
+  shortName           String?       @map("short_name")
+  avatarUrl           String?       @map("avatar_url")
+  timezone            String        @default("Asia/Ho_Chi_Minh")
+  weeklyCapacityHours Int?          @map("weekly_capacity_hours") // null = dùng mặc định workspace
+  notificationPrefs   Json          @default("{}") @map("notification_prefs")
   /// Sở thích cá nhân cho trợ lý AI (tầng ý định, docs 06) — ≤ 2.000 ký tự.
-  aiPersonalPrompt    String?   @map("ai_personal_prompt")
+  aiPersonalPrompt    String?       @map("ai_personal_prompt")
   isActive            Boolean       @default(true) @map("is_active")
   isSuperAdmin        Boolean       @default(false) @map("is_super_admin")
   platformRole        PlatformRole? @map("platform_role")
@@ -148,16 +147,16 @@ model User {
   updatedAt           DateTime      @updatedAt @map("updated_at")
 
   refreshTokens       RefreshToken[]
-  ownedWorkspaces     Workspace[]          @relation("WorkspaceOwner")
+  ownedWorkspaces     Workspace[]            @relation("WorkspaceOwner")
   workspaceMembers    WorkspaceMember[]
-  managedMembers      WorkspaceMember[]    @relation("MemberManager")
-  memberAliases       MemberAlias[]        @relation("AliasOwner")
-  aliasesCreated      MemberAlias[]        @relation("AliasCreator")
-  invitationsSent     Invitation[]         @relation("InvitationInviter")
-  userSkills          UserSkill[]          @relation("UserSkillOwner")
-  verifiedSkills      UserSkill[]          @relation("UserSkillVerifier")
+  managedMembers      WorkspaceMember[]      @relation("MemberManager")
+  memberAliases       MemberAlias[]          @relation("AliasOwner")
+  aliasesCreated      MemberAlias[]          @relation("AliasCreator")
+  invitationsSent     Invitation[]           @relation("InvitationInviter")
+  userSkills          UserSkill[]            @relation("UserSkillOwner")
+  verifiedSkills      UserSkill[]            @relation("UserSkillVerifier")
   projectMembers      ProjectMember[]
-  createdTasks        Task[]               @relation("TaskCreator")
+  createdTasks        Task[]                 @relation("TaskCreator")
   taskAssignees       TaskAssignee[]
   comments            Comment[]
   mentions            Mention[]
@@ -166,23 +165,23 @@ model User {
   pushSubscriptions   PushSubscription[]
   activityLogs        ActivityLog[]
   workloadSnapshots   WorkloadSnapshot[]
-  workloadAlerts      WorkloadAlert[]      @relation("AlertUser")
-  ackedAlerts         WorkloadAlert[]      @relation("AlertAcker")
+  workloadAlerts      WorkloadAlert[]        @relation("AlertUser")
+  ackedAlerts         WorkloadAlert[]        @relation("AlertAcker")
   timeOffs            UserTimeOff[]
-  aiConfigsCreated    AiConfig[]           @relation("AiConfigCreator")
-  aiPromptsEdited     AiPromptConfig[]     @relation("AiPromptEditor")
+  aiConfigsCreated    AiConfig[]             @relation("AiConfigCreator")
+  aiPromptsEdited     AiPromptConfig[]       @relation("AiPromptEditor")
   aiMemories          AiMemory[]
   aiHabits            AiHabit[]
   chatSessions        ChatSession[]
-  aiProposals         AiProposal[]         @relation("ProposalOwner")
-  aiProposalsApplied  AiProposal[]         @relation("ProposalApplier")
+  aiProposals         AiProposal[]           @relation("ProposalOwner")
+  aiProposalsApplied  AiProposal[]           @relation("ProposalApplier")
   aiTokenLogs         AiTokenLog[]
   calendarConnections CalendarConnection[]
   calendarEvents      CalendarEvent[]
   timeEntries         TimeEntry[]
   taskReviews         TaskReview[]
   metricsWeekly       UserMetricsWeekly[]
-  systemAuditLogs     SystemAuditLog[]     @relation("SystemAuditActor")
+  systemAuditLogs     SystemAuditLog[]       @relation("SystemAuditActor")
   supportSessions     SupportAccessSession[] @relation("SupportSessionAdmin")
 
   @@index([platformRole])
@@ -207,35 +206,35 @@ model RefreshToken {
 // ───────────────────────── Workspace ─────────────────────────
 
 model Workspace {
-  id         String    @id @default(uuid()) @db.Uuid
-  name       String
-  slug       String    @unique
-  logoUrl    String?   @map("logo_url")
-  ownerId    String    @map("owner_id") @db.Uuid
+  id            String                   @id @default(uuid()) @db.Uuid
+  name          String
+  slug          String                   @unique
+  logoUrl       String?                  @map("logo_url")
+  ownerId       String                   @map("owner_id") @db.Uuid
   // ngưỡng tải, trọng số, workdays, holidays, defaultCapacityHours, ai.dailyLimitPerUser, usdVnd
-  settings   Json      @default("{}")
-  status     WorkspaceLifecycleStatus @default(ACTIVE)
-  suspendedAt DateTime? @map("suspended_at")
-  suspendedById String? @map("suspended_by_id") @db.Uuid
-  suspendReason String? @map("suspend_reason")
-  archivedAt DateTime? @map("archived_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  settings      Json                     @default("{}")
+  status        WorkspaceLifecycleStatus @default(ACTIVE)
+  suspendedAt   DateTime?                @map("suspended_at")
+  suspendedById String?                  @map("suspended_by_id") @db.Uuid
+  suspendReason String?                  @map("suspend_reason")
+  archivedAt    DateTime?                @map("archived_at")
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  updatedAt     DateTime                 @updatedAt @map("updated_at")
 
-  owner         User                @relation("WorkspaceOwner", fields: [ownerId], references: [id])
-  memberAliases MemberAlias[]
-  members       WorkspaceMember[]
-  invitations   Invitation[]
-  skills        Skill[]
-  projects      Project[]
-  snapshots     WorkloadSnapshot[]
-  aiConfigs     AiConfig[]
-  aiPrompts     AiPromptConfig[]
-  aiMemories    AiMemory[]
-  aiHabits      AiHabit[]
-  chatSessions  ChatSession[]
-  aiTokenLogs   AiTokenLog[]
-  metricsWeekly UserMetricsWeekly[]
+  owner           User                   @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  memberAliases   MemberAlias[]
+  members         WorkspaceMember[]
+  invitations     Invitation[]
+  skills          Skill[]
+  projects        Project[]
+  snapshots       WorkloadSnapshot[]
+  aiConfigs       AiConfig[]
+  aiPrompts       AiPromptConfig[]
+  aiMemories      AiMemory[]
+  aiHabits        AiHabit[]
+  chatSessions    ChatSession[]
+  aiTokenLogs     AiTokenLog[]
+  metricsWeekly   UserMetricsWeekly[]
   supportSessions SupportAccessSession[]
 
   @@map("workspaces")
@@ -464,6 +463,8 @@ model Task {
   createdById    String     @map("created_by_id") @db.Uuid
   startedAt      DateTime?  @map("started_at")
   completedAt    DateTime?  @map("completed_at")
+  /// Bug sinh ra từ việc nào (PM gắn) — bằng chứng "làm lại" cho hồ sơ kỹ năng (docs 02/08). Chỉ task BUG.
+  originTaskId   String?    @map("origin_task_id") @db.Uuid
   deletedAt      DateTime?  @map("deleted_at")
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
@@ -485,8 +486,11 @@ model Task {
   aiProposal   AiProposal?      @relation(fields: [aiProposalId], references: [id], onDelete: SetNull)
   timeEntries  TimeEntry[]
   review       TaskReview?
+  originTask   Task?            @relation("TaskOrigin", fields: [originTaskId], references: [id], onDelete: SetNull)
+  derivedBugs  Task[]           @relation("TaskOrigin")
 
   @@unique([projectId, number])
+  @@index([originTaskId])
   @@index([projectId, sprintId, columnId, position])
   @@index([dueDate])
   @@index([parentId])
@@ -1203,10 +1207,10 @@ model UserMetricsWeekly {
 
 /// Cài đặt cấp nền tảng (bảo trì...) — lưu DB để sống sót restart và đồng nhất khi chạy nhiều pod.
 model PlatformSetting {
-  key         String   @id @db.VarChar(64)
-  value       Json
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  updatedBy   String?  @map("updated_by") @db.VarChar(255)
+  key       String   @id @db.VarChar(64)
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by") @db.VarChar(255)
 
   @@map("platform_settings")
 }
@@ -1255,4 +1259,3 @@ model SupportAccessSession {
   @@index([workspaceId, status])
   @@map("support_access_sessions")
 }
-

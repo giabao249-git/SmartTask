@@ -96,6 +96,13 @@ describe('AI MVP (e2e)', () => {
         })),
       })
       .expect(200);
+    // Tự khai không phải bằng chứng (docs 02/08): chủ workspace xác nhận để ngữ cảnh AI có kỹ năng của Lan
+    for (const sk of skills.body as { id: string }[])
+      await api()
+        .patch(`/api/v1/users/${lan.id}/skills/${sk.id}/verify`)
+        .set(auth(pm))
+        .send({ level: 5 })
+        .expect(200);
     // Sprint kế hoạch (tuần tới, 2 tuần) cho phân rã; sprint đang chạy (tuần này) có việc quá hạn cho giải thích rủi ro
     const planned = await api()
       .post(`/api/v1/projects/${projectId}/sprints`)

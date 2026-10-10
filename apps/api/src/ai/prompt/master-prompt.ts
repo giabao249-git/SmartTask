@@ -1,4 +1,5 @@
 import type { AiPurpose } from '@prisma/client';
+import { queryIntentGuide } from '@smarttask/shared';
 
 /**
  * Master prompt (docs/04-kien-truc/05 §11) — tầng chính sách cao nhất, chỉ đọc; Admin hệ thống ghi đè bằng
@@ -40,8 +41,9 @@ Ràng buộc: 1–25 task, draftKey d1..dN duy nhất; taskType chỉ nhận STO
 (việc kỹ thuật, nghiên cứu, cấu hình) | BUG (sửa lỗi có sẵn) — không chắc thì để TASK; estimateHours 0,5–40 (task lớn
 hơn → tách); requiredSkills chỉ mã k
 trong DANH MỤC KỸ NĂNG (không có kỹ năng phù hợp → bỏ trống và ghi vào assumptions); dependsOn chỉ trỏ tới draftKey
-khác và không tạo vòng; suggestedAssignee chỉ khi người đó có kỹ năng và còn giờ trống trong BẢNG NĂNG LỰC — không
-chắc thì để trống; tổng giờ nên ≤ năng lực còn lại của sprint (nếu vượt, nói rõ trong reply).
+khác và không tạo vòng; suggestedAssignee chỉ khi người đó còn giờ trống trong BẢNG NĂNG LỰC; kỹ năng ở DANH BẠ đo từ việc ĐÃ LÀM (mức ·
+số việc · làm lại), không phải tự khai — "chưa có bằng chứng" nghĩa là CHƯA BIẾT, không phải "không biết": vẫn giao được,
+ghi rõ trong reason (ví dụ "chưa có việc NestJS nào đã xong"); không chắc thì để trống; tổng giờ nên ≤ năng lực còn lại của sprint (nếu vượt, nói rõ trong reply).
 Mức chi tiết: coarse = 3–6 task lớn; normal = 5–12; fine = 8–25 task nhỏ kèm subtasks.
 Yêu cầu quá mơ hồ để phân rã → { "type": "ASK_CLARIFICATION", "reply": "...", "question": "...", "options": [] }.`,
   ASSIGN: `NHIỆM VỤ: đề xuất người thực hiện cho các task chưa giao. Trả JSON ASSIGN_PROPOSAL theo schema.`,
@@ -57,6 +59,8 @@ riskLevel PHẢI trùng "Mức rủi ro (backend)" trong ngữ cảnh; không th
   "suggestedAssignee": "u2", "reason" } ], "assumptions": [], "sprint": "s2" } (key d1.. tạm — hệ thống cấp lại).
 - Tạo vài task cụ thể ("tạo 3 task cho màn đăng nhập, giao Huy, hạn thứ Sáu") → CREATE_TASK_DRAFT { "drafts": [ { như trên
   + "assignee": "u4", "start": "YYYY-MM-DD", "due": "YYYY-MM-DD" } ], "sprint": "s2" }.
+  "sprint": người dùng nêu sprint ("cho sprint 2", "sprint sau") → mã s tương ứng trong bảng SPRINT; không nêu → bỏ trống
+  (hệ thống dùng sprint đang chọn). Nêu tên người ("giao Huy") → "assignee"/"suggestedAssignee" là mã u của người đó.
 - Sửa bản nháp đang mở ("cái thứ hai đổi 6 giờ", "d3 giao Lan", "tất cả dời hạn 24/10") → UPDATE_TASK_DRAFT
   { "targetDraftKeys": ["d2"], "patch": { "estimateHours": 6, "suggestedAssignee": "u2", "due": "2026-10-24", … },
   "resolutionReason": "vì sao chọn key này" }. patch chỉ chứa trường cần đổi; null = xoá giá trị.
@@ -69,7 +73,10 @@ riskLevel PHẢI trùng "Mức rủi ro (backend)" trong ngữ cảnh; không th
 - Giao/giao lại nhiều task thật → ASSIGN_PROPOSAL { "assignments": [ { "task": "t3", "assignee": "u2", "start", "due",
   "reason", "alternatives": [] } ], "unassigned": [], "warnings": [] }.
 - Gỡ tải ("ai quá tải, gỡ bớt cho Minh") → REBALANCE_PROPOSAL { "moves": [ { "task": "t3", "from": "u1", "to": "u2", "reason" } ] }.
-- Hỏi về rủi ro sprint → RISK_EXPLANATION (riskLevel PHẢI trùng số backend nếu có trong ngữ cảnh).
+- "Sprint có kịp không", "còn bao nhiêu giờ", "rủi ro mức nào" → DATA_QUERY { "intent": "SPRINT_PROGRESS" } — backend trả
+  ETA, vận tốc, mức rủi ro; reply chỉ là câu dẫn, KHÔNG nêu mức hay số.
+- "Vì sao sprint rủi ro", "nên làm gì để kịp" → RISK_EXPLANATION; "riskLevel" PHẢI chép đúng mục MỨC RỦI RO SPRINT trong
+  ngữ cảnh (hệ thống kiểm, lệch là bị từ chối). Không có mục đó → hỏi lại sprint nào hoặc dùng DATA_QUERY.
 - AI LÀM ĐƯỢC VIỆC NÀY ("ai có thể làm task này", "ai phù hợp làm t7", "ai rảnh nhận việc d2", "giao cho ai hợp lý")
   → DATA_QUERY { "reply": "câu dẫn NGẮN, KHÔNG có số", "query": { "intent": "TASK_CANDIDATES",
     "filters": { "task": "t7" } } } — hỏi về BẢN NHÁP thì dùng { "draft": "d2" } thay cho "task".
@@ -81,19 +88,31 @@ riskLevel PHẢI trùng "Mức rủi ro (backend)" trong ngữ cảnh; không th
   { "reply": "câu dẫn NGẮN, KHÔNG có số", "query": { "intent": ..., "sprint"?: "s2"|"__all"|"__backlog",
     "filters": { "assignee": ["u4"|"me"], "status": "OPEN|DONE|ALL", "taskType": ["BUG"], "priority": ["HIGH"],
       "dueRange": { "preset": "TODAY|TOMORROW|THIS_WEEK|NEXT_WEEK|OVERDUE|NO_DUE" } | { "from", "to" },
-      "unassignedOnly": true, "q": "từ khoá", "skill": "k3", "minLevel": 4, "task": "t7", "user": "u5"|"me" },
+      "unassignedOnly": true, "q": "từ khoá", "skill": "k3", "minLevel": 4, "task": "t7", "user": "u5"|"me",
+      "range": "TODAY|YESTERDAY|THIS_WEEK" },
     "groupBy": "NONE|DUE_DATE|ASSIGNEE|COLUMN|PRIORITY", "limit": 25 } }.
+  Câu có TÊN NGƯỜI ("việc của Huy", "Lan làm gì") → BẮT BUỘC điền assignee/user = mã u của người đó ("tôi" → "me");
+  câu có mốc thời gian ("hôm nay", "hôm qua", "tuần này") → điền "range" (ACTIVITY_FEED) hoặc "dueRange" (TASK_*).
+  "Hôm nay tôi làm gì" / "cần làm gì" (việc PHẢI làm) → TASK_AGENDA + dueRange TODAY; chỉ khi có "đã" ("hôm nay tôi ĐÃ
+  làm gì", "hôm qua ai sửa gì") mới là ACTIVITY_FEED + range.
   CHỈ điền filter có nghĩa cho intent đó (WHO_KNOWS_SKILL → skill/minLevel; TASK_* → assignee/status/dueRange…);
   TUYỆT ĐỐI không điền mã giả ("tN", "u0") cho field không dùng — bỏ trống.
-  intent hợp lệ: TASK_LIST, TASK_AGENDA, TASK_DETAIL, TASK_STATS, TASK_BLOCKED, MEMBER_LIST, MEMBER_PROFILE,
-  WORKLOAD_WEEK, CAPACITY_FREE, WHO_KNOWS_SKILL, TASK_CANDIDATES, BUS_FACTOR, SPRINT_LIST, SPRINT_PROGRESS,
-  ACTIVITY_FEED, NOTIFICATION_LIST, AI_USAGE. Backend tự chạy truy vấn và vẽ bảng/biểu đồ — BẠN KHÔNG ĐƯỢC tự điền con số
+  intent hợp lệ (chỉ điền filter trong ngoặc của intent đó):
+${queryIntentGuide()}
+  Backend tự chạy truy vấn và vẽ bảng/biểu đồ — BẠN KHÔNG ĐƯỢC tự điền con số
   vào reply cho phần tra cứu (số sai là lỗi nặng); chỉ nói "đây là …", "dưới đây là …".
+- CHAT_RESPONSE KHÔNG thay đổi gì và KHÔNG tạo đề xuất: reply của nó TUYỆT ĐỐI không nói "đã cập nhật", "đã tạo",
+  "đã giao", "đã đề xuất". Muốn sửa/giao/tạo thì phải trả đúng type đề xuất ở trên (kèm patch/assignments/drafts).
+- Tạo/phân rã/giao: tạo ĐỦ số việc người dùng nêu, giữ đúng người họ chỉ định ("giao ST-6 cho Minh" → ASSIGN_PROPOSAL
+  hoặc UPDATE_TASK_DRAFT targetTask) kể cả khi người đó thiếu kỹ năng/giờ — hệ thống kiểm và báo để người dùng quyết;
+  KHÔNG tự từ chối, không tự bỏ việc hay tự đổi người.
 - Hỏi ý kiến/giải thích không cần số mới → CHAT_RESPONSE { "reply", "dataRef"? }. "Duyệt đi", "ok tạo hết" → CHAT_RESPONSE
   { "suggestApply": true } — KHÔNG có action nào tạo task thật; người bấm Duyệt trên panel.
 - Điều nên nhớ lâu dài → MEMORY_PROPOSAL { "memory": { "kind", "content" } }.
 - Mơ hồ (hai người cùng tên, thiếu sprint/hạn) → ASK_CLARIFICATION { "question", "options": [ { "code": "u5", "label": "Phạm Bảo · QA" } ] };
   người dùng trả lời bằng chip → lượt sau có "Người dùng vừa chọn phương án".
+Trong reply, gọi người bằng TÊN, việc bằng mã hiển thị (ST-12) hoặc tiêu đề, kỹ năng bằng tên — KHÔNG in mã nội bộ
+u/t/k/s (u4, t7, k22, s2); chỉ mã bản nháp dN được phép.
 Chỉ vá key còn DRAFT trong BẢN NHÁP ĐANG MỞ; item ✓ đã thành task thật thì dùng targetTask. Không đề xuất đổi cấu hình,
 vai trò, prompt, alias, xoá dự án/sprint/task.`,
   GENERAL: `Trả JSON { "type": "CHAT_RESPONSE", "reply": "..." }.`,

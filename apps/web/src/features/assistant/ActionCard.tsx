@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, Brain, HelpCircle, Info, Layers, User } from "lucide-react";
+import { AlertTriangle, ArrowRight, Brain, HelpCircle, Info, Layers, User, XCircle } from "lucide-react";
 import { structuredActionSchema, type StructuredAction } from "@smarttask/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,11 +22,13 @@ interface ActionCardProps {
   resolver: CodeResolver;
   validation?: ValidationResult | null;
   onSelectOption?: (code: string, label: string) => void;
+  /** Cuộn panel bản nháp tới các mục này và nháy sáng */
+  onShowDrafts?: (keys: string[]) => void;
   disabled?: boolean;
 }
 
 /** Thẻ dữ liệu trong bong bóng chat theo `action.type` (docs 05 §5) — chỉ đọc; tạo thật luôn ở rail. */
-export function ActionCard({ action, resolver, validation, onSelectOption, disabled }: ActionCardProps) {
+export function ActionCard({ action, resolver, validation, onSelectOption, onShowDrafts, disabled }: ActionCardProps) {
   switch (action.type) {
     case "ASK_CLARIFICATION":
       return (
@@ -64,9 +66,16 @@ export function ActionCard({ action, resolver, validation, onSelectOption, disab
               <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5 text-warning" /> Phân tích rủi ro tiến độ
               </CardTitle>
-              <Badge variant={riskToVariant(action.riskLevel)} className="text-[10px]">
-                Rủi ro: {riskLabel(action.riskLevel)}
-              </Badge>
+              {validation && !validation.ok ? (
+                // Mức do AI tự nêu mà lệch số hệ thống thì KHÔNG in như sự thật (docs 05 §4)
+                <Badge variant="outline" className="text-[10px]">
+                  Mức rủi ro chưa khớp số hệ thống
+                </Badge>
+              ) : (
+                <Badge variant={riskToVariant(action.riskLevel)} className="text-[10px]">
+                  Rủi ro: {riskLabel(action.riskLevel)}
+                </Badge>
+              )}
             </div>
           </CardHeader>
           <CardContent className="p-3 text-xs space-y-2">
@@ -120,24 +129,58 @@ export function ActionCard({ action, resolver, validation, onSelectOption, disab
         </div>
       ) : null;
     case "DECOMPOSE_PROPOSAL":
-    case "CREATE_TASK_DRAFT":
+    case "CREATE_TASK_DRAFT": {
+      // Trước đây chỉ là dãy mã "d1 d2 d3 (xem panel bản nháp)" + khối lỗi thô: người đọc không biết AI đề xuất gì
+      const rows = action.type === "DECOMPOSE_PROPOSAL" ? action.tasks.map((t) => ({ ...t, who: t.suggestedAssignee })) : action.drafts.map((t) => ({ ...t, who: t.assignee ?? t.suggestedAssignee }));
+      const total = rows.reduce((s, t) => s + (t.estimateHours ?? 0), 0);
+      const sprint = resolver.sprint(action.sprint);
+      return (
+        <div className="mt-2 pt-2 border-t border-border/40 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs text-foreground flex-wrap">
+            <Layers className="h-3.5 w-3.5 text-info" />
+            <span className="font-medium">{ACTION_LABEL[action.type]}</span>
+            <span className="tabular-nums">
+              · {rows.length} việc · {hrs(total)}
+            </span>
+            {sprint && <span>· vào {sprint}</span>}
+          </div>
+          <ul className="space-y-1 text-xs">
+            {rows.slice(0, 6).map((t) => (
+              <li key={t.draftKey} className="flex items-baseline gap-2 min-w-0">
+                <span className="font-mono text-[10px] text-muted-foreground shrink-0">{t.draftKey}</span>
+                <span className="flex-1 min-w-0 truncate" title={t.title}>
+                  {t.title}
+                </span>
+                <span className="shrink-0 tabular-nums">{t.estimateHours != null ? hrs(t.estimateHours) : "—"}</span>
+                <span className="shrink-0 w-20 truncate text-right">{resolver.user(t.who)?.name ?? "chưa giao"}</span>
+              </li>
+            ))}
+            {rows.length > 6 && <li className="text-muted-foreground">… và {rows.length - 6} việc nữa</li>}
+          </ul>
+          <ProposalFooter validation={validation} keys={rows.map((t) => t.draftKey)} onShowDrafts={onShowDrafts} />
+        </div>
+      );
+    }
     case "UPDATE_TASK_DRAFT":
     case "DISCARD_DRAFT":
     case "ASSIGN_PROPOSAL":
     case "REBALANCE_PROPOSAL":
       return (
-        <div className="mt-2 pt-2 border-t border-border/40 space-y-1.5">
-          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground flex-wrap">
-            <Layers className="h-3 w-3 text-info" />
-            <span>{ACTION_LABEL[action.type]}</span>
+        <div className="mt-2 pt-2 border-t border-border/40 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs text-foreground flex-wrap">
+            <Layers className="h-3.5 w-3.5 text-info" />
+            <span className="font-medium">{ACTION_LABEL[action.type]}</span>
             {summaryOf(action, resolver).map((s) => (
-              <Badge key={s} variant="secondary" className="text-[9px] font-mono px-1 py-0">
+              <Badge key={s} variant="secondary" className="text-[11px] font-normal px-1.5 py-0">
                 {s}
               </Badge>
             ))}
-            <span className="text-info font-medium ml-1">(xem panel bản nháp)</span>
           </div>
-          {validation && <ValidationNote validation={validation} />}
+          <ProposalFooter
+            validation={validation}
+            keys={action.type === "UPDATE_TASK_DRAFT" && !action.targetTask ? [...(action.targetDraftKey ? [action.targetDraftKey] : []), ...(action.targetDraftKeys ?? [])] : []}
+            onShowDrafts={onShowDrafts}
+          />
         </div>
       );
     default:
@@ -152,7 +195,7 @@ function summaryOf(a: StructuredAction, r: CodeResolver): string[] {
     case "CREATE_TASK_DRAFT":
       return a.drafts.map((t) => t.draftKey);
     case "UPDATE_TASK_DRAFT":
-      return a.targetTask ? [`task ${a.targetTask}`] : [...(a.targetDraftKey ? [a.targetDraftKey] : []), ...(a.targetDraftKeys ?? [])];
+      return a.targetTask ? [r.task(a.targetTask)?.key ?? "việc thật"] : [...(a.targetDraftKey ? [a.targetDraftKey] : []), ...(a.targetDraftKeys ?? [])];
     case "DISCARD_DRAFT":
       return a.all ? ["tất cả"] : a.targetDraftKeys;
     case "ASSIGN_PROPOSAL":
@@ -178,6 +221,36 @@ export function ValidationNote({ validation }: { validation: ValidationResult })
           ⚠ <span className="font-mono">{w.code}</span> {w.message}
         </p>
       ))}
+    </div>
+  );
+}
+
+const hrs = (n: number) => `${(Math.round(n * 10) / 10).toLocaleString("vi-VN")} h`;
+
+/** Đếm lỗi/cảnh báo (chi tiết từng việc nằm trên thẻ bản nháp, bằng lời — không in mã/đường dẫn máy ở đây). */
+function ProposalFooter({ validation, keys, onShowDrafts }: { validation?: ValidationResult | null; keys: string[]; onShowDrafts?: (keys: string[]) => void }) {
+  const errors = validation?.errors.length ?? 0;
+  const warnings = validation?.warnings.length ?? 0;
+  return (
+    <div className="flex items-center justify-between gap-2 flex-wrap">
+      <span className="flex items-center gap-1.5 text-xs text-foreground">
+        {errors > 0 ? (
+          <>
+            <XCircle className="h-3.5 w-3.5 text-destructive" /> {errors} lỗi{warnings ? ` · ${warnings} cảnh báo` : ""} cần xử lý trước khi duyệt
+          </>
+        ) : warnings > 0 ? (
+          <>
+            <AlertTriangle className="h-3.5 w-3.5 text-warning" /> {warnings} cảnh báo
+          </>
+        ) : (
+          <span className="text-muted-foreground">Chưa tạo gì — chờ bạn duyệt</span>
+        )}
+      </span>
+      {onShowDrafts && (
+        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => onShowDrafts(keys)}>
+          Xem và duyệt <ArrowRight className="h-3 w-3" />
+        </Button>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ForecastModule } from '../forecast/forecast.module';
+import { SprintsModule } from '../sprints/sprints.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { WorkloadModule } from '../workload/workload.module';
 import { AiAdminController } from './ai-admin.controller';
@@ -25,7 +26,7 @@ import { ActionValidatorService } from './validator/action-validator.service';
  * ai_proposals → Executor (TasksService). Cấu hình/catalog/prompt/sổ token đọc từ DB (ai-config).
  */
 @Module({
-  imports: [WorkloadModule, ForecastModule, TasksModule],
+  imports: [WorkloadModule, ForecastModule, TasksModule, SprintsModule],
   controllers: [
     AiController,
     AiAdminController,

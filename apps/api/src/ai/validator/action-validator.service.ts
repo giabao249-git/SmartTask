@@ -11,6 +11,11 @@ import type { ProposalAction } from '../proposals/draft-items';
 import { PrismaService } from '../../prisma/prisma.service';
 import { addDays, isoDate, toDate } from '../../workload/domain/calendar';
 import { WorkloadService } from '../../workload/workload.service';
+import {
+  evidenceText,
+  isConclusive,
+} from '../../metrics/domain/skill-evidence';
+import { SkillEvidenceService } from '../../metrics/skill-evidence.service';
 import { mergeSettings } from '../../workspaces/workspace-settings';
 import type { CodeBook } from '../context/short-codes';
 import { boDau, findCycle } from './graph';
@@ -21,6 +26,12 @@ export interface DecomposeContext {
   workspaceId: string;
   /** Sprint đích đã chọn trên form (null = backlog) */
   sprintId: string | null;
+  /**
+   * Chat: `sprintId` chỉ là sprint đang xem trên thanh trên cùng, không phải lựa chọn cho yêu cầu này —
+   * người dùng nói "cho sprint 2" thì `action.sprint` (đã đối chiếu mã, chưa đóng) được dùng thay.
+   * Form phân rã: người dùng đã chọn sprint trên form → khác là lỗi.
+   */
+  sprintIsDefault?: boolean;
   today?: Date;
 }
 
@@ -59,6 +70,7 @@ export class ActionValidatorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly workload: WorkloadService,
+    private readonly evidence: SkillEvidenceService,
   ) {}
 
   async validateDecompose(
@@ -84,7 +96,7 @@ export class ActionValidatorService {
             `Mã sprint ${action.sprint} không có trong ngữ cảnh`,
           ),
         );
-      else if (ctx.sprintId && id !== ctx.sprintId)
+      else if (ctx.sprintId && id !== ctx.sprintId && !ctx.sprintIsDefault)
         errors.push(
           issue(
             'sprint',
@@ -125,12 +137,7 @@ export class ActionValidatorService {
         where: { projectId: ctx.projectId },
         select: {
           userId: true,
-          user: {
-            select: {
-              fullName: true,
-              userSkills: { select: { skillId: true, level: true } },
-            },
-          },
+          user: { select: { fullName: true } },
         },
       }),
       this.prisma.skill.findMany({
@@ -146,6 +153,11 @@ export class ActionValidatorService {
         select: { userId: true, fromDate: true, toDate: true },
       }),
     ]);
+    const evidenceOf = await this.evidence.evidence(
+      ctx.workspaceId,
+      members.map((m) => m.userId),
+      today,
+    );
     const memberById = new Map(members.map((m) => [m.userId, m]));
     const skillById = new Map(skills.map((s) => [s.id, s]));
     const skillByNorm = new Map<string, string>();
@@ -282,21 +294,34 @@ export class ActionValidatorService {
                 },
               ),
             );
-          const levels = new Map(
-            m.user.userSkills.map((s) => [s.skillId, s.level]),
-          );
+          // Kỹ năng đo bằng BẰNG CHỨNG (việc đã xong, đánh giá, làm lại), không bằng mức tự khai — và chỉ là
+          // CẢNH BÁO kèm số liệu: dữ liệu thưa, người quyết là PM (docs 02/08). Trước đây là lỗi và khoá nút Duyệt.
+          const mine = evidenceOf.get(id);
           for (const rs of resolvedSkills) {
-            const lv = levels.get(rs.skillId) ?? 0;
-            if (lv < rs.minLevel)
-              errors.push(
+            const name = skillById.get(rs.skillId)?.name;
+            const found = mine?.get(rs.skillId);
+            const e = found && isConclusive(found) ? found : undefined;
+            if (!e)
+              warnings.push(
+                issue(
+                  `${p}.suggestedAssignee`,
+                  'ASSIGN_SKILL_UNPROVEN',
+                  `${m.user.fullName} chưa có việc ${name} nào đã xong — chưa có bằng chứng cho mức ${rs.minLevel}`,
+                  { skill: name, required: rs.minLevel },
+                ),
+              );
+            else if (e.level < rs.minLevel)
+              warnings.push(
                 issue(
                   `${p}.suggestedAssignee`,
                   'ASSIGN_SKILL_GAP',
-                  `${m.user.fullName} có ${skillById.get(rs.skillId)?.name} mức ${lv}, task cần ≥ ${rs.minLevel}`,
+                  `${m.user.fullName}: ${name} mức ${e.level} theo bằng chứng (${evidenceText(e)}), việc cần ≥ ${rs.minLevel}`,
                   {
-                    skill: skillById.get(rs.skillId)?.name,
+                    skill: name,
                     required: rs.minLevel,
-                    level: lv,
+                    level: e.level,
+                    tasks: e.tasks,
+                    failed: e.failed,
                   },
                 ),
               );

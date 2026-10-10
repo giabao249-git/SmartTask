@@ -6,6 +6,8 @@ import { ForecastService } from '../../forecast/forecast.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isoDate, toDate } from '../../workload/domain/calendar';
 import { WorkloadService } from '../../workload/workload.service';
+import { isConclusive } from '../../metrics/domain/skill-evidence';
+import { SkillEvidenceService } from '../../metrics/skill-evidence.service';
 import { AiConfigService } from '../ai-config/ai-config.service';
 import { PURPOSE_INSTRUCTIONS } from '../prompt/master-prompt';
 import {
@@ -79,6 +81,7 @@ export class ContextBuilderService {
     private readonly aiConfig: AiConfigService,
     private readonly workload: WorkloadService,
     private readonly forecast: ForecastService,
+    private readonly evidence: SkillEvidenceService,
   ) {}
 
   async build(input: BuildInput): Promise<BuiltContext> {
@@ -105,18 +108,14 @@ export class ContextBuilderService {
                 shortName: true,
                 weeklyCapacityHours: true,
                 aiPersonalPrompt: true,
-                userSkills: {
-                  select: { skillId: true, level: true, verifiedById: true },
-                },
               },
             },
           },
         },
+        // Mọi sprint, theo thứ tự TẠO: mã s1, s2… của một sprint không bao giờ đổi (đóng sprint hay thêm
+        // sprint có ngày bắt đầu sớm hơn cũng không làm mã cũ trỏ sang sprint khác)
         sprints: {
-          where: {
-            status: { in: [SprintStatus.PLANNED, SprintStatus.ACTIVE] },
-          },
-          orderBy: [{ startDate: 'asc' }, { createdAt: 'asc' }],
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           select: {
             id: true,
             name: true,
@@ -124,6 +123,7 @@ export class ContextBuilderService {
             status: true,
             startDate: true,
             endDate: true,
+            closedAt: true,
           },
         },
       },
@@ -156,9 +156,25 @@ export class ContextBuilderService {
     const requesterName =
       requester?.user.shortName ?? requester?.user.fullName ?? 'PM';
 
+    // Sprint đích (form / thanh chọn trên giao diện) chỉ nhận sprint chưa đóng như trước
     const sprint = input.sprintId
-      ? (project.sprints.find((s) => s.id === input.sprintId) ?? null)
+      ? (project.sprints.find(
+          (s) => s.id === input.sprintId && s.status !== SprintStatus.CLOSED,
+        ) ?? null)
       : null;
+    // Bảng trong prompt: sprint đang mở + 3 sprint đóng gần nhất — đủ để hỏi "sprint trước", không phình prompt
+    const closedShown = new Set(
+      project.sprints
+        .filter((s) => s.status === SprintStatus.CLOSED)
+        .sort(
+          (a, b) => (b.closedAt?.getTime() ?? 0) - (a.closedAt?.getTime() ?? 0),
+        )
+        .slice(0, 3)
+        .map((s) => s.id),
+    );
+    const shownSprints = project.sprints
+      .filter((s) => s.status !== SprintStatus.CLOSED || closedShown.has(s.id))
+      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
     if (input.sprintId && !sprint)
       throw AppError.notFound({ sprintId: input.sprintId });
     const sprintCode = sprint ? codes.codeOf('s', sprint.id)! : null;
@@ -177,6 +193,12 @@ export class ContextBuilderService {
     ];
 
     const skillName = new Map(skills.map((s) => [s.id, s.name]));
+    // Kỹ năng gửi LLM = hồ sơ TỪ BẰNG CHỨNG; mức tự khai không vào ngữ cảnh (docs 02/08)
+    const evidenceOf = await this.evidence.evidence(
+      project.workspaceId,
+      project.members.map((m) => m.user.id),
+      today,
+    );
     const identity = await this.identityBlock(
       project.workspaceId,
       project.members.map((m) => m.user.id),
@@ -191,7 +213,7 @@ export class ContextBuilderService {
             'tên',
             'tên gọi',
             'vai',
-            'kỹ năng (mức, *=PM xác nhận)',
+            'kỹ năng theo bằng chứng (mức · việc đã xong · làm lại)',
             'giờ/tuần',
           ],
           project.members.map((m) => [
@@ -199,13 +221,15 @@ export class ContextBuilderService {
             m.user.fullName,
             m.user.shortName,
             m.role,
-            m.user.userSkills
+            [...(evidenceOf.get(m.user.id)?.values() ?? [])]
+              // Nửa ghi nhận chưa đủ một mức = chưa biết → không đưa "mức 0" cho LLM hiểu nhầm là không biết
+              .filter((e) => isConclusive(e))
+              .sort((a, b) => b.level - a.level || b.tasks - a.tasks)
               .map(
-                (s) =>
-                  `${codes.codeOf('k', s.skillId) ?? '?'} ${skillName.get(s.skillId) ?? ''} ${s.level}${s.verifiedById ? '*' : ''}`,
+                (e) =>
+                  `${codes.codeOf('k', e.skillId) ?? '?'} ${skillName.get(e.skillId) ?? ''} ${e.level} (${e.tasks} việc${e.failed ? `, ${e.failed} làm lại` : ''}${e.verified ? ', PM xác nhận' : ''})`,
               )
-              .sort()
-              .join(', ') || 'chưa khai',
+              .join(', ') || 'chưa có bằng chứng',
             m.user.weeklyCapacityHours ?? defaultCap,
           ]),
         ),
@@ -231,7 +255,7 @@ export class ContextBuilderService {
             : '',
           bang(
             ['mã', 'sprint', 'trạng thái', 'từ', 'đến', 'mục tiêu'],
-            project.sprints.map((s) => [
+            shownSprints.map((s) => [
               codes.codeOf('s', s.id),
               s.name,
               s.status,
@@ -267,6 +291,16 @@ export class ContextBuilderService {
         facts,
         today,
       );
+      if (input.purpose === 'CHAT')
+        await this.chatRiskBlock(
+          input.userId,
+          sprint ??
+            project.sprints.find((s) => s.status === SprintStatus.ACTIVE) ??
+            null,
+          codes,
+          dynamicBlocks,
+          facts,
+        );
     } else {
       await this.explainBlocks(
         input,
@@ -493,6 +527,26 @@ export class ContextBuilderService {
         ),
         `Tổng giờ trống cả nhóm tới hết cửa sổ: ${facts.sprintFreeHours} h · giờ còn lại của task đã có trong ${sprint ? 'sprint' : 'backlog'}: ${facts.sprintPlannedHours} h`,
       ].join('\n'),
+    });
+  }
+
+  /**
+   * Một dòng số rủi ro cho CHAT (docs 04 §8): LLM có câu "sprint có kịp không" thì chỉ được nhắc lại mức
+   * này — ChatService kiểm RISK_EXPLANATION với đúng `facts.forecastRiskLevel`.
+   */
+  private async chatRiskBlock(
+    userId: string,
+    sprint: { id: string; name: string } | null,
+    codes: CodeBook,
+    out: PromptBlock[],
+    facts: BuiltContext['facts'],
+  ) {
+    if (!sprint) return;
+    const fc = await this.forecast.forecast(userId, sprint.id);
+    facts.forecastRiskLevel = fc.riskLevel;
+    out.push({
+      title: 'MỨC RỦI RO SPRINT (backend tính — sự thật, không tự đổi)',
+      body: `${codes.codeOf('s', sprint.id)} ${sprint.name}: mức rủi ro ${fc.riskLevel} · ETA ${fc.eta ?? 'không tính được'} · còn ${fc.remainingHours} h · vận tốc ${fc.velocity} h/ngày làm việc`,
     });
   }
 

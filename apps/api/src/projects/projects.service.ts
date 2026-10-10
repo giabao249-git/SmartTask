@@ -6,6 +6,8 @@ import { WorkspaceAccessService } from '../common/access/workspace-access.servic
 import { AppError } from '../common/app-error';
 import { PROJECT_EVENTS } from '../common/events/task.events';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorkloadService } from '../workload/workload.service';
+import { SkillEvidenceService } from '../metrics/skill-evidence.service';
 import { isoDate, toDate, weekStartOf } from '../workload/domain/calendar';
 import type {
   CreateProjectDto,
@@ -55,6 +57,8 @@ export class ProjectsService {
     private readonly wsAccess: WorkspaceAccessService,
     private readonly access: ProjectAccessService,
     private readonly events: EventEmitter2,
+    private readonly workload: WorkloadService,
+    private readonly evidence: SkillEvidenceService,
   ) {}
 
   async list(userId: string, workspaceId: string, status?: ProjectStatus) {
@@ -203,7 +207,7 @@ export class ProjectsService {
   }
 
   async members(userId: string, projectId: string) {
-    await this.access.assertRead(userId, projectId);
+    const a = await this.access.assertRead(userId, projectId);
     const rows = await this.prisma.projectMember.findMany({
       where: { projectId },
       select: {
@@ -217,27 +221,36 @@ export class ProjectsService {
             avatarUrl: true,
             email: true,
             weeklyCapacityHours: true,
-            userSkills: {
-              where: { skill: { isActive: true } },
-              select: {
-                level: true,
-                verifiedAt: true,
-                skill: { select: { id: true, name: true, category: true } },
-              },
-            },
           },
         },
       },
       orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
     });
+    // `level` = mức TỪ BẰNG CHỨNG (docs 02/08); `declared` = tự khai, chỉ để đối chiếu
+    const [profiles, catalog] = await Promise.all([
+      this.evidence.profiles(
+        a.workspaceId,
+        rows.map((m) => m.user.id),
+      ),
+      this.prisma.skill.findMany({
+        where: { workspaceId: a.workspaceId, isActive: true },
+        select: { id: true, name: true, category: true },
+      }),
+    ]);
+    const skillOf = new Map(catalog.map((s) => [s.id, s]));
     return rows.map((m) => ({
       ...m.user,
-      userSkills: undefined,
-      skills: m.user.userSkills.map((s) => ({
-        ...s.skill,
-        level: s.level,
-        verified: s.verifiedAt !== null,
-      })),
+      skills: (profiles.get(m.user.id) ?? [])
+        .filter((e) => skillOf.has(e.skillId))
+        .map((e) => ({
+          ...skillOf.get(e.skillId)!,
+          level: e.level,
+          declared: e.declared,
+          tasks: e.tasks,
+          failed: e.failed,
+          confidence: e.confidence,
+          verified: e.verified,
+        })),
       role: m.role,
       joinedAt: m.joinedAt,
     }));
@@ -518,6 +531,21 @@ export class ProjectsService {
       },
     });
     const memberIds = project.members.map((m) => m.userId);
+    // Snapshot tải chỉ cập nhật theo sự kiện/cron — đo được Dashboard báo 0 % trong khi tính trực tiếp là 39 %.
+    // Cũ hơn 1 giờ (hoặc chưa có) thì tính lại trước khi đọc, để Dashboard, màn Nhân sự và Trợ lý nói cùng một số.
+    const snaps = await this.prisma.workloadSnapshot.findMany({
+      where: {
+        workspaceId: project.workspaceId,
+        weekStart,
+        userId: { in: memberIds },
+      },
+      select: { computedAt: true },
+    });
+    const staleBefore = new Date(Date.now() - 3_600_000);
+    if (!snaps.length || snaps.some((x) => x.computedAt < staleBefore))
+      await this.workload
+        .snapshotWorkspace(project.workspaceId, memberIds)
+        .catch(() => undefined); // không tính lại được thì vẫn trả số cũ, không làm hỏng Dashboard
     const [workloadWeek, openAlerts] = await Promise.all([
       this.prisma.workloadSnapshot.findMany({
         where: {

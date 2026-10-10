@@ -80,6 +80,7 @@ export const ACTION_LABEL: Record<string, string> = {
   MEMORY_PROPOSAL: "Đề xuất ghi nhớ",
   ASK_CLARIFICATION: "Cần làm rõ",
   CHAT_RESPONSE: "Trả lời",
+  DATA_QUERY: "Tra cứu",
 };
 
 export function fmtDate(iso: string | null | undefined): string {

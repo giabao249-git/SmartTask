@@ -731,5 +731,161 @@ describe('AI chat theo phiên (e2e)', () => {
       });
       expect(after.version).toBe(before.version);
     });
+
+    it('thiếu patch mà reply nói "Đã cập nhật" → gọi lại 1 lần; vẫn thiếu → trả lời thật "chưa thay đổi gì"', async () => {
+      const lie = {
+        type: 'UPDATE_TASK_DRAFT',
+        reply: 'Đã cập nhật d2 với độ khó 4.',
+        targetDraftKeys: ['d2'],
+        warnings: [],
+      };
+      AiMockQueue.push(lie, lie);
+      const res = await say('cái thứ hai đổi 8 giờ và độ khó 4').expect(200);
+      expect(res.body.action.type).toBe('CHAT_RESPONSE');
+      expect(res.body.action.reply).toMatch(/^Mình chưa thay đổi gì/);
+      expect(res.body.usage.attempts).toBe(2);
+    });
+  });
+
+  it('tra cứu: "Làm mới" giải được mã của phiên chỉ có tra cứu; mã sprint không đổi khi có sprint mới hay sprint bị đóng', async () => {
+    const sprintCode = (text: string, name: string) =>
+      new RegExp(`^(s\\d+) \\| ${name} \\|`, 'm').exec(text)?.[1];
+    const ask = () =>
+      api()
+        .post('/api/v1/ai/chat')
+        .set(auth(pm))
+        .send({ projectId, text: 'Sprint 2 tiến độ thế nào?' });
+    const dataQuery = (userText: string) => ({
+      type: 'DATA_QUERY',
+      reply: 'Đây là tiến độ Sprint 2.',
+      query: {
+        intent: 'SPRINT_PROGRESS',
+        sprint: sprintCode(userText, 'Sprint 2'),
+      },
+    });
+
+    AiMockQueue.push(dataQuery);
+    const first = await ask().expect(200);
+    const code = sprintCode(AiMockQueue.lastPrompt!.userText, 'Sprint 2')!;
+    expect(first.body.action.type).toBe('DATA_QUERY');
+    expect(code).toMatch(/^s\d+$/);
+    expect(first.body.action.query.sprint).toBe(code);
+    expect(first.body.proposals).toHaveLength(0); // tra cứu không sinh proposal
+    const refresh = (extra: Record<string, unknown>) =>
+      api()
+        .post('/api/v1/ai/query')
+        .set(auth(pm))
+        .send({
+          projectId,
+          sessionId: first.body.sessionId,
+          query: first.body.action.query,
+          ...extra,
+        });
+    // Trước đây: 422 UNKNOWN_CODE vì bảng mã chỉ nằm trong ai_proposals
+    await refresh({ messageId: first.body.message.id }).expect(200);
+    await refresh({}).expect(200);
+
+    // Sprint tạo sau nhưng bắt đầu sớm hơn, rồi bắt đầu + đóng nó: mã của Sprint 2 vẫn như cũ
+    const old = await api()
+      .post(`/api/v1/projects/${projectId}/sprints`)
+      .set(auth(pm))
+      .send({
+        name: 'Sprint cũ',
+        startDate: iso(plus(monday, -14)),
+        endDate: iso(plus(monday, -3)),
+      })
+      .expect(201);
+    await api()
+      .post(`/api/v1/sprints/${old.body.id}/start`)
+      .set(auth(pm))
+      .expect(201);
+    await api()
+      .post(`/api/v1/sprints/${old.body.id}/close`)
+      .set(auth(pm))
+      .send({ moveOpenTo: 'backlog' })
+      .expect(201);
+    AiMockQueue.push(dataQuery);
+    await ask().expect(200);
+    const prompt = AiMockQueue.lastPrompt!.userText;
+    expect(sprintCode(prompt, 'Sprint 2')).toBe(code);
+    expect(sprintCode(prompt, 'Sprint cũ')).toBeDefined(); // hỏi được "sprint trước"
+    expect(prompt).toMatch(/Sprint cũ \| CLOSED/);
+  });
+
+  it('rủi ro trong chat: mức do LLM tự chọn lệch số backend bị từ chối (cả lần gọi lại); chép đúng thì qua', async () => {
+    const levelIn = (text: string) =>
+      /MỨC RỦI RO SPRINT[^\n]*\n[^\n]*mức rủi ro (\w+)/.exec(text)?.[1];
+    const explain = (riskLevel: string) => ({
+      type: 'RISK_EXPLANATION',
+      reply: 'Sprint đang chậm vì còn việc chưa giao.',
+      riskLevel,
+      causes: [],
+      recommendations: ['Giao nốt việc chưa có người'],
+    });
+    const ask = (extra: Record<string, unknown> = {}) =>
+      api()
+        .post('/api/v1/ai/chat')
+        .set(auth(pm))
+        .send({ projectId, text: 'Vì sao sprint này rủi ro?', ...extra });
+
+    // LLM cứ khăng khăng "LOW" → hai lần đều bị kiểm, mức lưu kèm tin là "chưa khớp"
+    AiMockQueue.push(
+      (t) => explain(levelIn(t) === 'LOW' ? 'HIGH' : 'LOW'),
+      (t) => explain(levelIn(t) === 'LOW' ? 'HIGH' : 'LOW'),
+    );
+    const bad = await ask({ sprintId }).expect(200);
+    const expected = levelIn(AiMockQueue.lastPrompt!.userText);
+    expect(expected).toBeDefined(); // ngữ cảnh CHAT có số rủi ro của backend
+    expect(bad.body.validation.ok).toBe(false);
+    expect(bad.body.validation.errors[0]).toMatchObject({
+      code: 'AI_RESPONSE_INVALID',
+      data: { expected },
+    });
+    expect(bad.body.usage.attempts).toBe(2);
+    const stored = await prisma.chatMessage.findUniqueOrThrow({
+      where: { id: bad.body.message.id },
+      select: { structuredData: true },
+    });
+    expect(
+      (stored.structuredData as { validation: { ok: boolean } }).validation.ok,
+    ).toBe(false);
+
+    // Chép đúng mức trong ngữ cảnh → qua ngay lần đầu
+    AiMockQueue.push((t) => explain(levelIn(t)!));
+    const good = await ask({
+      sprintId,
+      sessionId: bad.body.sessionId,
+    }).expect(200);
+    expect(good.body.validation.ok).toBe(true);
+    expect(good.body.usage.attempts).toBe(1);
+  });
+
+  it('TASK_DETAIL qua chat: mã t thật trong prompt → thẻ việc đúng task', async () => {
+    let code = '';
+    AiMockQueue.push((userText) => {
+      code = /^(t\d+) \| [^\n]*API đăng nhập/m.exec(userText)?.[1] ?? '';
+      return {
+        type: 'DATA_QUERY',
+        reply: 'Đây là tình trạng việc đó.',
+        query: { intent: 'TASK_DETAIL', filters: { task: code } },
+      };
+    });
+    const res = await api()
+      .post('/api/v1/ai/chat')
+      .set(auth(pm))
+      .send({ projectId, text: 'việc API đăng nhập đang thế nào?' })
+      .expect(200);
+    expect(code).toMatch(/^t\d+$/);
+    const msg = await prisma.chatMessage.findUniqueOrThrow({
+      where: { id: res.body.message.id },
+      select: { structuredData: true },
+    });
+    const qr = (
+      msg.structuredData as {
+        queryResult: { blocks: { kind: string; item?: { title: string } }[] };
+      }
+    ).queryResult;
+    expect(qr.blocks[0].kind).toBe('person_card');
+    expect(qr.blocks[0].item!.title).toContain('API đăng nhập');
   });
 });
