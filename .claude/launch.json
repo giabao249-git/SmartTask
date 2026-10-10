@@ -20,6 +20,34 @@
       ],
       "port": 3000,
       "autoPort": false
+    },
+    {
+      "name": "api-chup",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "PORT=3110",
+        "CORS_ORIGIN=http://localhost:3013",
+        "AI_PROVIDER=fake",
+        "npm",
+        "run",
+        "api:dev"
+      ],
+      "port": 3110,
+      "autoPort": false
+    },
+    {
+      "name": "web-chup",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "PORT=3013",
+        "NEXT_PUBLIC_API_URL=http://localhost:3110/api/v1",
+        "NEXT_DIST_DIR=.next-chup",
+        "npm",
+        "run",
+        "web:dev"
+      ],
+      "port": 3013,
+      "autoPort": false
     }
   ]
 }
