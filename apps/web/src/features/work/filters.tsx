@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { TaskListItem } from "@/lib/types";
 
-export type WorkView = "board" | "list" | "timeline" | "eisenhower" | "backlog";
+export type WorkView = "board" | "list" | "timeline" | "eisenhower";
 export type QuickFilter = "all" | "my" | "unassigned";
 /** Nhóm thẻ trên bảng Kanban thành các hàng (swimlane). */
 export type GroupBy = "none" | "assignee" | "priority";
@@ -14,7 +14,6 @@ export const WORK_VIEWS: { key: WorkView; label: string; short: string }[] = [
   { key: "list", label: "Danh sách", short: "Danh sách" },
   { key: "timeline", label: "Gantt / Timeline", short: "Timeline" },
   { key: "eisenhower", label: "Ma trận Eisenhower", short: "Eisenhower" },
-  { key: "backlog", label: "Backlog (chưa vào sprint)", short: "Backlog" },
 ];
 
 export interface WorkFilters {
@@ -51,7 +50,7 @@ const Ctx = React.createContext<WorkFiltersCtx | null>(null);
 const isView = (v: string | null): v is WorkView => WORK_VIEWS.some((x) => x.key === v);
 
 /**
- * Bộ lọc dùng chung cho 4 cách nhìn công việc, đồng bộ vào URL (`?view=&sprint=&assignee=&q=&quick=&task=`)
+ * Bộ lọc dùng chung cho các cách nhìn công việc, đồng bộ vào URL (`?view=&sprint=&assignee=&q=&quick=&task=`)
  * để đổi tab không mất lọc, F5 và chia sẻ link vẫn ra đúng khung nhìn.
  */
 export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSprintId?: string; children: React.ReactNode }) {
@@ -59,8 +58,10 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
   const params = useSearchParams();
   const get = (k: string, d = "") => params.get(k) ?? d;
 
-  const view: WorkView = isView(params.get("view")) ? (params.get("view") as WorkView) : "board";
-  const sprint = get("sprint") || defaultSprintId || "__all";
+  // Link cũ `?view=backlog` → Danh sách lọc theo Backlog (Backlog giờ là một giá trị của bộ lọc Sprint, không còn là cách nhìn)
+  const legacyBacklog = params.get("view") === "backlog";
+  const view: WorkView = legacyBacklog ? "list" : isView(params.get("view")) ? (params.get("view") as WorkView) : "board";
+  const sprint = legacyBacklog ? "__backlog" : get("sprint") || defaultSprintId || "__all";
   const assignee = get("assignee", "__all");
   const type = get("type", "__all");
   const group = (["none", "assignee", "priority"] as const).find((x) => x === get("group")) ?? "none";
@@ -71,8 +72,14 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
   const write = React.useCallback(
     (patch: Record<string, string | null>) => {
       const next = new URLSearchParams(params.toString());
+      // Chuẩn hoá link cũ view=backlog ngay lần ghi đầu tiên, kẻo "backlog" ghim cứng bộ lọc sprint
+      if (next.get("view") === "backlog") {
+        next.set("view", "list");
+        next.set("sprint", "__backlog");
+      }
       for (const [k, v] of Object.entries(patch)) {
-        if (!v || v === "__all") next.delete(k);
+        // sprint="__all" phải giữ trong URL: vắng mặt nghĩa là "dùng sprint đang chạy"
+        if (!v || (v === "__all" && k !== "sprint")) next.delete(k);
         else next.set(k, v);
       }
       router.replace(`?${next.toString()}`, { scroll: false });
@@ -83,11 +90,9 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
   const explicitSprint = params.get("sprint");
 
   const value = React.useMemo<WorkFiltersCtx>(() => {
-    // Màn Backlog luôn chỉ lấy việc chưa thuộc sprint — bộ lọc sprint không áp ở đây
-    const inBacklogView = view === "backlog";
     const query = {
-      sprintId: inBacklogView ? undefined : sprint !== "__all" && sprint !== "__backlog" ? sprint : undefined,
-      backlog: inBacklogView || sprint === "__backlog" ? (true as const) : undefined,
+      sprintId: sprint !== "__all" && sprint !== "__backlog" ? sprint : undefined,
+      backlog: sprint === "__backlog" ? (true as const) : undefined,
       assigneeId: assignee !== "__all" ? assignee : undefined,
       type: type !== "__all" ? type : undefined,
       q: q.trim() || undefined,
@@ -103,7 +108,7 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
       taskId,
       query,
       isFiltered:
-        (explicitSprint !== null && explicitSprint !== (defaultSprintId ?? "__all")) ||
+        (legacyBacklog || (explicitSprint !== null && explicitSprint !== (defaultSprintId ?? "__all"))) ||
         assignee !== "__all" ||
         type !== "__all" ||
         q.trim() !== "" ||
@@ -124,7 +129,7 @@ export function WorkFiltersProvider({ defaultSprintId, children }: { defaultSpri
             ? tasks.filter((t) => t.assignees.length === 0)
             : tasks,
     };
-  }, [view, sprint, assignee, type, group, q, quick, taskId, write, explicitSprint, defaultSprintId]);
+  }, [view, sprint, assignee, type, group, q, quick, taskId, write, explicitSprint, defaultSprintId, legacyBacklog]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

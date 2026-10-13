@@ -8,6 +8,9 @@ import { SESSION_FLAG_COOKIE } from "@/lib/auth-cookie";
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const hasSession = req.cookies.has(SESSION_FLAG_COOKIE);
+  if (pathname === "/") {
+    return NextResponse.next();
+  }
   if (pathname.startsWith("/login")) {
     if (hasSession) return NextResponse.redirect(new URL("/workspaces", req.url));
     return NextResponse.next();

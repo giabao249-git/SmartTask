@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { ClipboardCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +18,12 @@ export function PendingReviewsCard({ projectId }: { projectId: string }) {
   const rows = q.data ?? [];
   if (!rows.length) return null;
   return (
-    <Card className="border-border/80">
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+    >
+      <Card className="border-border/80 hover:border-info/40 transition-colors shadow-2xs">
       <CardHeader className="p-4 pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
           <ClipboardCheck className="h-4 w-4 text-info" /> {rows.length} việc đã xong chờ bạn đánh giá
@@ -49,5 +55,6 @@ export function PendingReviewsCard({ projectId }: { projectId: string }) {
         {rows.length > 5 && <p className="pt-1 text-[11px] text-muted-foreground">và {rows.length - 5} việc nữa</p>}
       </CardContent>
     </Card>
+    </motion.div>
   );
 }

@@ -44,6 +44,27 @@ export function joinProject(projectId: string, view = "board"): () => void {
   };
 }
 
+/** Gửi ping presence định kỳ khi đang xem dự án. */
+export function pingPresence(projectId: string, view = "board"): void {
+  const s = getSocket();
+  if (s?.connected) {
+    s.emit("presence:ping", { projectId, view }, () => undefined);
+  }
+}
+
+/** Vào phòng workspace để nhận sự kiện toàn workspace (như audit:logged); trả hàm rời phòng. */
+export function joinWorkspace(workspaceId: string): () => void {
+  const s = getSocket();
+  if (!s) return () => undefined;
+  const join = () => s.emit("workspace:join", { workspaceId }, () => undefined);
+  if (s.connected) join();
+  s.on("connect", join);
+  return () => {
+    s.off("connect", join);
+    s.emit("workspace:leave", { workspaceId });
+  };
+}
+
 export function disconnectSocket(): void {
   socket?.disconnect();
   socket = null;

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Card } from "@/components/ui/card";
+import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { PriorityBadge } from "./PriorityBadge";
 import { TaskTypeBadge } from "./TaskTypeBadge";
@@ -42,11 +42,14 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
   const pending = task.pending === true;
 
   return (
-    <Card
+    <motion.div
+      data-task-card="true"
+      whileHover={isDragging || pending ? undefined : { y: -2, transition: { duration: 0.12 } }}
+      whileTap={isDragging || pending ? undefined : { scale: 0.985 }}
       onClick={() => !pending && onClick?.(task)}
       aria-busy={pending}
       className={cn(
-        "p-3 cursor-pointer transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.99] border-border/80 bg-card select-none relative",
+        "rounded-xl border p-3 cursor-pointer transition-colors shadow-2xs hover:border-primary/50 hover:shadow-md border-border/80 bg-card select-none relative",
         pending && "opacity-70 pointer-events-none border-dashed",
         isMyTask && "border-l-2 border-l-primary",
         isFocused && "ring-2 ring-ring ring-offset-1 border-primary",
@@ -57,38 +60,38 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
       )}
     >
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className={cn("flex items-center gap-1.5 flex-wrap", isSelected && "pl-6")}>
-            <Badge variant="outline" className="font-mono text-xs font-semibold px-1.5 py-0">
+        <div className="flex items-center justify-between gap-1.5 min-h-[24px]">
+          <div className={cn("flex items-center gap-1.5 flex-wrap min-w-0", isSelected && "pl-6")}>
+            <Badge variant="outline" className="font-mono text-xs font-semibold px-1.5 py-0 shrink-0">
               {pending ? "…" : taskKeyOf(projectKey, task)}
             </Badge>
             {pending ? (
-              <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0 h-4">
+              <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0 h-4 shrink-0">
                 <Loader2 className="h-2.5 w-2.5 animate-spin" /> Đang lưu…
               </Badge>
             ) : (
               <TaskTypeBadge type={task.type} size="icon" />
             )}
+            <PriorityBadge priority={task.priority} showIcon={false} />
             {isMyTask && (
-              <Badge variant="default" className="text-[9px] px-1 py-0 h-4 bg-primary/20 text-primary border-primary/30 hover:bg-primary/30 font-medium">
+              <Badge variant="default" className="text-[9px] px-1 py-0 h-4 bg-primary/20 text-primary border-primary/30 hover:bg-primary/30 font-medium shrink-0">
                 Của tôi
               </Badge>
             )}
             {task.source === "AI" && (
-              <Badge variant="info" className="gap-1 text-[10px] px-1.5 py-0 h-4">
+              <Badge variant="info" className="gap-1 text-[9px] px-1 py-0 h-4 shrink-0">
                 <Sparkles className="h-2.5 w-2.5" /> AI
               </Badge>
             )}
-            <PriorityBadge priority={task.priority} showIcon={false} />
             {task.dependsOnIds.length > 0 && (
-              <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0 h-4" title="Có phụ thuộc">
+              <Badge variant="secondary" className="gap-0.5 text-[9px] px-1 py-0 h-4 shrink-0" title="Có phụ thuộc">
                 <Link2 className="h-2.5 w-2.5" /> {task.dependsOnIds.length}
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center justify-end gap-1 shrink-0 h-6">
             {task.assignees.length > 0 ? (
-              <div className="flex -space-x-1.5">
+              <div className="flex -space-x-1.5 items-center">
                 {task.assignees.slice(0, 3).map((a) => (
                   <UserAvatar key={a.id} name={a.shortName ?? a.fullName} avatar={a.avatarUrl ?? undefined} size="sm" className="ring-2 ring-card" />
                 ))}
@@ -100,14 +103,14 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
                   e.stopPropagation();
                   onClaim(task);
                 }}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-colors border border-primary/25 cursor-pointer shadow-2xs"
+                className="inline-flex items-center gap-1 px-1.5 h-5 rounded text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-colors border border-primary/25 cursor-pointer shadow-2xs"
                 title="Tự nhận công việc này"
               >
                 <Plus className="h-3 w-3" />
                 <span>Nhận task</span>
               </button>
             ) : (
-              <span className="text-[10px] text-muted-foreground italic">chưa giao</span>
+              <span className="text-[10px] text-muted-foreground/60 italic">chưa giao</span>
             )}
           </div>
         </div>
@@ -124,7 +127,7 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
           </div>
         )}
 
-        <div className="flex items-center justify-between pt-1 border-t border-border/40 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between pt-1.5 border-t border-border/40 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             {task.subtaskCount > 0 && (
               <div className="flex items-center gap-1 text-[11px] tabular-nums" title="Công việc con">
@@ -133,17 +136,17 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
               </div>
             )}
             {task.estimateHours != null && (
-              <div className="flex items-center gap-1 text-[11px] tabular-nums" title={`Còn ${task.remainingHours ?? task.estimateHours}h / ước lượng ${task.estimateHours}h`}>
+              <div className="flex items-center gap-1 text-[11px] tabular-nums font-mono" title={`Còn ${task.remainingHours ?? task.estimateHours}h / ước lượng ${task.estimateHours}h`}>
                 <Clock className="h-3 w-3" />
                 <span>
                   {task.remainingHours ?? task.estimateHours}/{task.estimateHours}h
                 </span>
               </div>
             )}
-            {task.progress > 0 && <span className="text-[11px] tabular-nums">{task.progress}%</span>}
+            {task.progress > 0 && <span className="text-[11px] tabular-nums font-mono text-muted-foreground/80">{task.progress}%</span>}
           </div>
           <div
-            className={cn("flex items-center gap-1 text-[11px] tabular-nums", overdue ? "text-destructive font-medium bg-destructive/10 px-1.5 py-0.5 rounded-sm" : "text-muted-foreground")}
+            className={cn("flex items-center gap-1 text-[11px] tabular-nums shrink-0 ml-auto", overdue ? "text-destructive font-medium bg-destructive/10 px-1.5 py-0.5 rounded-sm" : "text-muted-foreground")}
             title={overdue ? "Quá hạn" : `Hạn ${fmtDay(task.dueDate)}`}
           >
             <Calendar className="h-3 w-3" />
@@ -151,6 +154,6 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
           </div>
         </div>
       </div>
-    </Card>
+    </motion.div>
   );
 }

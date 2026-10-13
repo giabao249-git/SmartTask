@@ -17,6 +17,7 @@ import { WorkloadBadge } from "@/components/app/WorkloadBadge";
 import { api, describeError } from "@/lib/api";
 import { useCapacityTable, useProjectWorkload, useWorkloadDetails } from "@/lib/hooks/analytics";
 import { useCurrentProject } from "@/lib/hooks/use-project";
+import { useBoardRealtime } from "@/features/board/hooks";
 import { levelToVariant, projectRoleLabel, riskFactorLabel, workloadLevelLabel } from "@/lib/status";
 import { useSprints } from "@/lib/hooks/queries";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -40,6 +41,11 @@ export function WorkloadView() {
   const qc = useQueryClient();
   const wl = useProjectWorkload(project.id, 4);
   const [detail, setDetail] = React.useState<{ userId: string; week: string } | null>(null);
+
+  // Lắng nghe cập nhật tải và phân bổ thời gian thực từ Socket.IO
+  useBoardRealtime(project.id, {
+    view: "workload",
+  });
   const recompute = useMutation({
     mutationFn: () => api.post<unknown>(`/projects/${project.id}/workload/recompute`),
     onSuccess: () => {

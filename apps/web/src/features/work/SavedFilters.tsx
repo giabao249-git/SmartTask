@@ -111,7 +111,7 @@ export function SavedFilters({ projectId }: { projectId: string }) {
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" title="Bộ lọc đã lưu (lưu trên máy này)">
           <Bookmark className={activeName ? "h-3.5 w-3.5 fill-current" : "h-3.5 w-3.5"} />
-          {activeName ? <span className="max-w-28 truncate">{activeName}</span> : "Bộ lọc đã lưu"}
+          {activeName ? <span className="max-w-28 truncate">{activeName}</span> : "Đã lưu"}
           {list.length > 0 && (
             <Badge variant="outline" className="text-[10px] px-1 py-0 font-mono">
               {list.length}

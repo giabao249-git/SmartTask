@@ -31,12 +31,12 @@ export function AssigneePicker({ value, members, disabled, onChange }: { value: 
       }}
     >
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled} className="h-8 w-full justify-start gap-1.5 text-xs font-normal">
+        <Button variant="outline" size="sm" disabled={disabled} className="min-h-8 h-auto py-1 px-2.5 w-full justify-start gap-1.5 text-xs font-normal bg-background/80 hover:bg-background">
           {selected.length === 0 ? (
             <span className="text-muted-foreground">Chưa giao</span>
           ) : (
             <>
-              <div className="flex -space-x-1.5">
+              <div className="flex -space-x-1.5 shrink-0">
                 {selected.slice(0, 3).map((m) => (
                   <UserAvatar key={m.id} name={m.shortName ?? m.fullName} avatar={m.avatarUrl ?? undefined} size="sm" showTooltip={false} className="ring-2 ring-background" />
                 ))}
@@ -76,8 +76,8 @@ function LabelPicker({ value, labels, disabled, onChange }: { value: string[]; l
       }}
     >
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled} className="h-8 w-full justify-start gap-1 text-xs font-normal overflow-hidden">
-          {selected.length === 0 ? <span className="text-muted-foreground">Không nhãn</span> : selected.map((l) => <Badge key={l.id} variant="secondary" className="text-[10px] px-1 py-0 font-normal">#{l.name}</Badge>)}
+        <Button variant="outline" size="sm" disabled={disabled} className="min-h-8 h-auto py-1 px-2.5 w-full justify-start gap-1 text-xs font-normal flex-wrap bg-background/80 hover:bg-background">
+          {selected.length === 0 ? <span className="text-muted-foreground">Không nhãn</span> : selected.map((l) => <Badge key={l.id} variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">#{l.name}</Badge>)}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2 space-y-1" align="start">
@@ -114,8 +114,8 @@ function SkillPicker({ value, workspaceId, disabled, onChange }: { value: { skil
       }}
     >
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled} className="h-8 w-full justify-start gap-1 text-xs font-normal overflow-hidden">
-          {value.length === 0 ? <span className="text-muted-foreground">Không yêu cầu</span> : value.map((s) => <Badge key={s.skillId} variant="outline" className="text-[10px] px-1 py-0 font-normal">{byId.get(s.skillId)?.name ?? "…"} ≥ {s.minLevel}</Badge>)}
+        <Button variant="outline" size="sm" disabled={disabled} className="min-h-8 h-auto py-1 px-2.5 w-full justify-start gap-1 text-xs font-normal flex-wrap bg-background/80 hover:bg-background">
+          {value.length === 0 ? <span className="text-muted-foreground">Không yêu cầu</span> : value.map((s) => <Badge key={s.skillId} variant="outline" className="text-[10px] px-1.5 py-0 font-normal bg-background">{byId.get(s.skillId)?.name ?? "…"} ≥ {s.minLevel}</Badge>)}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-2 space-y-1" align="start">

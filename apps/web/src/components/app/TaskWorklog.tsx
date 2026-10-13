@@ -120,16 +120,16 @@ export function WorklogPanel({ task, project }: { task: TaskDetail; project: Pro
 
       {canLog ? (
         <form
-          className="grid grid-cols-[8.5rem_4.5rem_minmax(0,1fr)_auto] gap-1.5"
+          className="grid grid-cols-2 sm:grid-cols-[8.5rem_5rem_minmax(0,1fr)_auto] gap-2 pt-1"
           onSubmit={(e) => {
             e.preventDefault();
             if (Number(hours) > 0) add.mutate();
           }}
         >
           <Input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} className="h-8 text-xs" aria-label="Ngày làm" />
-          <Input type="number" step="0.25" min={0.25} max={24} value={hours} onChange={(e) => setHours(e.target.value)} placeholder="giờ" className="h-8 text-xs" aria-label="Số giờ" required />
-          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú (tuỳ chọn)" maxLength={500} className="h-8 text-xs" />
-          <Button type="submit" size="sm" className="h-8 text-xs" disabled={add.isPending || !(Number(hours) > 0)}>
+          <Input type="number" step="0.25" min={0.25} max={24} value={hours} onChange={(e) => setHours(e.target.value)} placeholder="Số giờ" className="h-8 text-xs" aria-label="Số giờ" required />
+          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú (tuỳ chọn)" maxLength={500} className="h-8 text-xs col-span-2 sm:col-span-1" />
+          <Button type="submit" size="sm" className="h-8 text-xs col-span-2 sm:col-span-1" disabled={add.isPending || !(Number(hours) > 0)}>
             {add.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Ghi giờ"}
           </Button>
         </form>

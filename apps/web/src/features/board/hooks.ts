@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { getSocket, joinProject } from "@/lib/socket";
+import { getSocket, joinProject, pingPresence } from "@/lib/socket";
 import type { AttachmentView, CommentView, Paged, SuggestItem, TaskDetail, TaskListItem, TaskListResponse } from "@/lib/types";
 
 export const taskKeys = {
@@ -290,7 +290,7 @@ export async function downloadAttachment(id: string): Promise<string> {
   return r.url;
 }
 
-interface TaskSocketPayload {
+export interface TaskSocketPayload {
   task?: { id: string; version: number; assigneeIds?: string[] };
   taskId?: string;
   version?: number;
@@ -298,25 +298,45 @@ interface TaskSocketPayload {
   diffKeys?: string[];
 }
 
+export interface PresenceEntry {
+  userId: string;
+  view: string;
+  at: number;
+}
+
+export interface UseBoardRealtimeOptions {
+  view?: string;
+  selfId?: string;
+  onTaskEvent?: (ev: string, p: TaskSocketPayload) => void;
+  onPresenceUpdate?: (users: PresenceEntry[]) => void;
+}
+
 /**
- * Vào phòng dự án và nghe task:* / comment:* (docs 11 §4). Payload socket là bản rút gọn (assigneeIds, không có tên)
- * nên chỉ dùng để BÁO — dữ liệu thật tải lại qua REST (danh sách ≤ 1.000 task, gộp 300 ms). Sự kiện do chính mình gây
- * ra đã được mutation cập nhật nên bỏ qua.
+ * Vào phòng dự án và nghe task:* / comment:* / sprint:* / workload:* / presence:* (docs 11 §4).
+ * Payload socket là bản rút gọn nên dùng để kích hoạt làm mới REST (gộp 300 ms).
+ * Tự động đồng bộ presence và các thay đổi giữa tất cả chế độ xem.
  */
-export function useBoardRealtime(projectId: string, opts: { selfId?: string; onTaskEvent?: (ev: string, p: TaskSocketPayload) => void } = {}) {
+export function useBoardRealtime(projectId: string, opts: UseBoardRealtimeOptions = {}) {
   const qc = useQueryClient();
   const handler = React.useRef(opts.onTaskEvent);
   handler.current = opts.onTaskEvent;
+  const presenceHandler = React.useRef(opts.onPresenceUpdate);
+  presenceHandler.current = opts.onPresenceUpdate;
   const selfId = opts.selfId;
+  const view = opts.view ?? "board";
+
   React.useEffect(() => {
-    const leave = joinProject(projectId, "board");
+    if (!projectId) return;
+    const leave = joinProject(projectId, view);
     const s = getSocket();
     if (!s) return leave;
+
     let timer: ReturnType<typeof setTimeout> | null = null;
     const refetch = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => void qc.invalidateQueries({ queryKey: taskKeys.list(projectId) }), 300);
     };
+
     const onTask = (ev: string) => (p: TaskSocketPayload) => {
       const id = p.task?.id ?? p.taskId;
       if (p.actorId && p.actorId === selfId) return;
@@ -324,15 +344,77 @@ export function useBoardRealtime(projectId: string, opts: { selfId?: string; onT
       if (id) void qc.invalidateQueries({ queryKey: taskKeys.detail(id) });
       handler.current?.(ev, p);
     };
+
     const bound = ["task:created", "task:updated", "task:moved", "task:assigned", "task:deleted"].map((ev) => [ev, onTask(ev)] as const);
     bound.forEach(([ev, fn]) => s.on(ev, fn));
+
     const onComment = (p: { taskId: string }) => void qc.invalidateQueries({ queryKey: taskKeys.comments(p.taskId) });
     ["comment:created", "comment:updated", "comment:deleted"].forEach((ev) => s.on(ev, onComment));
+
+    const onSprint = () => {
+      void qc.invalidateQueries({ queryKey: ["sprints", projectId] });
+      void qc.invalidateQueries({ queryKey: ["projects", projectId] });
+      void qc.invalidateQueries({ queryKey: ["projects", projectId, "dashboard"] });
+      refetch();
+    };
+    s.on("sprint:updated", onSprint);
+
+    const onForecast = () => {
+      void qc.invalidateQueries({ queryKey: ["sprints", projectId] });
+      void qc.invalidateQueries({ queryKey: ["projects", projectId] });
+    };
+    s.on("forecast:risk", onForecast);
+
+    const onWorkload = () => {
+      void qc.invalidateQueries({ queryKey: ["projects", projectId, "workload"] });
+      void qc.invalidateQueries({ queryKey: ["capacity", projectId] });
+    };
+    s.on("workload:updated", onWorkload);
+
+    const onAiProposal = () => {
+      refetch();
+    };
+    s.on("ai:proposal:applied", onAiProposal);
+
+    const onPresence = (p: { projectId: string; users: PresenceEntry[] }) => {
+      if (p.projectId === projectId) {
+        qc.setQueryData(["projects", projectId, "presence"], p.users);
+        presenceHandler.current?.(p.users);
+      }
+    };
+    s.on("presence:update", onPresence);
+
+    // Gửi ping presence đều đặn mỗi 30 giây để duy trì trạng thái online
+    const pingInterval = setInterval(() => {
+      pingPresence(projectId, view);
+    }, 30_000);
+
     return () => {
       if (timer) clearTimeout(timer);
+      clearInterval(pingInterval);
       bound.forEach(([ev, fn]) => s.off(ev, fn));
       ["comment:created", "comment:updated", "comment:deleted"].forEach((ev) => s.off(ev, onComment));
+      s.off("sprint:updated", onSprint);
+      s.off("forecast:risk", onForecast);
+      s.off("workload:updated", onWorkload);
+      s.off("ai:proposal:applied", onAiProposal);
+      s.off("presence:update", onPresence);
       leave();
     };
-  }, [projectId, qc, selfId]);
+  }, [projectId, qc, selfId, view]);
+}
+
+/** Hook lấy danh sách thành viên đang mở dự án theo thời gian thực (presence) */
+export function useProjectPresence(projectId?: string | null, currentView = "board") {
+  const qc = useQueryClient();
+  const [presenceUsers, setPresenceUsers] = React.useState<PresenceEntry[]>(() => {
+    return projectId ? qc.getQueryData<PresenceEntry[]>(["projects", projectId, "presence"]) ?? [] : [];
+  });
+
+  useBoardRealtime(projectId ?? "", {
+    view: currentView,
+    onPresenceUpdate: (users) => setPresenceUsers(users),
+  });
+
+  return presenceUsers;
 }

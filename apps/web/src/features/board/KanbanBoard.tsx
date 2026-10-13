@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { accordionExpand } from "@/lib/motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   DndContext,
@@ -16,7 +18,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, MoreHorizontal, AlertTriangle, ShieldCheck, User, Scale, Bot, Filter, Loader2, ChevronDown, Copy, Trash2, UserPlus, Flag, CalendarDays, Maximize2 } from "lucide-react";
+import { Plus, MoreHorizontal, AlertTriangle, Filter, Loader2, ChevronDown, Copy, Trash2, UserPlus, Flag, CalendarDays, Maximize2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +54,6 @@ import { useAuth } from "@/lib/auth";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useWorkFilters } from "@/features/work/filters";
 import { useWorkSelection } from "@/features/work/selection";
-import { useWorkFocus } from "@/features/work/focus";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { BoardColumn, ProjectDetail, TaskListItem } from "@/lib/types";
 import { TASK_TYPES, typeToHint, typeToLabel } from "@/lib/status";
@@ -134,7 +135,6 @@ export function KanbanBoard() {
   const params = useSearchParams();
   const f = useWorkFilters();
   const sel = useWorkSelection();
-  const { focus } = useWorkFocus();
   const sprintFilter = f.sprint;
   /**
    * Sprint của công việc sắp tạo — phải đọc đúng bộ lọc đang đứng.
@@ -367,14 +367,6 @@ export function KanbanBoard() {
   );
 
   const [confirmDelete, setConfirmDelete] = React.useState<TaskListItem | null>(null);
-
-  const isLeader = project.canManage || project.myRole === "PM";
-  const myTasks = React.useMemo(() => {
-    const currentUserId = auth.user?.id;
-    if (!currentUserId) return [];
-    return local.filter((t) => t.assignees.some((a) => a.id === currentUserId));
-  }, [local, auth.user?.id]);
-  const myHours = myTasks.reduce((s, t) => s + (t.remainingHours ?? t.estimateHours ?? 0), 0);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor));
   const colTasks = (colId: string) =>
@@ -669,51 +661,6 @@ export function KanbanBoard() {
         </div>
       </div>
 
-      {/* Thanh phân vai PM/Leader vs Thành viên thường — giấu ở chế độ tập trung (docs 02/05 §C5) */}
-      {focus ? null : isLeader ? (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl border border-primary/20 bg-primary/5 text-xs">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-semibold text-xs gap-1 py-0.5">
-              <ShieldCheck className="h-3.5 w-3.5" /> PM / Trưởng nhóm điều phối
-            </Badge>
-            <span className="text-muted-foreground">
-              Toàn quyền quản trị tiến độ sprint, phân rã WBS và cân bằng tải nhân sự
-            </span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push(`/projects/${project.id}/people?tab=balance`)}
-              className="h-7 text-xs gap-1 text-info hover:text-info border-info/30 hover:bg-info/10"
-            >
-              <Scale className="h-3 w-3" /> Cân bằng tải AI
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push(`/projects/${project.id}/assistant`)}
-              className="h-7 text-xs gap-1 text-primary hover:text-primary border-primary/30 hover:bg-primary/10"
-            >
-              <Bot className="h-3 w-3" /> Trợ lý AI
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl border border-border/80 bg-card/60 text-xs">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="border-border bg-muted/60 text-foreground font-medium text-xs gap-1 py-0.5">
-              <User className="h-3.5 w-3.5 text-primary" /> Thành viên dự án
-            </Badge>
-            <span className="text-muted-foreground">
-              Bạn đang phụ trách <strong className="text-foreground">{myTasks.length}</strong> công việc (<strong className="text-foreground">{myHours}h</strong> còn lại).
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <span>Bấm phím <kbd className="px-1 py-0.5 rounded bg-background border font-mono text-[10px] text-foreground font-semibold">Q</kbd> để lọc nhanh việc của bạn · Nhấn <strong>Nhận việc</strong> trên thẻ chưa giao</span>
-          </div>
-        </div>
-      )}
 
 
       {tasksQuery.isPending ? (
@@ -1508,25 +1455,46 @@ function Column({
               Kéo thẻ vào đây
             </div>
           )}
-          {canEdit && canAdd &&
-            (composerOpen ? (
-              <ColumnComposer
-                columnName={col.name}
-                dicts={dicts}
-                onCreate={onQuickCreate}
-                onOpenFull={onOpenFull}
-                onClose={onCloseComposer}
-              />
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onAddTask?.(col.id)}
-                className="w-full justify-start text-xs text-muted-foreground hover:text-foreground hover:bg-background/80 border border-dashed border-border/50 hover:border-border mt-1 h-8 gap-1.5 rounded-lg transition-colors"
-              >
-                <Plus className="h-3.5 w-3.5" /> Thêm công việc
-              </Button>
-            ))}
+          {canEdit && canAdd && (
+            <div className="mt-auto pt-2">
+              <AnimatePresence mode="wait">
+                {composerOpen ? (
+                  <motion.div
+                    key="composer"
+                    variants={accordionExpand}
+                    initial="collapsed"
+                    animate="expanded"
+                    exit="collapsed"
+                  >
+                    <ColumnComposer
+                      columnName={col.name}
+                      dicts={dicts}
+                      onCreate={onQuickCreate}
+                      onOpenFull={onOpenFull}
+                      onClose={onCloseComposer}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="btn"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.1 }}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onAddTask?.(col.id)}
+                      className="w-full justify-start text-xs text-muted-foreground hover:text-foreground hover:bg-background/80 border border-dashed border-border/50 hover:border-border h-8 gap-1.5 rounded-lg transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Thêm công việc
+                    </Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
         </div>
       </SortableContext>
     </div>

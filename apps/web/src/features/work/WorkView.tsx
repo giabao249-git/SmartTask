@@ -1,14 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { CalendarRange, Grid2X2, Inbox, Kanban, ListTodo, Minimize2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { Bot, CalendarRange, Grid2X2, Kanban, ListTodo, Minimize2, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/app/PageHeader";
+import { contentVariants } from "@/lib/motion";
 import { useAuth } from "@/lib/auth";
 import { useCurrentProject } from "@/lib/hooks/use-project";
-import { useTasks } from "@/features/board/hooks";
+import { useBoardRealtime, useTasks } from "@/features/board/hooks";
 import { KanbanBoard } from "@/features/board/KanbanBoard";
 import { TaskListView } from "@/features/tasks/TaskListView";
 import { TimelineGanttView } from "@/features/timeline/TimelineGanttView";
@@ -25,10 +28,9 @@ const ICON: Record<ViewKey, typeof Kanban> = {
   list: ListTodo,
   timeline: CalendarRange,
   eisenhower: Grid2X2,
-  backlog: Inbox,
 };
 
-/** Màn "Công việc": 4 cách nhìn cùng một tập task (GET /projects/:id/tasks), chung bộ lọc và chung cache. */
+/** Màn "Công việc": các cách nhìn cùng một tập task (GET /projects/:id/tasks), chung bộ lọc và chung cache. */
 export function WorkView() {
   const project = useCurrentProject();
   return (
@@ -46,6 +48,13 @@ function WorkBody() {
   const project = useCurrentProject();
   const auth = useAuth();
   const f = useWorkFilters();
+
+  // Kích hoạt đồng bộ thời gian thực Socket.IO cho cả 4 chế độ xem (Bảng, Danh sách, Timeline, Eisenhower)
+  useBoardRealtime(project.id, {
+    view: f.view,
+    selfId: auth.user?.id,
+  });
+
   // Cùng khoá với 4 view bên trong → chỉ một lần gọi API cho cả màn
   const tasks = useTasks(project.id, f.query);
   const counts = React.useMemo(() => {
@@ -76,6 +85,73 @@ function WorkBody() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [toggle]);
 
+  const router = useRouter();
+  const isLeader =
+    auth.user?.isSuperAdmin ||
+    auth.workspaces.some(
+      (w) => w.id === project.workspaceId && (w.role === "OWNER" || w.role === "ADMIN"),
+    );
+
+  const viewSwitcher = (
+    <div className="flex items-center gap-2">
+      <Tabs
+        value={f.view}
+        onValueChange={(v) => f.setView(v as ViewKey)}
+        layoutId="project-work-views"
+        className="hidden md:block"
+      >
+        <TabsList className="h-8 p-0.5 bg-muted/70">
+          {WORK_VIEWS.map((v) => {
+            const Icon = ICON[v.key];
+            return (
+              <TabsTrigger key={v.key} value={v.key} className="text-xs gap-1.5 px-2.5 h-7">
+                <Icon className="h-3.5 w-3.5" />
+                {v.short}
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+      </Tabs>
+      <Select value={f.view} onValueChange={(v) => f.setView(v as ViewKey)}>
+        <SelectTrigger className="h-8 text-xs w-36 md:hidden">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {WORK_VIEWS.map((v) => (
+            <SelectItem key={v.key} value={v.key} className="text-xs">
+              {v.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const aiActions = isLeader && router ? (
+    <div className="flex items-center gap-1.5">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => router.push(`/projects/${project.id}/people?tab=balance`)}
+        className="h-8 text-xs gap-1 text-info hover:text-info border-info/30 hover:bg-info/10 px-2.5 shadow-2xs"
+        title="Cân bằng tải công việc bằng AI"
+      >
+        <Scale className="h-3.5 w-3.5" />
+        <span className="hidden xl:inline">Cân bằng tải AI</span>
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => router.push(`/projects/${project.id}/assistant`)}
+        className="h-8 text-xs gap-1 text-primary hover:text-primary border-primary/30 hover:bg-primary/10 px-2.5 shadow-2xs"
+        title="Mở Trợ lý AI dự án"
+      >
+        <Bot className="h-3.5 w-3.5" />
+        <span className="hidden xl:inline">Trợ lý AI</span>
+      </Button>
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-4">
       {focus ? (
@@ -89,7 +165,6 @@ function WorkBody() {
       ) : (
       <PageHeader
         title={`Công việc · ${project.key}`}
-        description="Bốn cách nhìn cùng một danh sách công việc — đổi cách nhìn vẫn giữ nguyên bộ lọc."
         breadcrumbs={[
           { label: "Workspace", href: "/workspaces" },
           { label: project.name, href: `/projects/${project.id}/dashboard` },
@@ -98,45 +173,27 @@ function WorkBody() {
       />
       )}
 
-      {/* Chọn cách nhìn: tab trên màn rộng, select trên điện thoại */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <Tabs value={f.view} onValueChange={(v) => f.setView(v as ViewKey)} className="hidden sm:block">
-          <TabsList className="h-9">
-            {WORK_VIEWS.map((v) => {
-              const Icon = ICON[v.key];
-              return (
-                <TabsTrigger key={v.key} value={v.key} className="text-xs gap-1.5">
-                  <Icon className="h-3.5 w-3.5" />
-                  {v.short}
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-        </Tabs>
-        <Select value={f.view} onValueChange={(v) => f.setView(v as ViewKey)}>
-          <SelectTrigger className="h-9 text-xs w-48 sm:hidden">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {WORK_VIEWS.map((v) => (
-              <SelectItem key={v.key} value={v.key} className="text-xs">
-                {v.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Toolbar thống nhất: Tabs chuyển view + bộ lọc + nút tác vụ AI nằm chung một dòng */}
+      <WorkFilterBar counts={counts} syncing={tasks.isFetching} leftSlot={viewSwitcher} rightSlot={aiActions} />
 
-      <WorkFilterBar counts={counts} syncing={tasks.isFetching} />
-
-      {f.view === "board" && <KanbanBoard />}
-      {f.view === "list" && <TaskListView />}
-      {f.view === "timeline" && <TimelineGanttView />}
-      {f.view === "eisenhower" && <EisenhowerMatrixView />}
-      {f.view === "backlog" && <BacklogView />}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={f.view}
+          variants={contentVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+        >
+          {f.view === "board" && <KanbanBoard />}
+          {/* Backlog = Danh sách lọc sprint "Backlog": cùng dữ liệu, chỉ thêm kéo thả xếp thứ tự */}
+          {f.view === "list" && (f.sprint === "__backlog" ? <BacklogView /> : <TaskListView />)}
+          {f.view === "timeline" && <TimelineGanttView />}
+          {f.view === "eisenhower" && <EisenhowerMatrixView />}
+        </motion.div>
+      </AnimatePresence>
 
       {/* Chọn nhiều dùng chung cho Bảng và Danh sách nên thanh hành động đặt ở đây */}
-      {(f.view === "board" || f.view === "list" || f.view === "backlog") && <BulkActionBar project={project} tasks={tasks.data ?? []} />}
+      {(f.view === "board" || f.view === "list") && <BulkActionBar project={project} tasks={tasks.data ?? []} />}
     </div>
   );
 }

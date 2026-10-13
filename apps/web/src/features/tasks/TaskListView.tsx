@@ -2,12 +2,13 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpDown, Sparkles, ListTodo, Maximize2 } from "lucide-react";
+import { ArrowUpDown, ChevronDown, Filter, Sparkles, ListTodo, Maximize2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AssigneePicker } from "@/components/app/TaskFieldPickers";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,10 +26,37 @@ import { useAuth } from "@/lib/auth";
 import { useWorkFilters } from "@/features/work/filters";
 import { useWorkSelection } from "@/features/work/selection";
 import { Checkbox } from "@/components/ui/checkbox";
-import { statusToVariant } from "@/lib/status";
+import { statusToVariant, sprintStatusLabel, TASK_TYPES, typeToLabel } from "@/lib/status";
+import { useSprints } from "@/lib/hooks/queries";
 import type { TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useBoardRealtime, useTaskMutations, useTasks } from "@/features/board/hooks";
+
+/** Khoảng hạn lọc ở cột Hạn — tính theo ngày (YYYY-MM-DD) để không lệch múi giờ. */
+const DUE_OPTIONS = [
+  { value: "__all", label: "Mọi hạn" },
+  { value: "overdue", label: "Quá hạn" },
+  { value: "today", label: "Hôm nay" },
+  { value: "week", label: "Tuần này" },
+  { value: "none", label: "Chưa đặt hạn" },
+];
+function matchDue(t: TaskListItem, preset: string): boolean {
+  if (preset === "__all") return true;
+  if (preset === "none") return !t.dueDate;
+  if (!t.dueDate) return false;
+  const d = t.dueDate.slice(0, 10);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  if (preset === "overdue") return d < today && !t.completedAt;
+  if (preset === "today") return d === today;
+  if (preset === "week") {
+    const dow = (now.getUTCDay() + 6) % 7; // thứ Hai = 0
+    const mon = new Date(now.getTime() - dow * 86_400_000).toISOString().slice(0, 10);
+    const sun = new Date(now.getTime() + (6 - dow) * 86_400_000).toISOString().slice(0, 10);
+    return d >= mon && d <= sun;
+  }
+  return true;
+}
 
 type SortKey = "number" | "title" | "priority" | "dueDate" | "estimateHours" | "progress" | "updatedAt";
 const PRIORITY_RANK: Record<string, number> = { URGENT: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
@@ -49,6 +77,7 @@ export function TaskListView() {
   };
   const priority = get("priority", "__all");
   const column = get("column", "__all");
+  const due = get("due", "__all");
   const sortKey = (get("sort", "number") as SortKey) || "number";
   const sortDir = get("dir", "asc") === "desc" ? "desc" : "asc";
 
@@ -84,11 +113,14 @@ export function TaskListView() {
     setDetailOpen(true);
   }, [urlTaskId]);
 
-  const rows = React.useMemo(() => {
+  const sprints = useSprints(project.id);
+
+  const sorted = React.useMemo(() => {
     const list = f
       .applyQuick(tasksQuery.data ?? [], auth.user?.id)
       .filter((t) => column === "__all" || t.columnId === column)
-      .filter((t) => priority === "__all" || t.priority === priority);
+      .filter((t) => priority === "__all" || t.priority === priority)
+      .filter((t) => matchDue(t, due));
     const cmp = (a: TaskListItem, b: TaskListItem): number => {
       switch (sortKey) {
         case "title":
@@ -108,7 +140,36 @@ export function TaskListView() {
       }
     };
     return [...list].sort((a, b) => (sortDir === "asc" ? cmp(a, b) : cmp(b, a)));
-  }, [tasksQuery.data, column, priority, sortKey, sortDir, f, auth.user?.id]);
+  }, [tasksQuery.data, column, priority, due, sortKey, sortDir, f, auth.user?.id]);
+
+  /**
+   * Chia danh sách thành từng khoảng sprint ở đầu mỗi nhóm: đang chạy → kế hoạch → đã đóng (mới nhất trước) → backlog.
+   * Thứ tự sắp xếp cột vẫn áp BÊN TRONG mỗi nhóm. `rows` là dãy phẳng theo đúng thứ tự hiển thị để
+   * chọn nhiều (Shift-click) và "chọn tất cả" khớp với những gì người dùng thấy.
+   */
+  const groups = React.useMemo(() => {
+    const byId = new Map<string, TaskListItem[]>();
+    for (const t of sorted) {
+      const k = t.sprintId ?? "__backlog";
+      const arr = byId.get(k);
+      if (arr) arr.push(t);
+      else byId.set(k, [t]);
+    }
+    const rank = { ACTIVE: 0, PLANNED: 1, CLOSED: 2 } as const;
+    const list = [...byId.entries()].map(([id, tasks]) => {
+      const sprint = id === "__backlog" ? null : (sprints.data ?? []).find((x) => x.id === id) ?? null;
+      const hours = tasks.reduce((n, t) => n + (t.estimateHours ?? 0), 0);
+      const done = tasks.filter((t) => t.completedAt).length;
+      return { id, sprint, tasks, hours, done };
+    });
+    return list.sort((a, b) => {
+      if (!a.sprint || !b.sprint) return a.sprint ? -1 : b.sprint ? 1 : 0;
+      const r = rank[a.sprint.status] - rank[b.sprint.status];
+      if (r) return r;
+      return a.sprint.status === "CLOSED" ? b.sprint.startDate.localeCompare(a.sprint.startDate) : a.sprint.startDate.localeCompare(b.sprint.startDate);
+    });
+  }, [sorted, sprints.data]);
+  const rows = React.useMemo(() => groups.flatMap((g) => g.tasks), [groups]);
 
   const toggleSort = (k: SortKey) => {
     const next = new URLSearchParams(params.toString());
@@ -119,14 +180,87 @@ export function TaskListView() {
     }
     router.replace(`?${next.toString()}`);
   };
-  const Head = ({ k, children, className }: { k: SortKey; children: React.ReactNode; className?: string }) => (
-    <TableHead className={cn("text-xs cursor-pointer select-none", className)} onClick={() => toggleSort(k)}>
-      <span className="inline-flex items-center gap-1">
-        {children}
-        <ArrowUpDown className={cn("h-3 w-3", sortKey === k ? "text-foreground" : "text-muted-foreground/50")} />
-      </span>
-    </TableHead>
-  );
+  const Head = ({ k, children, className }: { k: SortKey; children: React.ReactNode; className?: string }) => {
+    const isRight = className?.includes("text-right");
+    return (
+      <TableHead className={cn("text-xs cursor-pointer select-none", className)} onClick={() => toggleSort(k)}>
+        <span className={cn("inline-flex items-center gap-1", isRight && "justify-end w-full")}>
+          {children}
+          <ArrowUpDown className={cn("h-3 w-3", sortKey === k ? "text-foreground" : "text-muted-foreground/50")} />
+        </span>
+      </TableHead>
+    );
+  };
+  /**
+   * Tiêu đề cột kiêm bộ lọc: bấm vào mở menu chọn giá trị lọc của cột đó (và sắp xếp nếu cột sắp xếp được).
+   * Cột đang lọc được tô nổi và hiện giá trị đang chọn ngay trên tiêu đề.
+   */
+  const FilterHead = ({
+    label,
+    value,
+    options,
+    onChange,
+    sortKeyOf,
+    className,
+  }: {
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+    onChange: (v: string) => void;
+    sortKeyOf?: SortKey;
+    className?: string;
+  }) => {
+    const active = value !== "__all";
+    const current = options.find((o) => o.value === value)?.label;
+    return (
+      <TableHead className={cn("text-xs", className)}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "inline-flex items-center gap-1 rounded px-1 -mx-1 py-0.5 hover:bg-muted-foreground/10 transition-colors",
+                active && "bg-primary/10 text-foreground font-semibold",
+              )}
+              title={`Lọc theo ${label.toLowerCase()}`}
+            >
+              {label}
+              {active && <span className="max-w-24 truncate font-normal">: {current}</span>}
+              {active ? <Filter className="h-3 w-3" /> : <ChevronDown className="h-3 w-3 text-muted-foreground/60" />}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-44">
+            {sortKeyOf && (
+              <>
+                <DropdownMenuLabel className="text-[11px] text-muted-foreground">Sắp xếp</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={sortKey === sortKeyOf ? sortDir : ""}
+                  onValueChange={(d) => {
+                    const next = new URLSearchParams(params.toString());
+                    next.set("sort", sortKeyOf);
+                    next.set("dir", d);
+                    router.replace(`?${next.toString()}`);
+                  }}
+                >
+                  <DropdownMenuRadioItem value="asc" className="text-xs">{sortKeyOf === "dueDate" ? "Sớm → muộn" : "Thấp → cao"}</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="desc" className="text-xs">{sortKeyOf === "dueDate" ? "Muộn → sớm" : "Cao → thấp"}</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuLabel className="text-[11px] text-muted-foreground">Lọc {label.toLowerCase()}</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
+              {options.map((o) => (
+                <DropdownMenuRadioItem key={o.value} value={o.value} className="text-xs">
+                  {o.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableHead>
+    );
+  };
   const today = new Date().toISOString().slice(0, 10);
   /** Ô sửa tại chỗ không được để click lan ra làm mở modal chi tiết. */
   const stop = (e: React.MouseEvent) => e.stopPropagation();
@@ -134,39 +268,8 @@ export function TaskListView() {
   return (
     <div className="space-y-6">
 
-      <div className="flex items-center gap-2 flex-wrap text-xs">
-        <span className="text-muted-foreground">Lọc riêng của bảng:</span>
-        <Select value={column} onValueChange={(v) => setParam("column", v)}>
-          <SelectTrigger className="h-8 text-xs w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all" className="text-xs">
-              Mọi cột
-            </SelectItem>
-            {project.columns.map((c) => (
-              <SelectItem key={c.id} value={c.id} className="text-xs">
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={priority} onValueChange={(v) => setParam("priority", v)}>
-          <SelectTrigger className="h-8 text-xs w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all" className="text-xs">
-              Mọi ưu tiên
-            </SelectItem>
-            {["URGENT", "HIGH", "MEDIUM", "LOW"].map((p) => (
-              <SelectItem key={p} value={p} className="text-xs">
-                {p}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="text-muted-foreground ml-auto">{rows.length} công việc</span>
+      <div className="flex items-center justify-end text-xs text-muted-foreground">
+        <span>{rows.length} công việc · bấm tiêu đề cột để lọc</span>
       </div>
 
       {tasksQuery.isPending ? (
@@ -197,21 +300,76 @@ export function TaskListView() {
                   Mã
                 </Head>
                 <Head k="title">Tiêu đề</Head>
-                <TableHead className="text-xs">Loại</TableHead>
-                <TableHead className="text-xs">Cột</TableHead>
-                <Head k="priority">Ưu tiên</Head>
-                <TableHead className="text-xs">Người</TableHead>
+                <FilterHead
+                  label="Loại"
+                  value={f.type}
+                  onChange={(v) => f.set({ type: v })}
+                  options={[{ value: "__all", label: "Mọi loại" }, ...TASK_TYPES.map((t) => ({ value: t, label: typeToLabel(t) }))]}
+                />
+                <FilterHead
+                  label="Cột"
+                  value={column}
+                  onChange={(v) => setParam("column", v)}
+                  options={[{ value: "__all", label: "Mọi cột" }, ...project.columns.map((c) => ({ value: c.id, label: c.name }))]}
+                />
+                <FilterHead
+                  label="Ưu tiên"
+                  value={priority}
+                  onChange={(v) => setParam("priority", v)}
+                  sortKeyOf="priority"
+                  options={[{ value: "__all", label: "Mọi ưu tiên" }, ...["URGENT", "HIGH", "MEDIUM", "LOW"].map((p) => ({ value: p, label: p }))]}
+                />
+                <FilterHead
+                  label="Người"
+                  value={f.quick === "unassigned" ? "__unassigned" : f.assignee}
+                  onChange={(v) => (v === "__unassigned" ? f.set({ quick: "unassigned", assignee: "__all" }) : f.set({ assignee: v, quick: "all" }))}
+                  options={[
+                    { value: "__all", label: "Mọi người" },
+                    { value: "__unassigned", label: "Chưa giao" },
+                    ...project.members.map((m) => ({ value: m.id, label: m.fullName })),
+                  ]}
+                />
                 <Head k="estimateHours" className="text-right">
                   Giờ
                 </Head>
                 <Head k="progress" className="text-right">
                   %
                 </Head>
-                <Head k="dueDate">Hạn</Head>
+                <FilterHead
+                  label="Hạn"
+                  value={due}
+                  onChange={(v) => setParam("due", v)}
+                  sortKeyOf="dueDate"
+                  options={DUE_OPTIONS}
+                />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((t) => {
+              {groups.map((g) => (
+                <React.Fragment key={g.id}>
+                  <TableRow className="bg-muted hover:bg-muted border-y border-border/80">
+                    <TableCell colSpan={editable ? 10 : 9} className="py-2">
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                        <span className="font-semibold text-sm text-foreground">{g.sprint ? g.sprint.name : "Backlog"}</span>
+                        {g.sprint ? (
+                          <>
+                            <Badge variant={g.sprint.status === "ACTIVE" ? "default" : "outline"} className="text-[10px]">
+                              {sprintStatusLabel(g.sprint.status)}
+                            </Badge>
+                            <span className="text-muted-foreground tabular-nums">
+                              {fmtDay(g.sprint.startDate)} – {fmtDay(g.sprint.endDate)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">chưa vào sprint nào</span>
+                        )}
+                        <span className="ml-auto text-muted-foreground tabular-nums">
+                          {g.tasks.length} việc · {g.done} xong · {g.hours}h
+                        </span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {g.tasks.map((t) => {
                 const col = project.columns.find((c) => c.id === t.columnId);
                 const overdue = !!t.dueDate && !t.completedAt && t.dueDate.slice(0, 10) < today;
                 return (
@@ -266,8 +424,11 @@ export function TaskListView() {
                             mut.move.mutate({ id: t.id, version: t.version, columnId }, { onError: (e) => fail(e, "Chuyển cột", taskKeyOf(project.key, t)) })
                           }
                         >
-                          <SelectTrigger className="h-7 w-32 text-[11px] border-transparent hover:border-border px-2">
-                            <SelectValue />
+                          <SelectTrigger className="h-6 w-auto border-none bg-transparent hover:bg-muted/80 p-0 shadow-none focus:ring-0 gap-1 text-xs">
+                            <Badge variant={statusToVariant(col?.statusKey ?? "")} className="font-normal text-[11px] gap-1 cursor-pointer">
+                              {col?.name ?? "—"}
+                              <ChevronDown className="h-2.5 w-2.5 opacity-50" />
+                            </Badge>
                           </SelectTrigger>
                           <SelectContent>
                             {project.columns.map((c) => (
@@ -286,8 +447,8 @@ export function TaskListView() {
                     <TableCell onClick={stop}>
                       {editable ? (
                         <Select value={t.priority} onValueChange={(v) => patchRow(t, { priority: v }, "Đổi ưu tiên")}>
-                          <SelectTrigger className="h-7 w-28 text-[11px] border-transparent hover:border-border px-2">
-                            <SelectValue />
+                          <SelectTrigger className="h-6 w-auto border-none bg-transparent hover:bg-muted/80 p-0 shadow-none focus:ring-0 gap-1">
+                            <PriorityBadge priority={t.priority} showIcon={false} className="cursor-pointer font-normal border-border/60" />
                           </SelectTrigger>
                           <SelectContent>
                             {(["LOW", "MEDIUM", "HIGH", "URGENT"] as const).map((pr) => (
@@ -320,15 +481,15 @@ export function TaskListView() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-mono">{t.estimateHours ?? "—"}</TableCell>
-                    <TableCell className="text-right font-mono">{t.progress}</TableCell>
-                    <TableCell onClick={stop} className={cn("font-mono", overdue && "text-destructive font-medium")}>
+                    <TableCell className="text-right font-mono tabular-nums">{t.estimateHours != null ? `${t.estimateHours}h` : "—"}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">{t.progress}%</TableCell>
+                    <TableCell onClick={stop} className={cn("font-mono tabular-nums", overdue && "text-destructive font-medium")}>
                       {editable ? (
                         <Input
                           type="date"
                           value={t.dueDate ? t.dueDate.slice(0, 10) : ""}
                           onChange={(e) => patchRow(t, { dueDate: e.target.value || null }, "Đổi hạn")}
-                          className="h-7 w-32 text-[11px] border-transparent hover:border-border px-2"
+                          className="h-6 w-32 text-[11px] border-none bg-transparent hover:bg-muted/60 p-1 rounded font-mono shadow-none focus-visible:ring-1"
                         />
                       ) : (
                         fmtDay(t.dueDate)
@@ -337,6 +498,8 @@ export function TaskListView() {
                   </TableRow>
                 );
               })}
+                </React.Fragment>
+              ))}
             </TableBody>
           </Table>
         </div>

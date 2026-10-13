@@ -1,29 +1,26 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { resolveLandingPath } from "@/lib/landing";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LandingPageView } from "@/features/landing/LandingPageView";
 
-/** Trang gốc: đưa thẳng vào dự án đang làm dở (hoặc dự án duy nhất) thay vì luôn dừng ở danh sách. */
+/**
+ * Trang gốc (Root / Landing Page):
+ * - Khi chưa đăng nhập: Hiển thị Landing Page giới thiệu sản phẩm theo mô hình BYOK (Bring Your Own Key).
+ * - Khi đã đăng nhập: Hiển thị Landing Page kèm banner thông minh và các nút lối tắt dẫn thẳng vào Workspace.
+ */
 export default function RootPage() {
-  const router = useRouter();
   const auth = useAuth();
 
-  React.useEffect(() => {
-    if (auth.status === "loading") return;
-    if (auth.status !== "authenticated") {
-      router.replace("/login");
-      return;
-    }
-    void resolveLandingPath(auth.workspaces).then((path) => router.replace(path));
-  }, [auth.status, auth.workspaces, router]);
+  const isAuthenticated = auth.status === "authenticated";
+  const userFullName = auth.user?.fullName ?? null;
+  const workspaceName = auth.workspaces[0]?.name ?? null;
 
   return (
-    <div className="min-h-screen p-6 space-y-3">
-      <Skeleton className="h-8 w-64" />
-      <Skeleton className="h-4 w-96" />
-    </div>
+    <LandingPageView
+      isAuthenticated={isAuthenticated}
+      userFullName={userFullName}
+      workspaceName={workspaceName}
+    />
   );
 }

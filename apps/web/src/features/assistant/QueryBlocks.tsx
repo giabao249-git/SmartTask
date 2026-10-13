@@ -136,7 +136,7 @@ function BlockView({ block, projectId, animate = false, onDone }: { block: Query
     if (!ref) return;
     if (ref.type === "task") router.push(`/projects/${projectId}/work?task=${ref.id}`);
     else if (ref.type === "user") router.push(`/projects/${projectId}/people?member=${ref.id}`);
-    else if (ref.type === "sprint") router.push(`/projects/${projectId}/sprints?sprint=${ref.id}`);
+    else if (ref.type === "sprint") router.push(`/projects/${projectId}/dashboard?sprint=${ref.id}`);
     else if (ref.type === "notification") router.push(`/settings`);
   };
 

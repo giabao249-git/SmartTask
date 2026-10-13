@@ -189,4 +189,11 @@ export class RealtimeListener {
       at: p.at,
     });
   }
+
+  @OnEvent('audit.logged', { async: true })
+  onAudit(p: { workspaceId: string; log: unknown }): void {
+    if (p.workspaceId) {
+      this.gateway.toWorkspace(p.workspaceId, 'audit:logged', p.log);
+    }
+  }
 }

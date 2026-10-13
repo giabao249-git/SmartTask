@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -11,15 +12,18 @@ import {
   Check,
   Code,
   Copy,
-  History,
   Keyboard,
   Layers,
+  MessageSquare,
   MoreHorizontal,
+  PanelLeft,
+  PanelLeftClose,
+  PanelRightClose,
   Pencil,
-  Plus,
   Search,
   Send,
   Sparkles,
+  SquarePen,
   Trash2,
 } from "lucide-react";
 import { UserAvatar } from "@/components/app/UserAvatar";
@@ -133,7 +137,7 @@ const SLASH_COMMANDS = [
   },
 ];
 
-/** Trang Trợ lý AI (docs 12 §6): bảng lịch sử panel trượt · giữa chat chiếm trọn · phải rail bản nháp */
+/** Trang Trợ lý AI (docs 12 §6): thanh lịch sử bung trực tiếp bên trái (kiểu ChatGPT/Gemini) · giữa khung chat · phải rail bản nháp */
 export function AssistantView() {
   const project = useCurrentProject();
   const mod = useModKey();
@@ -148,7 +152,10 @@ export function AssistantView() {
   const [search, setSearch] = React.useState("");
   const [activeSessionId, setActiveSessionId] = React.useState<string | null>(initialSession);
   const [input, setInput] = React.useState(initialPrompt ?? "");
+  // Desktop: thanh lịch sử bung trực tiếp bên trái như ChatGPT/Gemini; Mobile: mở Sheet
+  const [historyOpen, setHistoryOpen] = React.useState(true);
   const [historySheet, setHistorySheet] = React.useState(false);
+  const [railOpen, setRailOpen] = React.useState(true);
   const [railSheet, setRailSheet] = React.useState(false);
   const [versionConflict, setVersionConflict] = React.useState(false);
   const [highlightApply, setHighlightApply] = React.useState(false);
@@ -164,9 +171,17 @@ export function AssistantView() {
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const itemRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
-  /** Nút "Xem và duyệt" trong bong bóng chat: màn hẹp mở Sheet bản nháp, rồi cuộn tới mục và nháy sáng */
+  const toggleHistory = React.useCallback(() => {
+    if (window.matchMedia("(min-width: 768px)").matches) {
+      setHistoryOpen((v) => !v);
+    } else {
+      setHistorySheet((v) => !v);
+    }
+  }, []);
+  /** Nút "Xem và duyệt" trong bong bóng chat: màn hẹp mở Sheet bản nháp, màn rộng bung rail bên phải rồi cuộn tới mục và nháy sáng */
   const showDrafts = React.useCallback((keys: string[]) => {
     if (!window.matchMedia("(min-width: 1024px)").matches) setRailSheet(true);
+    else setRailOpen(true);
     setHighlightedKeys(new Set(keys));
     setTimeout(() => keys[0] && itemRefs.current[keys[0]]?.scrollIntoView({ behavior: "smooth", block: "center" }), 250);
     setTimeout(() => setHighlightedKeys(new Set()), 1500);
@@ -214,12 +229,17 @@ export function AssistantView() {
   }, [messages]);
   const openDrafts = proposals.reduce((n, p) => n + p.items.filter((i) => i.status === "DRAFT").length, 0);
 
-  // Ctrl/Super + H mở ngăn Lịch sử, ? mở bảng phím tắt (metaKey trên Linux/Windows là phím Super).
+  // Tự mở rail bản nháp khi phiên có bản nháp chờ duyệt
+  React.useEffect(() => {
+    if (openDrafts > 0) setRailOpen(true);
+  }, [openDrafts]);
+
+  // Ctrl/Super + H đóng/mở thanh Lịch sử bên trái, ? mở bảng phím tắt.
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === "h" || e.key === "H")) {
         e.preventDefault();
-        setHistorySheet((v) => !v);
+        toggleHistory();
       }
       const tag = (e.target as HTMLElement | null)?.tagName;
       const isInput = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement | null)?.isContentEditable;
@@ -230,7 +250,7 @@ export function AssistantView() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [toggleHistory]);
 
   // Chưa chọn phiên → chọn phiên gần nhất khi danh sách về
   React.useEffect(() => {
@@ -425,6 +445,15 @@ export function AssistantView() {
     setIsEditingTitle(false);
   };
 
+  const createNewSession = () =>
+    sessionMut.create.mutate(undefined, {
+      onSuccess: (s) => {
+        setActiveSessionId(s.id);
+        setHistorySheet(false);
+      },
+      onError: (e) => onServerError(e),
+    });
+
   const sidebar = (
     <SessionSidebar
       sessions={sessions}
@@ -437,15 +466,8 @@ export function AssistantView() {
         setVersionConflict(false);
         setHistorySheet(false);
       }}
-      onCreate={() =>
-        sessionMut.create.mutate(undefined, {
-          onSuccess: (s) => {
-            setActiveSessionId(s.id);
-            setHistorySheet(false);
-          },
-          onError: (e) => onServerError(e),
-        })
-      }
+      onCreate={createNewSession}
+      onCollapse={() => setHistoryOpen(false)}
       onToggleArchive={(s) => sessionMut.patch.mutate({ id: s.id, archived: !s.archivedAt }, { onError: (e) => onServerError(e) })}
       onRename={(s) => setRename({ id: s.id, title: s.title ?? "" })}
       onDelete={(s) => setDeleteId(s.id)}
@@ -453,6 +475,7 @@ export function AssistantView() {
       onSearch={setSearch}
       showArchived={showArchived}
       onToggleArchived={() => setShowArchived((v) => !v)}
+      mod={mod}
     />
   );
 
@@ -515,7 +538,7 @@ export function AssistantView() {
             <span className="hidden sm:inline">Cấu hình AI</span>
           </Button>
 
-          {/* Nút nổi hoặc mở bản nháp trên mobile */}
+          {/* Nút nổi mở bản nháp trên màn hình < 1024px */}
           <Button variant="outline" size="sm" className="lg:hidden h-8 text-xs gap-1.5 border-info/40 text-info" onClick={() => setRailSheet(true)}>
             <Layers className="h-3.5 w-3.5" /> Bản nháp ({openDrafts})
           </Button>
@@ -523,14 +546,25 @@ export function AssistantView() {
       </div>
 
       <div className="flex-1 min-h-0 flex gap-3 overflow-hidden w-full max-w-full">
-        {/* Sheet Lịch sử phiên chat (trượt từ trái rộng 320px đè lên) */}
+        {/* Thanh Lịch sử chat bung trực tiếp bên trái trên Desktop (như ChatGPT / Gemini, không phủ màn đen) */}
+        <aside
+          aria-label="Lịch sử phiên chat"
+          className={cn(
+            "hidden md:flex shrink-0 flex-col rounded-xl bg-card/85 overflow-hidden transition-all duration-200 ease-in-out",
+            historyOpen
+              ? "w-[268px] xl:w-[284px] border border-border/80 shadow-xs opacity-100"
+              : "w-0 border-0 opacity-0 pointer-events-none -mr-3",
+          )}
+        >
+          <div className="w-[268px] xl:w-[284px] h-full flex flex-col">{sidebar}</div>
+        </aside>
+
+        {/* Sheet Lịch sử phiên chat chỉ dùng trên màn hình hẹp (< 768px) */}
         <Sheet open={historySheet} onOpenChange={setHistorySheet}>
-          <SheetContent side="left" className="w-[320px] p-0 flex flex-col">
-            <SheetHeader className="p-3.5 border-b border-border/60">
-              <SheetTitle className="text-xs font-semibold flex items-center gap-1.5">
-                <History className="h-4 w-4 text-info" /> Lịch sử phiên chat ({sessions.length})
-              </SheetTitle>
-              <SheetDescription className="sr-only">Danh sách các phiên chat trong dự án này</SheetDescription>
+          <SheetContent side="left" className="w-[300px] p-0 flex flex-col md:hidden">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Lịch sử phiên chat</SheetTitle>
+              <SheetDescription>Danh sách các phiên chat trong dự án này</SheetDescription>
             </SheetHeader>
             <div className="flex-1 overflow-hidden">{sidebar}</div>
           </SheetContent>
@@ -539,20 +573,37 @@ export function AssistantView() {
         {/* Khung chat: Chiếm toàn bộ bề rộng còn lại */}
         <main className="flex-1 min-w-0 flex flex-col rounded-xl border border-border/80 bg-card/80 overflow-hidden shadow-xs">
           {/* Header khung chat */}
-          <div className="p-3 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              {/* Nút Lịch sử phiên chat */}
+          <div className="p-2.5 px-3 border-b border-border/60 bg-muted/20 flex items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              {/* Nút bung/đóng thanh Lịch sử kiểu ChatGPT / Gemini */}
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                onClick={() => setHistorySheet(true)}
-                className="h-7 px-2.5 text-xs gap-1.5 text-muted-foreground hover:text-foreground shrink-0 border-border/80"
-                title={`Lịch sử phiên chat (${mod}+H)`}
+                onClick={toggleHistory}
+                className={cn(
+                  "h-8 px-2 text-xs gap-1.5 shrink-0",
+                  historyOpen ? "md:hidden text-muted-foreground hover:text-foreground" : "text-foreground hover:bg-muted/80",
+                )}
+                title={`${historyOpen ? "Ẩn" : "Mở"} thanh lịch sử chat (${mod}+H)`}
               >
-                <History className="h-3.5 w-3.5 text-info" />
-                <span>Lịch sử ({sessions.length})</span>
-                <kbd className="hidden sm:inline text-[9px] bg-background border px-1 rounded font-mono">{mod}+H</kbd>
+                <PanelLeft className="h-4 w-4 text-info" />
+                <span className="text-xs font-medium">Lịch sử</span>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono">
+                  {sessions.length}
+                </Badge>
               </Button>
+
+              {!historyOpen && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={createNewSession}
+                  className="hidden md:inline-flex h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+                  title="Tạo cuộc trò chuyện mới"
+                >
+                  <SquarePen className="h-4 w-4" />
+                </Button>
+              )}
 
               {/* Tiêu đề phiên có thể đổi tên inline */}
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -576,11 +627,11 @@ export function AssistantView() {
                   <button
                     type="button"
                     onClick={handleStartRename}
-                    className="group flex items-center gap-1.5 hover:bg-muted/60 px-1.5 py-0.5 rounded cursor-pointer text-left min-w-0 max-w-[240px] sm:max-w-[400px]"
-                    title="Bấm để đổi tên phiên"
+                    className="group flex items-center gap-1.5 hover:bg-muted/60 px-2 py-1 rounded-md cursor-pointer text-left min-w-0 max-w-[240px] sm:max-w-[420px]"
+                    title="Bấm để đổi tên cuộc trò chuyện"
                   >
                     <h3 className="text-xs font-semibold truncate text-foreground">
-                      {activeSession?.title ?? (activeSessionId ? "Phiên chưa đặt tên" : "Phiên mới")}
+                      {activeSession?.title ?? (activeSessionId ? "Cuộc trò chuyện chưa đặt tên" : "Cuộc trò chuyện mới")}
                     </h3>
                     <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                   </button>
@@ -588,9 +639,9 @@ export function AssistantView() {
               </div>
             </div>
 
-            {/* Thông tin sprint & tin + Nút Bảng phím tắt */}
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="text-[10px] text-muted-foreground hidden md:block">
+            {/* Thông tin sprint & nút đóng/mở Bản nháp + Phím tắt */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <div className="text-[10px] text-muted-foreground hidden xl:block mr-1">
                 {messages.length} tin · {project.activeSprint ? `sprint ${project.activeSprint.name}` : "chưa có sprint"}
               </div>
               <Button
@@ -603,6 +654,21 @@ export function AssistantView() {
                 <Keyboard className="h-3.5 w-3.5 text-info" />
                 <span className="hidden sm:inline">Phím tắt</span>
                 <kbd className="text-[9px] bg-muted border px-1 rounded font-mono">?</kbd>
+              </Button>
+              <Button
+                variant={railOpen ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setRailOpen((v) => !v)}
+                className="hidden lg:inline-flex h-7 px-2.5 text-xs gap-1.5 shrink-0"
+                title={railOpen ? "Thu gọn cột Bản nháp" : "Mở cột Bản nháp"}
+              >
+                {railOpen ? <PanelRightClose className="h-3.5 w-3.5 text-info" /> : <Layers className="h-3.5 w-3.5 text-info" />}
+                <span>Bản nháp</span>
+                {openDrafts > 0 && (
+                  <Badge variant="info" className="text-[10px] px-1.5 py-0 h-4 font-mono">
+                    {openDrafts}
+                  </Badge>
+                )}
               </Button>
             </div>
           </div>
@@ -907,9 +973,17 @@ export function AssistantView() {
           </div>
         </main>
 
-        {/* Rail "Bản nháp trong phiên": Rộng 380px ở ≥1280px, 320px ở 1024-1279px, ẩn dưới 1024px */}
-        <aside className="hidden lg:flex w-[320px] xl:w-[380px] shrink-0 flex-col rounded-xl border border-border/80 bg-card/70 overflow-hidden shadow-xs">
-          {rail}
+        {/* Rail "Bản nháp trong phiên": Bung/thu mượt bên phải ở ≥1024px, ẩn dưới 1024px */}
+        <aside
+          aria-label="Bản nháp trong phiên"
+          className={cn(
+            "hidden lg:flex shrink-0 flex-col rounded-xl bg-card/70 overflow-hidden transition-all duration-200 ease-in-out",
+            railOpen
+              ? "w-[320px] xl:w-[360px] border border-border/80 shadow-xs opacity-100"
+              : "w-0 border-0 opacity-0 pointer-events-none -ml-3",
+          )}
+        >
+          <div className="w-[320px] xl:w-[360px] h-full flex flex-col">{rail}</div>
         </aside>
 
         {/* Sheet Bản nháp trên màn hình < 1024px */}
@@ -1037,7 +1111,10 @@ function MessageBubble({
   };
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
       className={cn(
         "flex gap-3 max-w-[85%] text-xs",
         isUser
@@ -1157,11 +1234,11 @@ function MessageBubble({
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
-// ── Cột danh sách phiên (Sidebar / Sheet panel) ────────────────
+// ── Cột danh sách phiên (Kiểu thanh bên ChatGPT / Gemini) ─────
 interface SessionSidebarProps {
   sessions: ChatSessionView[];
   loading: boolean;
@@ -1170,6 +1247,7 @@ interface SessionSidebarProps {
   activeId: string | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  onCollapse?: () => void;
   onToggleArchive: (s: ChatSessionView) => void;
   onRename: (s: ChatSessionView) => void;
   onDelete: (s: ChatSessionView) => void;
@@ -1177,106 +1255,191 @@ interface SessionSidebarProps {
   onSearch: (q: string) => void;
   showArchived: boolean;
   onToggleArchived: () => void;
+  mod: string;
+}
+
+function groupSessionsByDate(sessions: ChatSessionView[]): { label: string; items: ChatSessionView[] }[] {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yesterdayStart = todayStart - 86_400_000;
+  const weekStart = todayStart - 7 * 86_400_000;
+
+  const groups: Record<"today" | "yesterday" | "week" | "older", ChatSessionView[]> = {
+    today: [],
+    yesterday: [],
+    week: [],
+    older: [],
+  };
+
+  for (const s of sessions) {
+    const t = new Date(s.lastTurnAt ?? s.createdAt).getTime();
+    if (t >= todayStart) groups.today.push(s);
+    else if (t >= yesterdayStart) groups.yesterday.push(s);
+    else if (t >= weekStart) groups.week.push(s);
+    else groups.older.push(s);
+  }
+
+  return [
+    { label: "Hôm nay", items: groups.today },
+    { label: "Hôm qua", items: groups.yesterday },
+    { label: "7 ngày qua", items: groups.week },
+    { label: "Cũ hơn", items: groups.older },
+  ].filter((g) => g.items.length > 0);
 }
 
 function SessionSidebar(p: SessionSidebarProps) {
+  const groups = React.useMemo(() => groupSessionsByDate(p.sessions), [p.sessions]);
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-3 border-b border-border/60 space-y-2">
-        <Button onClick={p.onCreate} size="sm" className="w-full justify-center gap-1.5 text-xs h-8">
-          <Plus className="h-3.5 w-3.5" /> Phiên mới
-        </Button>
+    <div className="flex flex-col h-full bg-muted/15">
+      {/* Header thanh bên kiểu ChatGPT / Gemini */}
+      <div className="p-2.5 border-b border-border/60 space-y-2 shrink-0">
+        <div className="flex items-center justify-between gap-1.5">
+          {p.onCollapse && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={p.onCollapse}
+              className="hidden md:inline-flex h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+              title={`Đóng thanh lịch sử (${p.mod}+H)`}
+              aria-label="Đóng thanh lịch sử"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </Button>
+          )}
+          <Button
+            onClick={p.onCreate}
+            variant="outline"
+            size="sm"
+            className="flex-1 justify-start gap-2 text-xs h-8 font-medium bg-background/80 hover:bg-background border-border/80 shadow-2xs"
+          >
+            <SquarePen className="h-3.5 w-3.5 text-info shrink-0" />
+            <span className="truncate">Đoạn chat mới</span>
+          </Button>
+        </div>
+
         <div className="relative">
-          <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
-          <Input value={p.search} onChange={(e) => p.onSearch(e.target.value)} placeholder="Tìm phiên..." className="text-xs h-8 pl-8 bg-background" />
+          <Search className="h-3.5 w-3.5 absolute left-2.5 top-2 text-muted-foreground pointer-events-none" />
+          <Input
+            value={p.search}
+            onChange={(e) => p.onSearch(e.target.value)}
+            placeholder="Tìm đoạn chat..."
+            className="text-xs h-7 pl-8 bg-background/70 border-border/60"
+          />
         </div>
       </div>
-      <ScrollArea className="flex-1 p-2">
+
+      {/* Danh sách đoạn chat chia theo nhóm thời gian */}
+      <ScrollArea className="flex-1 px-2 py-2 [&>[data-radix-scroll-area-viewport]>div]:!block">
         {p.loading ? (
-          <div className="space-y-2">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-14 rounded-lg" />
+          <div className="space-y-1.5 px-1">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-9 rounded-lg" />
             ))}
           </div>
         ) : p.error ? (
           <ErrorState code={p.error.code} message={p.error.message} onRetry={p.onRetry} />
         ) : p.sessions.length === 0 ? (
-          <div className="p-4 text-center text-xs text-muted-foreground">Chưa có phiên nào — gửi tin đầu tiên, phiên sẽ tự tạo.</div>
+          <div className="py-10 px-3 text-center text-xs text-muted-foreground space-y-1.5">
+            <MessageSquare className="h-6 w-6 mx-auto text-muted-foreground/40" />
+            <p>{p.search ? "Không tìm thấy đoạn chat phù hợp." : "Chưa có lịch sử trò chuyện."}</p>
+          </div>
         ) : (
-          <div className="space-y-1">
-            {p.sessions.map((s) => {
-              const active = s.id === p.activeId;
-              return (
-                <div
-                  key={s.id}
-                  onClick={() => p.onSelect(s.id)}
-                  className={cn(
-                    "p-2.5 rounded-lg text-xs transition-colors cursor-pointer group flex flex-col gap-1 border border-transparent",
-                    active ? "bg-primary/10 border-primary/20" : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-1.5">
-                    <span className={cn("line-clamp-2 text-xs flex-1", active ? "font-semibold text-foreground" : "text-foreground/90")}>
-                      {s.title ?? "Phiên chưa đặt tên"}
-                    </span>
-                    <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-muted-foreground hover:text-foreground opacity-70 group-hover:opacity-100"
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-36 text-xs">
-                          <DropdownMenuItem onClick={() => p.onRename(s)}>
-                            <Pencil className="mr-2 h-3.5 w-3.5" /> Đổi tên
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => p.onToggleArchive(s)}>
-                            {s.archivedAt ? <ArchiveRestore className="mr-2 h-3.5 w-3.5" /> : <Archive className="mr-2 h-3.5 w-3.5" />}
-                            {s.archivedAt ? "Bỏ lưu trữ" : "Lưu trữ"}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => p.onDelete(s)} className="text-destructive focus:text-destructive">
-                            <Trash2 className="mr-2 h-3.5 w-3.5" /> Xoá phiên
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5">
-                    <span>{s.lastTurnAt ? fmtDate(s.lastTurnAt) : fmtDate(s.createdAt)}</span>
-                    <div className="flex items-center gap-1">
-                      {(s.openKinds ?? []).slice(0, 2).map((k) => (
-                        <Badge key={k} variant="outline" className="text-[9px] px-1 py-0 font-mono">
-                          {k}
-                        </Badge>
-                      ))}
-                      {(s.openDrafts ?? 0) > 0 && (
-                        <Badge variant="info" className="text-[9px] px-1 py-0 font-mono h-3.5">
-                          {s.openDrafts} nháp
-                        </Badge>
-                      )}
-                      {s.archivedAt && (
-                        <Badge variant="secondary" className="text-[9px] px-1 py-0">
-                          lưu trữ
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
+          <div className="space-y-4">
+            {groups.map((g) => (
+              <div key={g.label} className="space-y-0.5">
+                <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                  {g.label}
                 </div>
-              );
-            })}
+                {g.items.map((s) => {
+                  const active = s.id === p.activeId;
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => p.onSelect(s.id)}
+                      className={cn(
+                        "group relative flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors cursor-pointer select-none",
+                        active
+                          ? "bg-primary/10 text-foreground font-medium"
+                          : "text-foreground/85 hover:bg-muted/70 hover:text-foreground",
+                      )}
+                    >
+                      <MessageSquare
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0",
+                          active ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground/80",
+                        )}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="truncate text-xs leading-snug">
+                          {s.title ?? "Cuộc trò chuyện mới"}
+                        </div>
+                        {((s.openDrafts ?? 0) > 0 || s.archivedAt) && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            {(s.openDrafts ?? 0) > 0 && (
+                              <span className="inline-flex items-center text-[10px] text-info font-medium">
+                                {s.openDrafts} bản nháp chờ duyệt
+                              </span>
+                            )}
+                            {s.archivedAt && (
+                              <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">
+                                đã lưu trữ
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={cn(
+                                "h-6 w-6 text-muted-foreground hover:text-foreground transition-opacity",
+                                active ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100",
+                              )}
+                              aria-label="Tùy chọn phiên chat"
+                            >
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40 text-xs">
+                            <DropdownMenuItem onClick={() => p.onRename(s)}>
+                              <Pencil className="mr-2 h-3.5 w-3.5" /> Đổi tên
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => p.onToggleArchive(s)}>
+                              {s.archivedAt ? <ArchiveRestore className="mr-2 h-3.5 w-3.5" /> : <Archive className="mr-2 h-3.5 w-3.5" />}
+                              {s.archivedAt ? "Bỏ lưu trữ" : "Lưu trữ"}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => p.onDelete(s)} className="text-destructive focus:text-destructive">
+                              <Trash2 className="mr-2 h-3.5 w-3.5" /> Xoá đoạn chat
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         )}
       </ScrollArea>
-      <div className="p-2 border-t border-border/60 bg-muted/20">
-        <Button variant="ghost" size="sm" onClick={p.onToggleArchived} className="w-full text-xs text-muted-foreground hover:text-foreground justify-start h-7 gap-1.5">
-          <Archive className="h-3 w-3" /> {p.showArchived ? "Ẩn phiên đã lưu trữ" : "Hiện phiên đã lưu trữ"}
+
+      <div className="p-2 border-t border-border/60 bg-muted/20 shrink-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={p.onToggleArchived}
+          className="w-full text-xs text-muted-foreground hover:text-foreground justify-start h-7 gap-1.5"
+        >
+          <Archive className="h-3.5 w-3.5" /> {p.showArchived ? "Ẩn đoạn chat đã lưu trữ" : "Xem đoạn chat đã lưu trữ"}
         </Button>
       </div>
     </div>
   );
 }
+

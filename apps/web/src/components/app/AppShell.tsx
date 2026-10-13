@@ -28,7 +28,7 @@ import {
   ChevronsUpDown,
   Plus,
   ShieldAlert,
-  Flag,
+  ShieldCheck,
 } from "lucide-react";
 import { ShortcutsDialog } from "@/components/app/ShortcutsDialog";
 import { useModKey } from "@/lib/hooks/use-mod-key";
@@ -65,6 +65,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { UserAvatar } from "./UserAvatar";
 import { NotificationsPanel, useBellCount } from "@/features/notifications/NotificationsPanel";
+import { useNotificationRealtime } from "@/features/notifications/hooks";
+import { ProjectPresenceBar } from "@/components/app/ProjectPresenceBar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -91,7 +93,15 @@ export function AppShell({ children }: AppShellProps) {
   const [isPinned, setIsPinned] = React.useState(false);
   const [isHovered, setIsHovered] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const enterTimerRef = React.useRef<NodeJS.Timeout | null>(null);
   const leaveTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
+      if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
+    };
+  }, []);
 
   const [commandOpen, setCommandOpen] = React.useState(false);
   const [commandQuery, setCommandQuery] = React.useState("");
@@ -126,14 +136,24 @@ export function AppShell({ children }: AppShellProps) {
       clearTimeout(leaveTimerRef.current);
       leaveTimerRef.current = null;
     }
-    setIsHovered(true);
+    if (!enterTimerRef.current) {
+      enterTimerRef.current = setTimeout(() => {
+        setIsHovered(true);
+        enterTimerRef.current = null;
+      }, 70);
+    }
   }, []);
 
   const handleMouseLeave = React.useCallback(() => {
+    if (enterTimerRef.current) {
+      clearTimeout(enterTimerRef.current);
+      enterTimerRef.current = null;
+    }
     if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
     leaveTimerRef.current = setTimeout(() => {
       setIsHovered(false);
-    }, 200);
+      leaveTimerRef.current = null;
+    }, 180);
   }, []);
 
   const handleFocus = React.useCallback(() => {
@@ -146,10 +166,15 @@ export function AppShell({ children }: AppShellProps) {
 
   const handleBlur = React.useCallback((e: React.FocusEvent<HTMLElement>) => {
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      if (enterTimerRef.current) {
+        clearTimeout(enterTimerRef.current);
+        enterTimerRef.current = null;
+      }
       if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
       leaveTimerRef.current = setTimeout(() => {
         setIsHovered(false);
-      }, 200);
+        leaveTimerRef.current = null;
+      }, 180);
     }
   }, []);
 
@@ -166,6 +191,11 @@ export function AppShell({ children }: AppShellProps) {
     : auth.workspaces[0];
   // Số chưa đọc thật từ GET /notifications/unread-count (trước đây đếm trên dữ liệu giả)
   const unreadCount = useBellCount();
+
+  // Lắng nghe thông báo thời gian thực toàn cầu — báo toast và cập nhật chuông ngay lập tức
+  useNotificationRealtime((n) => {
+    toast.info(n.title, { description: n.body ?? undefined });
+  });
 
   const isAssistantPage = pathname.includes("/assistant");
 
@@ -216,6 +246,8 @@ export function AppShell({ children }: AppShellProps) {
               title: "Dashboard",
               href: `${projectBase}/dashboard`,
               icon: LayoutDashboard,
+              badge: "Sprint & Báo cáo",
+              badgeVariant: "secondary" as const,
             },
             {
               title: "Công việc",
@@ -223,11 +255,6 @@ export function AppShell({ children }: AppShellProps) {
               icon: Kanban,
               badge: "4 cách xem",
               badgeVariant: "secondary" as const,
-            },
-            {
-              title: "Sprint",
-              href: `${projectBase}/sprints`,
-              icon: Flag,
             },
             {
               title: "Nhân sự & kỹ năng",
@@ -252,6 +279,13 @@ export function AppShell({ children }: AppShellProps) {
     [projectBase]
   );
 
+  const isWorkspaceAdmin = Boolean(
+    currentUser?.isSuperAdmin ||
+      workspace?.role === "OWNER" ||
+      workspace?.role === "ADMIN" ||
+      auth.workspaces.some((w) => w.role === "OWNER" || w.role === "ADMIN")
+  );
+
   const secondaryNavItems = React.useMemo(
     () => [
       {
@@ -259,6 +293,18 @@ export function AppShell({ children }: AppShellProps) {
         href: "/workspaces",
         icon: Building2,
       },
+      ...(isWorkspaceAdmin
+        ? [
+            {
+              title: "Nhật ký kiểm toán",
+              href: "/audit",
+              icon: ShieldCheck,
+              badge: "Audit",
+              badgeVariant: "secondary" as const,
+              dotColor: "bg-emerald-500",
+            },
+          ]
+        : []),
       {
         title: "Thông báo & Cài đặt",
         href: "/settings",
@@ -280,7 +326,7 @@ export function AppShell({ children }: AppShellProps) {
           ]
         : []),
     ],
-    [unreadCount, currentUser?.isSuperAdmin]
+    [unreadCount, currentUser?.isSuperAdmin, isWorkspaceAdmin]
   );
 
   const isExpanded = isPinned || isHovered;
@@ -288,26 +334,32 @@ export function AppShell({ children }: AppShellProps) {
   const renderNavList = (expanded: boolean, onNavigate?: () => void) => (
     <TooltipProvider delayDuration={150}>
       <div className="space-y-1">
-        {expanded && (
-          <p className="px-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-            Dự án Agile
-          </p>
-        )}
+        <p
+          className={cn(
+            "px-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate transition-all duration-200 select-none",
+            expanded ? "opacity-100 max-h-5 mb-1.5" : "opacity-0 max-h-0 mb-0 overflow-hidden pointer-events-none"
+          )}
+        >
+          Dự án Agile
+        </p>
 
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
-          const link = (
-            <Link key={item.href} href={item.href} onClick={onNavigate} className="block">
+          const isActive =
+            pathname === item.href ||
+            (item.title === "Công việc" && (pathname.startsWith(item.href) || pathname.includes("/tasks"))) ||
+            (item.title === "Dashboard" && pathname === `${projectBase}/dashboard`);
+
+          const content = (
+            <Link key={item.href} href={item.href} onClick={onNavigate} className="block w-full">
               <div
                 className={cn(
-                  "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium transition-colors group cursor-pointer relative",
+                  "flex items-center rounded-md text-xs font-medium transition-colors group cursor-pointer relative overflow-hidden h-9 w-full px-3",
                   isActive
                     ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  !expanded && "justify-center px-0 h-9 w-9 mx-auto"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <div className="relative flex items-center justify-center">
+                <div className="relative flex items-center justify-center shrink-0 w-4 h-4">
                   <item.icon
                     className={cn(
                       "h-4 w-4 shrink-0 transition-colors",
@@ -318,104 +370,113 @@ export function AppShell({ children }: AppShellProps) {
                     <span className={cn("absolute -top-1 -right-1 w-2 h-2 rounded-full ring-2 ring-card", item.dotColor)} />
                   )}
                 </div>
-                {expanded && (
-                  <>
-                    <span className="truncate flex-1">{item.title}</span>
-                    {item.badge && (
-                      <Badge
-                        variant={item.badgeVariant || "secondary"}
-                        className={cn(
-                          "text-[10px] px-1.5 py-0 h-4 font-mono shrink-0",
-                          isActive && "bg-primary-foreground/20 text-primary-foreground border-transparent"
-                        )}
-                      >
-                        {item.badge}
-                      </Badge>
-                    )}
-                  </>
-                )}
+                <div
+                  className={cn(
+                    "flex items-center gap-2 min-w-0 flex-1 ml-2.5 overflow-hidden whitespace-nowrap transition-all duration-200",
+                    expanded ? "opacity-100 max-w-[180px]" : "opacity-0 max-w-0 pointer-events-none"
+                  )}
+                >
+                  <span className="truncate flex-1">{item.title}</span>
+                  {item.badge && (
+                    <Badge
+                      variant={item.badgeVariant || "secondary"}
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 h-4 font-mono shrink-0",
+                        isActive && "bg-primary-foreground/20 text-primary-foreground border-transparent"
+                      )}
+                    >
+                      {item.badge}
+                    </Badge>
+                  )}
+                </div>
               </div>
             </Link>
           );
 
-          if (!expanded) {
-            return (
-              <Tooltip key={item.href}>
-                <TooltipTrigger asChild>{link}</TooltipTrigger>
-                <TooltipContent side="right" className="flex items-center gap-1.5 text-xs font-medium">
-                  <span>{item.title}</span>
-                  {item.badge && (
-                    <Badge variant={item.badgeVariant || "secondary"} className="text-[9px] px-1 py-0 font-mono">
-                      {item.badge}
-                    </Badge>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
-          return link;
+          if (expanded) return content;
+
+          return (
+            <Tooltip key={item.href}>
+              <TooltipTrigger asChild>{content}</TooltipTrigger>
+              <TooltipContent side="right" className="flex items-center gap-1.5 text-xs font-medium">
+                <span>{item.title}</span>
+                {item.badge && (
+                  <Badge variant={item.badgeVariant || "secondary"} className="text-[9px] px-1 py-0 font-mono">
+                    {item.badge}
+                  </Badge>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          );
         })}
       </div>
 
-      <div className="pt-4 mt-4 border-t border-border/40 space-y-1">
-        {expanded && (
-          <p className="px-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-            Hệ thống
-          </p>
-        )}
+      <div className={cn("space-y-1 pt-2 mt-2 border-t border-border/40")}>
+        <p
+          className={cn(
+            "px-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate transition-all duration-200 select-none",
+            expanded ? "opacity-100 max-h-5 mb-1.5" : "opacity-0 max-h-0 mb-0 overflow-hidden pointer-events-none"
+          )}
+        >
+          Hệ thống
+        </p>
 
         {secondaryNavItems.map((item) => {
-          const isActive = pathname === item.href;
-          const link = (
-            <Link key={item.href} href={item.href} onClick={onNavigate} className="block">
+          const isActive =
+            pathname === item.href ||
+            (item.href !== "/workspaces" && !item.href.includes("/projects/") && pathname.startsWith(item.href));
+
+          const content = (
+            <Link key={item.href} href={item.href} onClick={onNavigate} className="block w-full">
               <div
                 className={cn(
-                  "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium transition-colors group cursor-pointer relative",
+                  "flex items-center rounded-md text-xs font-medium transition-colors group cursor-pointer relative overflow-hidden h-9 w-full px-3",
                   isActive
                     ? "bg-primary text-primary-foreground font-semibold"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  !expanded && "justify-center px-0 h-9 w-9 mx-auto"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <div className="relative flex items-center justify-center">
+                <div className="relative flex items-center justify-center shrink-0 w-4 h-4">
                   <item.icon className="h-4 w-4 shrink-0" />
                   {!expanded && item.dotColor && (
                     <span className={cn("absolute -top-1 -right-1 w-2 h-2 rounded-full ring-2 ring-card", item.dotColor)} />
                   )}
                 </div>
-                {expanded && (
-                  <>
-                    <span className="truncate flex-1">{item.title}</span>
-                    {item.badge && (
-                      <Badge
-                        variant={item.badgeVariant || "secondary"}
-                        className="text-[10px] px-1.5 py-0 h-4 font-mono shrink-0"
-                      >
-                        {item.badge}
-                      </Badge>
-                    )}
-                  </>
-                )}
+                <div
+                  className={cn(
+                    "flex items-center gap-2 min-w-0 flex-1 ml-2.5 overflow-hidden whitespace-nowrap transition-all duration-200",
+                    expanded ? "opacity-100 max-w-[180px]" : "opacity-0 max-w-0 pointer-events-none"
+                  )}
+                >
+                  <span className="truncate flex-1">{item.title}</span>
+                  {item.badge && (
+                    <Badge
+                      variant={item.badgeVariant || "secondary"}
+                      className="text-[10px] px-1.5 py-0 h-4 font-mono shrink-0"
+                    >
+                      {item.badge}
+                    </Badge>
+                  )}
+                </div>
               </div>
             </Link>
           );
 
-          if (!expanded) {
-            return (
-              <Tooltip key={item.href}>
-                <TooltipTrigger asChild>{link}</TooltipTrigger>
-                <TooltipContent side="right" className="flex items-center gap-1.5 text-xs font-medium">
-                  <span>{item.title}</span>
-                  {item.badge && (
-                    <Badge variant={item.badgeVariant || "secondary"} className="text-[9px] px-1 py-0 font-mono">
-                      {item.badge}
-                    </Badge>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
-          return link;
+          if (expanded) return content;
+
+          return (
+            <Tooltip key={item.href}>
+              <TooltipTrigger asChild>{content}</TooltipTrigger>
+              <TooltipContent side="right" className="flex items-center gap-1.5 text-xs font-medium">
+                <span>{item.title}</span>
+                {item.badge && (
+                  <Badge variant={item.badgeVariant || "secondary"} className="text-[9px] px-1 py-0 font-mono">
+                    {item.badge}
+                  </Badge>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          );
         })}
       </div>
     </TooltipProvider>
@@ -424,7 +485,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <div
       className={cn(
-        "flex min-h-screen w-full bg-background text-foreground transition-[padding] duration-200",
+        "flex min-h-screen w-full bg-background text-foreground transition-[padding] duration-200 ease-in-out",
         isPinned ? "md:pl-[260px]" : "md:pl-14"
       )}
     >
@@ -481,7 +542,7 @@ export function AppShell({ children }: AppShellProps) {
           )}
 
           <CommandGroup heading="Điều hướng nhanh">
-            {navItems.map((item) => (
+            {[...navItems, ...secondaryNavItems].map((item) => (
               <CommandItem
                 key={item.href}
                 onSelect={() => {
@@ -550,54 +611,47 @@ export function AppShell({ children }: AppShellProps) {
         onFocus={handleFocus}
         onBlur={handleBlur}
         className={cn(
-          "fixed top-0 bottom-0 left-0 z-40 hidden md:flex flex-col border-r border-border bg-card/95 backdrop-blur-md transition-all duration-150 ease-out",
-          isExpanded ? "w-[260px] shadow-2xl" : "w-14 shadow-none"
+          "fixed top-0 bottom-0 left-0 z-50 hidden md:flex flex-col border-r border-border bg-card/95 backdrop-blur-md transition-all duration-200 ease-in-out",
+          isPinned ? "w-[260px] shadow-none" : isHovered ? "w-[260px] shadow-2xl" : "w-14 shadow-none"
         )}
       >
         {/* Workspace Brand / Header */}
-        <div
-          className={cn(
-            "flex h-14 items-center px-3 border-b border-border/60 shrink-0",
-            isExpanded ? "justify-between" : "justify-center px-0"
-          )}
-        >
-          {isExpanded ? (
-            <>
-              <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-xs shrink-0">
-                  ST
-                </div>
-                <div className="flex flex-col truncate">
-                  <span className="font-semibold text-xs tracking-tight text-foreground truncate">
-                    {workspace?.name ?? "SmartTask"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground truncate">
-                    {project ? `${project.name} (${project.key})` : "Chưa chọn dự án"}
-                  </span>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={togglePin}
-                className={cn(
-                  "h-7 w-7 text-muted-foreground hover:text-foreground shrink-0",
-                  isPinned && "text-primary hover:text-primary"
-                )}
-                aria-label={isPinned ? `Bỏ ghim sidebar (${mod}+B)` : `Ghim sidebar (${mod}+B)`}
-                title={isPinned ? `Bỏ ghim sidebar (${mod}+B)` : `Ghim sidebar (${mod}+B)`}
-              >
-                <Pin className={cn("h-4 w-4 transition-transform", isPinned ? "rotate-45 fill-current text-primary" : "rotate-0")} />
-              </Button>
-            </>
-          ) : (
-            <div
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-xs"
-              title={workspace?.name ?? "SmartTask"}
-            >
-              ST
+        <div className="flex h-14 items-center px-3 border-b border-border/60 shrink-0 overflow-hidden">
+          <Link
+            href="/workspaces"
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-xs shrink-0 select-none hover:opacity-90 transition-opacity"
+            title={workspace?.name ?? "SmartTask"}
+          >
+            ST
+          </Link>
+          <div
+            className={cn(
+              "flex items-center justify-between min-w-0 flex-1 ml-2.5 overflow-hidden whitespace-nowrap transition-all duration-200",
+              isExpanded ? "opacity-100 max-w-[190px]" : "opacity-0 max-w-0 pointer-events-none"
+            )}
+          >
+            <div className="flex flex-col truncate flex-1 min-w-0">
+              <span className="font-semibold text-xs tracking-tight text-foreground truncate">
+                {workspace?.name ?? "SmartTask"}
+              </span>
+              <span className="text-[10px] text-muted-foreground truncate">
+                {project ? `${project.name} (${project.key})` : "Chưa chọn dự án"}
+              </span>
             </div>
-          )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={togglePin}
+              className={cn(
+                "h-7 w-7 text-muted-foreground hover:text-foreground shrink-0 ml-1",
+                isPinned && "text-primary hover:text-primary"
+              )}
+              aria-label={isPinned ? `Bỏ ghim sidebar (${mod}+B)` : `Ghim sidebar (${mod}+B)`}
+              title={isPinned ? `Bỏ ghim sidebar (${mod}+B)` : `Ghim sidebar (${mod}+B)`}
+            >
+              <Pin className={cn("h-4 w-4 transition-transform", isPinned ? "rotate-45 fill-current text-primary" : "rotate-0")} />
+            </Button>
+          </div>
         </div>
 
         {/* Navigation links */}
@@ -606,76 +660,76 @@ export function AppShell({ children }: AppShellProps) {
         </ScrollArea>
 
         {/* Sidebar Footer: AI Assistant button & User info */}
-        <div className="p-2 border-t border-border/60 space-y-2 bg-card/80 shrink-0">
+        <div className="p-2 border-t border-border/60 space-y-2 bg-card/80 shrink-0 overflow-hidden">
           <TooltipProvider delayDuration={150}>
-            {isExpanded ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => projectBase && router.push(`${projectBase}/assistant`)}
-                disabled={!projectBase}
-                className="w-full justify-start gap-2 text-xs h-8 border-info/40 bg-info/5 hover:bg-info/10 text-info font-medium"
-              >
-                <Bot className="h-4 w-4 shrink-0 text-info" />
-                <span className="truncate flex-1 text-left">Trợ lý AI</span>
-                <kbd className="hidden sm:inline text-[9px] bg-background/80 border px-1 rounded font-mono">{mod}+J</kbd>
-              </Button>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => projectBase && router.push(`${projectBase}/assistant`)}
-                    disabled={!projectBase}
-                    className="h-9 w-9 mx-auto flex items-center justify-center border-info/40 bg-info/5 hover:bg-info/10 text-info"
-                  >
-                    <Bot className="h-4 w-4 text-info" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">Trợ lý AI ({mod}+J)</TooltipContent>
-              </Tooltip>
-            )}
-
-            {isExpanded ? (
-              <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-muted/40">
-                <UserAvatar
-                  name={currentUser?.fullName ?? "?"}
-                  avatar={currentUser?.avatarUrl ?? undefined}
-                  role={workspace?.role}
-                  isOnline
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
                   size="sm"
-                  showTooltip={false}
-                />
-                <div className="flex flex-col truncate flex-1">
-                  <span className="text-xs font-medium text-foreground truncate">
-                    {currentUser?.fullName}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground truncate">
-                    {projectCtx?.myRole ?? workspace?.role ?? ""}{workspace ? ` · ${workspace.name}` : ""}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex justify-center p-1 cursor-pointer">
-                    <UserAvatar
-                      name={currentUser?.fullName ?? "?"}
-                      avatar={currentUser?.avatarUrl ?? undefined}
-                      role={workspace?.role}
-                      isOnline
-                      size="sm"
-                      showTooltip={false}
-                    />
+                  onClick={() => projectBase && router.push(`${projectBase}/assistant`)}
+                  disabled={!projectBase}
+                  className={cn(
+                    "h-9 border-info/40 bg-info/5 hover:bg-info/10 text-info font-medium transition-all duration-200 overflow-hidden w-full",
+                    isExpanded ? "justify-start px-3 gap-2" : "p-0 justify-center"
+                  )}
+                >
+                  <Bot className="h-4 w-4 shrink-0 text-info" />
+                  <div
+                    className={cn(
+                      "flex items-center justify-between min-w-0 flex-1 overflow-hidden whitespace-nowrap transition-all duration-200",
+                      isExpanded ? "opacity-100 max-w-[170px]" : "opacity-0 max-w-0 pointer-events-none"
+                    )}
+                  >
+                    <span className="truncate flex-1 text-left text-xs">Trợ lý AI</span>
+                    <kbd className="hidden sm:inline text-[9px] bg-background/80 border px-1 rounded font-mono ml-1">{mod}+J</kbd>
                   </div>
-                </TooltipTrigger>
+                </Button>
+              </TooltipTrigger>
+              {!isExpanded && (
+                <TooltipContent side="right">Trợ lý AI ({mod}+J)</TooltipContent>
+              )}
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={cn(
+                    "flex items-center rounded-md bg-muted/40 transition-all duration-200 overflow-hidden cursor-pointer h-9 w-full hover:bg-muted/70",
+                    isExpanded ? "px-2.5 gap-2 justify-start" : "p-0 justify-center"
+                  )}
+                  onClick={() => router.push("/settings")}
+                >
+                  <UserAvatar
+                    name={currentUser?.fullName ?? "?"}
+                    avatar={currentUser?.avatarUrl ?? undefined}
+                    role={workspace?.role}
+                    isOnline
+                    size="sm"
+                    showTooltip={false}
+                  />
+                  <div
+                    className={cn(
+                      "flex flex-col min-w-0 flex-1 overflow-hidden whitespace-nowrap transition-all duration-200",
+                      isExpanded ? "opacity-100 max-w-[170px]" : "opacity-0 max-w-0 pointer-events-none"
+                    )}
+                  >
+                    <span className="text-xs font-medium text-foreground truncate">
+                      {currentUser?.fullName}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground truncate">
+                      {projectCtx?.myRole ?? workspace?.role ?? ""}{workspace ? ` · ${workspace.name}` : ""}
+                    </span>
+                  </div>
+                </div>
+              </TooltipTrigger>
+              {!isExpanded && (
                 <TooltipContent side="right">
                   <div className="text-xs font-semibold">{currentUser?.fullName}</div>
                   <div className="text-[10px] text-muted-foreground">{workspace?.role ?? "Thành viên"}</div>
                 </TooltipContent>
-              </Tooltip>
-            )}
+              )}
+            </Tooltip>
           </TooltipProvider>
         </div>
       </aside>
@@ -743,7 +797,7 @@ export function AppShell({ children }: AppShellProps) {
       {/* Main Content Area */}
       <div className="flex flex-1 flex-col min-w-0 min-h-screen">
         {/* Top Navbar — Fixed/Sticky at top with backdrop blur */}
-        <header className="sticky top-0 z-40 flex h-14 w-full shrink-0 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 sm:px-6 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 shadow-xs">
+        <header className="sticky top-0 z-30 flex h-14 w-full shrink-0 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 sm:px-6 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 shadow-xs">
           {/* Left: Hamburger (mobile) + Workspace Switcher + Project Breadcrumb */}
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             <Button
@@ -775,8 +829,8 @@ export function AppShell({ children }: AppShellProps) {
               {projectCtx && (
                 <>
                   <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/60 hidden sm:inline" />
-                  {/* Huy hiệu sprint dẫn tới trang Sprint (trước đây không bấm được) */}
-                  <Link href={`${projectBase}/sprints`} className="hidden sm:inline-flex" aria-label="Mở trang Sprint">
+                  {/* Huy hiệu sprint dẫn tới trang Dashboard (mặc định mở sprint đang chạy) */}
+                  <Link href={`${projectBase}/dashboard`} className="hidden sm:inline-flex" aria-label="Mở báo cáo Sprint trên Dashboard">
                     <Badge variant="outline" className="text-[10px] font-mono font-medium truncate max-w-[130px] sm:max-w-none hover:bg-muted">
                       {projectCtx.activeSprint
                         ? `${projectCtx.activeSprint.name}`
@@ -790,6 +844,9 @@ export function AppShell({ children }: AppShellProps) {
 
           {/* Right: Search, Notifications, Theme Toggle, User Presence */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Live Presence Bar */}
+            {projectCtx?.id && <ProjectPresenceBar projectId={projectCtx.id} />}
+
             {/* Nút mở nhanh bảng lệnh */}
             <Button
               variant="outline"

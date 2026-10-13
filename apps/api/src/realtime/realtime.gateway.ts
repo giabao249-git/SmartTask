@@ -31,6 +31,8 @@ interface PresenceEntry {
 
 export const roomOfProject = (projectId: string): string =>
   `project:${projectId}`;
+export const roomOfWorkspace = (workspaceId: string): string =>
+  `workspace:${workspaceId}`;
 export const roomOfUser = (userId: string): string => `user:${userId}`;
 
 /**
@@ -153,10 +155,37 @@ export class RealtimeGateway
     return { ok: true };
   }
 
+  @SubscribeMessage('workspace:join')
+  async joinWorkspace(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { workspaceId?: string },
+  ) {
+    this.userOf(client);
+    const workspaceId = body?.workspaceId;
+    if (!workspaceId) return { ok: false };
+    await client.join(roomOfWorkspace(workspaceId));
+    return { ok: true, workspaceId };
+  }
+
+  @SubscribeMessage('workspace:leave')
+  async leaveWorkspace(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { workspaceId?: string },
+  ) {
+    const workspaceId = body?.workspaceId;
+    if (!workspaceId) return { ok: false };
+    await client.leave(roomOfWorkspace(workspaceId));
+    return { ok: true };
+  }
+
   // ── Dùng bởi RealtimeListener ──
 
   toProject(projectId: string, event: string, payload: unknown): void {
     this.server?.to(roomOfProject(projectId)).emit(event, payload);
+  }
+
+  toWorkspace(workspaceId: string, event: string, payload: unknown): void {
+    this.server?.to(roomOfWorkspace(workspaceId)).emit(event, payload);
   }
 
   toUser(userId: string, event: string, payload: unknown): void {

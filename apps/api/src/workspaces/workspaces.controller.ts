@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
@@ -28,7 +29,15 @@ import {
 } from './dto/workspace.dto';
 import { InvitationsService } from './invitations.service';
 import { workspaceSettingsPatchSchema } from './workspace-settings';
-import { WorkspacesService } from './workspaces.service';
+import {
+  WorkspacesService,
+  type AuditActorContext,
+} from './workspaces.service';
+
+interface ReqMeta {
+  ip?: string;
+  headers?: Record<string, string | string[] | undefined>;
+}
 
 @ApiTags('Workspace')
 @ApiBearerAuth()
@@ -38,6 +47,16 @@ export class WorkspacesController {
     private readonly workspaces: WorkspacesService,
     private readonly invitations: InvitationsService,
   ) {}
+
+  private actor(user: JwtUser, req?: ReqMeta): AuditActorContext {
+    const ua = req?.headers?.['user-agent'];
+    return {
+      userId: user.id,
+      email: user.email,
+      ip: req?.ip,
+      userAgent: Array.isArray(ua) ? ua[0] : ua,
+    };
+  }
 
   // ── Workspace ──────────────────────────────────────────────
 
@@ -68,9 +87,11 @@ export class WorkspacesController {
   @ApiOperation({ summary: 'Sửa tên, logo' })
   update(
     @Param('wsId', ParseUUIDPipe) wsId: string,
+    @CurrentUser() user: JwtUser,
+    @Req() req: ReqMeta,
     @Body() dto: UpdateWorkspaceDto,
   ) {
-    return this.workspaces.update(wsId, dto);
+    return this.workspaces.update(wsId, dto, this.actor(user, req));
   }
 
   @Post('workspaces/:wsId/archive')
@@ -79,8 +100,12 @@ export class WorkspacesController {
   @ApiOperation({
     summary: 'Lưu trữ workspace (ẩn khỏi danh sách, không xoá dữ liệu)',
   })
-  async archive(@Param('wsId', ParseUUIDPipe) wsId: string): Promise<void> {
-    await this.workspaces.archive(wsId);
+  async archive(
+    @Param('wsId', ParseUUIDPipe) wsId: string,
+    @CurrentUser() user: JwtUser,
+    @Req() req: ReqMeta,
+  ): Promise<void> {
+    await this.workspaces.archive(wsId, this.actor(user, req));
   }
 
   @Post('workspaces/:wsId/transfer-ownership')
@@ -91,9 +116,15 @@ export class WorkspacesController {
   transfer(
     @Param('wsId', ParseUUIDPipe) wsId: string,
     @CurrentUser() user: JwtUser,
+    @Req() req: ReqMeta,
     @Body() dto: TransferOwnershipDto,
   ) {
-    return this.workspaces.transferOwnership(wsId, user.id, dto.userId);
+    return this.workspaces.transferOwnership(
+      wsId,
+      user.id,
+      dto.userId,
+      this.actor(user, req),
+    );
   }
 
   // ── Cài đặt ────────────────────────────────────────────────
@@ -122,9 +153,38 @@ export class WorkspacesController {
   })
   patchSettings(
     @Param('wsId', ParseUUIDPipe) wsId: string,
+    @CurrentUser() user: JwtUser,
+    @Req() req: ReqMeta,
     @Body(new ZodValidationPipe(workspaceSettingsPatchSchema)) patch: unknown,
   ) {
-    return this.workspaces.patchSettings(wsId, patch);
+    return this.workspaces.patchSettings(wsId, patch, this.actor(user, req));
+  }
+
+  // ── Nhật ký kiểm toán (Audit Log — OWNER & ADMIN) ──────────
+
+  @Get('workspaces/:wsId/audit-logs')
+  @WorkspaceRoles('OWNER', 'ADMIN')
+  @ApiOperation({
+    summary:
+      'Nhật ký kiểm toán (Audit Log) cấp Workspace với chữ ký chuỗi HMAC-SHA256 bất biến',
+  })
+  auditLogs(
+    @Param('wsId', ParseUUIDPipe) wsId: string,
+    @Query('category') category?: string,
+    @Query('actorId') actorId?: string,
+    @Query('days') days?: string,
+    @Query('q') q?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.workspaces.getAuditLogs(wsId, {
+      category,
+      actorId,
+      days,
+      q,
+      page,
+      limit,
+    });
   }
 
   // ── Thành viên ─────────────────────────────────────────────
@@ -147,9 +207,16 @@ export class WorkspacesController {
   updateRole(
     @Param('wsId', ParseUUIDPipe) wsId: string,
     @Param('userId', ParseUUIDPipe) userId: string,
+    @CurrentUser() user: JwtUser,
+    @Req() req: ReqMeta,
     @Body() dto: UpdateMemberRoleDto,
   ) {
-    return this.workspaces.updateMemberRole(wsId, userId, dto.role);
+    return this.workspaces.updateMemberRole(
+      wsId,
+      userId,
+      dto.role,
+      this.actor(user, req),
+    );
   }
 
   @Delete('workspaces/:wsId/members/:userId')
@@ -159,8 +226,10 @@ export class WorkspacesController {
   async removeMember(
     @Param('wsId', ParseUUIDPipe) wsId: string,
     @Param('userId', ParseUUIDPipe) userId: string,
+    @CurrentUser() user: JwtUser,
+    @Req() req: ReqMeta,
   ): Promise<void> {
-    await this.workspaces.removeMember(wsId, userId);
+    await this.workspaces.removeMember(wsId, userId, this.actor(user, req));
   }
 
   // ── Lời mời ────────────────────────────────────────────────
@@ -178,12 +247,33 @@ export class WorkspacesController {
     summary:
       'Tạo lời mời đích danh (email) hoặc link chung; trả token để ghép link /invite/:token',
   })
-  createInvitation(
+  async createInvitation(
     @Param('wsId', ParseUUIDPipe) wsId: string,
     @CurrentUser() user: JwtUser,
+    @Req() req: ReqMeta,
     @Body() dto: CreateInvitationDto,
   ) {
-    return this.invitations.create(wsId, user.id, dto);
+    const inv = await this.invitations.create(wsId, user.id, dto);
+    const meta = this.actor(user, req);
+    await this.workspaces.recordWorkspaceAudit({
+      workspaceId: wsId,
+      actorId: user.id,
+      actorEmail: user.email,
+      action: 'member.invited',
+      targetType: 'Invitation',
+      targetId: inv.id,
+      targetName: inv.email ?? 'Link mời dùng chung',
+      category: 'MEMBER',
+      beforeState: null,
+      afterState: {
+        email: inv.email ?? 'Link dùng chung',
+        role: inv.role,
+        expiresAt: inv.expiresAt.toISOString(),
+      },
+      ipAddress: meta.ip,
+      userAgent: meta.userAgent,
+    });
+    return inv;
   }
 
   @Delete('workspaces/:wsId/invitations/:id')
@@ -193,8 +283,25 @@ export class WorkspacesController {
   async revokeInvitation(
     @Param('wsId', ParseUUIDPipe) wsId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtUser,
+    @Req() req: ReqMeta,
   ): Promise<void> {
     await this.invitations.revoke(wsId, id);
+    const meta = this.actor(user, req);
+    await this.workspaces.recordWorkspaceAudit({
+      workspaceId: wsId,
+      actorId: user.id,
+      actorEmail: user.email,
+      action: 'member.invitation_revoked',
+      targetType: 'Invitation',
+      targetId: id,
+      targetName: `Lời mời #${id.slice(0, 8)}`,
+      category: 'MEMBER',
+      beforeState: { status: 'PENDING' },
+      afterState: { status: 'REVOKED' },
+      ipAddress: meta.ip,
+      userAgent: meta.userAgent,
+    });
   }
 
   @Public()

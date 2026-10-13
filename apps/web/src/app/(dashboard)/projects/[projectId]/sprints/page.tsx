@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import { SprintsView } from "@/features/sprints/SprintsView";
+import { ProjectDashboardView } from "@/features/dashboard/ProjectDashboardView";
 
 export default function SprintsPage() {
   return (
     <Suspense>
-      <SprintsView />
+      <ProjectDashboardView />
     </Suspense>
   );
 }

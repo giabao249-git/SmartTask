@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { CalendarRange, ZoomIn, ZoomOut, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -27,8 +27,12 @@ import { describeError as errInfo } from "@/lib/api";
 import { toast } from "sonner";
 
 const DAY = 86_400_000;
-const ZOOM = { day: 56, week: 24, month: 10 } as const;
-type Zoom = keyof typeof ZOOM;
+/** Độ rộng một ngày (px). Các mức có sẵn là điểm nhảy nhanh; Ctrl+cuộn / nút ± cho phép mọi giá trị giữa MIN và MAX. */
+const PRESETS = { day: 56, week: 24, month: 10 } as const;
+type Preset = keyof typeof PRESETS;
+const PX_MIN = 4;
+const PX_MAX = 120;
+const clampPx = (v: number) => Math.min(PX_MAX, Math.max(PX_MIN, v));
 
 const toDay = (iso: string) => Math.floor(new Date(iso).getTime() / DAY);
 const fmt = (dayIdx: number) => {
@@ -147,7 +151,7 @@ function TaskHoverCard({ task, projectKey, columnName, isOverdue, today }: TaskH
 }
 
 const ROW = 38;
-const SIDEBAR_WIDTH = 340;
+const SIDEBAR_WIDTH = 390;
 
 /** Gantt tương tác cao (UC-13): lấp đầy viewport, xem trước hover, thanh theo ngày bắt đầu–hạn, nhóm sprint, đường hôm nay, quá hạn, kéo thả điều chỉnh */
 export function TimelineGanttView() {
@@ -156,10 +160,15 @@ export function TimelineGanttView() {
   const f = useWorkFilters();
   const auth = useAuth();
   const sprints = useSprints(project.id);
-  const [zoom, setZoom] = React.useState<Zoom>("week");
+  const [px, setPx] = React.useState<number>(PRESETS.week);
+  const zoom: Preset = px >= 40 ? "day" : px >= 16 ? "week" : "month";
+  const scrollBoxRef = React.useRef<HTMLDivElement>(null);
+  const pxRef = React.useRef(px);
+  pxRef.current = px;
+  /** Điểm neo khi đổi zoom: ngày đang nằm dưới con trỏ (hoặc giữa khung) phải đứng yên sau khi co giãn. */
+  const anchorRef = React.useRef<{ day: number; offset: number } | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
   const tasksQuery = useTasks(project.id, f.query);
-  const px = ZOOM[zoom];
   const today = Math.floor(Date.now() / DAY);
   const m = useTaskMutations(project.id);
 
@@ -239,6 +248,55 @@ export function TimelineGanttView() {
     return { start: Math.min(...starts, today) - 2, end: Math.max(...ends, today) + 3 };
   }, [rows, today]);
   const days = range.end - range.start + 1;
+  const rangeStartRef = React.useRef(range.start);
+  rangeStartRef.current = range.start;
+
+  const viewport = () => scrollBoxRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]") ?? null;
+  const zoomTo = (next: number, clientX?: number) => {
+    const vp = viewport();
+    const target = clampPx(next);
+    if (vp) {
+      const rect = vp.getBoundingClientRect();
+      const offset = clientX !== undefined ? clientX - rect.left : (rect.width + SIDEBAR_WIDTH) / 2;
+      // vị trí ngày dưới con trỏ, tính theo px hiện tại (cột trái sticky nên trừ SIDEBAR_WIDTH)
+      const day = (vp.scrollLeft + offset - SIDEBAR_WIDTH) / pxRef.current;
+      anchorRef.current = { day, offset };
+    }
+    setPx(target);
+  };
+  React.useLayoutEffect(() => {
+    const a = anchorRef.current;
+    const vp = viewport();
+    anchorRef.current = null;
+    if (a && vp) vp.scrollLeft = Math.max(0, a.day * px + SIDEBAR_WIDTH - a.offset);
+  }, [px]);
+
+  // Ctrl/⌘ + cuộn = zoom timeline thay vì zoom cả trang. Phải gắn bằng addEventListener không-passive
+  // vì onWheel của React là passive, không preventDefault được.
+  React.useEffect(() => {
+    const el = scrollBoxRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomTo(pxRef.current * Math.exp(-e.deltaY * 0.0015), e.clientX);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.length]);
+
+  // Tự động cuộn tới task sớm nhất / sprint đang chạy khi mở view
+  const hasCenteredRef = React.useRef(false);
+  React.useEffect(() => {
+    if (hasCenteredRef.current || rows.length === 0) return;
+    const vp = viewport();
+    if (!vp) return;
+    const starts = rows.map((t) => toDay(t.startDate ?? t.dueDate!));
+    const minStart = Math.min(...starts);
+    vp.scrollLeft = Math.max(0, (minStart - range.start) * pxRef.current - 24);
+    hasCenteredRef.current = true;
+  }, [rows, range.start]);
 
   const groups = React.useMemo(() => {
     const bySprint = new Map<string, TaskListItem[]>();
@@ -282,21 +340,31 @@ export function TimelineGanttView() {
         <div className="flex items-center justify-between gap-2 flex-wrap shrink-0">
           <p className="text-xs text-muted-foreground">
             {project.canEdit
-              ? "Kéo thanh để dời ngày, kéo mép phải để đổi hạn (lưu kèm version). Rê chuột để xem chi tiết, bấm để mở hội thoại."
-              : "Chế độ xem. Rê chuột để xem chi tiết, bấm để mở hội thoại."}
+              ? "Kéo thanh để dời ngày, kéo mép phải để đổi hạn · Ctrl + cuộn để phóng to/thu nhỏ · bấm để mở chi tiết."
+              : "Chế độ xem · Ctrl + cuộn để phóng to/thu nhỏ · bấm để mở chi tiết."}
           </p>
-          <div className="flex items-center rounded-md border border-border/80 bg-background">
-            {(["day", "week", "month"] as Zoom[]).map((z) => (
-              <Button
-                key={z}
-                variant={zoom === z ? "default" : "ghost"}
-                size="sm"
-                className="h-8 text-xs rounded-none first:rounded-l-md last:rounded-r-md"
-                onClick={() => setZoom(z)}
-              >
-                {z === "day" ? <ZoomIn className="h-3.5 w-3.5" /> : z === "month" ? <ZoomOut className="h-3.5 w-3.5" /> : "Tuần"}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-md border border-border/80 bg-background">
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none rounded-l-md" onClick={() => zoomTo(pxRef.current / 1.25)} disabled={px <= PX_MIN} aria-label="Thu nhỏ" title="Thu nhỏ (Ctrl + cuộn xuống)">
+                <ZoomOut className="h-3.5 w-3.5" />
               </Button>
-            ))}
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none rounded-r-md border-l border-border/60" onClick={() => zoomTo(pxRef.current * 1.25)} disabled={px >= PX_MAX} aria-label="Phóng to" title="Phóng to (Ctrl + cuộn lên)">
+                <ZoomIn className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="flex items-center rounded-md border border-border/80 bg-background">
+              {(["day", "week", "month"] as Preset[]).map((z) => (
+                <Button
+                  key={z}
+                  variant={zoom === z ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-8 text-xs rounded-none first:rounded-l-md last:rounded-r-md"
+                  onClick={() => zoomTo(PRESETS[z])}
+                >
+                  {z === "day" ? "Ngày" : z === "week" ? "Tuần" : "Tháng"}
+                </Button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -316,36 +384,37 @@ export function TimelineGanttView() {
           />
         ) : (
           <Card className="border-border/80 flex-1 min-h-0 flex flex-col overflow-hidden shadow-xs">
-            <CardHeader className="p-3.5 pb-2.5 shrink-0 flex flex-row items-center justify-between border-b border-border/60">
+            <CardHeader className="p-3 pb-2.5 shrink-0 flex flex-row items-center justify-between border-b border-border/60 gap-3 flex-wrap">
               <div>
                 <CardTitle className="text-sm font-semibold">
                   {rows.length} công việc · {groups.length} nhóm sprint
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Đường đỏ = hôm nay · thanh đỏ = quá hạn · mũi tên = phụ thuộc · rê chuột vào công việc để xem chi tiết
-                </CardDescription>
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="hidden sm:inline font-mono text-[11px]">
-                  Bấm thanh hoặc tên công việc để mở chi tiết
-                </span>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                <div className="flex items-center gap-2.5 text-[11px]">
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-destructive inline-block" /> Hôm nay</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-xs bg-destructive/60 border border-destructive inline-block" /> Quá hạn</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-xs bg-sky-500/60 border border-sky-500 inline-block" /> Đang chạy</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-xs bg-success/60 border border-success inline-block" /> Hoàn thành</span>
+                  <span className="inline-flex items-center gap-1"><Link2 className="h-3 w-3 text-primary" /> Phụ thuộc</span>
+                </div>
               </div>
             </CardHeader>
 
             <CardContent className="p-0 flex-1 min-h-0 flex flex-col overflow-hidden">
-              <ScrollArea className="w-full flex-1 min-h-0">
+              <ScrollArea ref={scrollBoxRef} className="w-full flex-1 min-h-0">
                 <div className="flex" style={{ minWidth: SIDEBAR_WIDTH + days * px, minHeight: gridHeight }}>
                   {/* Cột trái: Danh sách công việc */}
                   <div
                     className="shrink-0 border-r border-border/60 sticky left-0 bg-card z-20 shadow-xs"
                     style={{ width: SIDEBAR_WIDTH, minHeight: gridHeight }}
                   >
-                    <div className="h-8 border-b border-border/60 px-3 flex items-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/20">
+                    <div className="h-8 border-b border-border/60 px-3 flex items-center text-[11px] font-semibold text-foreground/70 uppercase tracking-wider bg-muted/40">
                       Công việc & Phân công
                     </div>
                     {groups.map((g) => (
                       <React.Fragment key={g.id}>
-                        <div className="h-[38px] px-3 flex items-center text-xs font-semibold bg-muted/40 border-b border-border/40 text-foreground">
+                        <div className="h-[38px] px-3 flex items-center text-xs font-semibold bg-muted border-b border-border/60 text-foreground">
                           {g.name}
                         </div>
                         {g.tasks.map((t) => {
@@ -359,7 +428,7 @@ export function TimelineGanttView() {
                                   className="h-[38px] w-full justify-between px-3 text-xs rounded-none border-b border-border/30 gap-2 hover:bg-muted/60 text-left font-normal cursor-pointer"
                                 >
                                   <div className="flex items-center gap-2 truncate min-w-0">
-                                    <span className="font-mono text-[11px] font-semibold text-muted-foreground shrink-0">
+                                    <span className="font-mono text-[11px] font-semibold text-foreground/70 shrink-0">
                                       {taskKeyOf(project.key, t)}
                                     </span>
                                     <span className="truncate text-foreground font-medium">{t.title}</span>
@@ -401,7 +470,7 @@ export function TimelineGanttView() {
                   {/* Vùng Timeline biểu đồ Gantt bên phải */}
                   <div className="relative flex-1" style={{ width: days * px, minHeight: gridHeight, height: gridHeight }}>
                     {/* Trục ngày header */}
-                    <div className="h-8 border-b border-border/60 sticky top-0 bg-background/95 backdrop-blur-xs z-10 text-[10px] text-muted-foreground">
+                    <div className="h-8 border-b border-border/60 sticky top-0 bg-background z-10 text-[11px] text-foreground/75">
                       {Array.from({ length: days }).map((_, i) => {
                         const d = range.start + i;
                         const date = new Date(d * DAY);
@@ -412,7 +481,7 @@ export function TimelineGanttView() {
                         return (
                           <div
                             key={i}
-                            className="absolute bottom-0 h-full border-l border-border/40 pl-1 flex items-end pb-0.5 whitespace-nowrap font-mono"
+                            className="absolute bottom-0 h-full border-l border-border pl-1.5 flex items-center whitespace-nowrap font-mono font-medium"
                             style={{ left: i * px, width: span * px }}
                           >
                             {fmt(d)}
@@ -425,7 +494,7 @@ export function TimelineGanttView() {
                     {Array.from({ length: days }).map((_, i) => {
                       const dow = new Date((range.start + i) * DAY).getUTCDay();
                       return dow === 0 || dow === 6 ? (
-                        <div key={i} className="absolute top-8 bottom-0 bg-muted/25 pointer-events-none" style={{ left: i * px, width: px }} />
+                        <div key={i} className="absolute top-8 bottom-0 bg-muted/60 pointer-events-none" style={{ left: i * px, width: px }} />
                       ) : null;
                     })}
 
@@ -433,7 +502,7 @@ export function TimelineGanttView() {
                     {Array.from({ length: idx }).map((_, r) => (
                       <div
                         key={r}
-                        className="absolute left-0 right-0 border-b border-border/20 pointer-events-none"
+                        className="absolute left-0 right-0 border-b border-border/50 pointer-events-none"
                         style={{ top: (r + 1) * ROW, height: 1 }}
                       />
                     ))}
@@ -455,6 +524,8 @@ export function TimelineGanttView() {
                         const b = bar(t);
                         const r = rowIndex.get(t.id) ?? 0;
                         const isDragging = drag?.id === t.id;
+                        const barWidth = Math.max(b.width, px);
+                        const isNarrow = barWidth < 100;
 
                         return (
                           <Tooltip key={t.id} delayDuration={150} open={isDragging ? false : undefined}>
@@ -467,34 +538,62 @@ export function TimelineGanttView() {
                                 onPointerUp={() => onPointerUp(t)}
                                 onKeyDown={(e) => e.key === "Enter" && setSelectedId(t.id)}
                                 className={cn(
-                                  "absolute h-7 px-2.5 flex items-center text-[11px] rounded-md border shadow-2xs select-none transition-shadow",
+                                  "absolute h-7 px-2 flex items-center text-xs rounded-md border shadow-2xs select-none transition-shadow text-foreground",
                                   project.canEdit && !t.completedAt
                                     ? "cursor-grab active:cursor-grabbing hover:shadow-sm"
                                     : "cursor-pointer",
                                   isDragging && "ring-2 ring-ring z-30 shadow-md",
+                                  // Chữ luôn là text-foreground (đủ tương phản trên nền nhạt ở cả sáng/tối); trạng thái thể hiện bằng nền + viền
                                   b.overdue
-                                    ? "bg-destructive/15 border-destructive/50 text-destructive font-medium"
+                                    ? "bg-destructive/25 border-destructive"
                                     : t.completedAt
-                                    ? "bg-success/15 border-success/40 text-success-foreground"
-                                    : "bg-primary/15 border-primary/40 text-primary-foreground font-medium",
+                                    ? "bg-success/25 border-success"
+                                    : "bg-sky-500/25 border-sky-600 dark:border-sky-400",
                                 )}
                                 style={{
                                   top: r * ROW + 5,
                                   left: b.left,
-                                  width: Math.max(b.width, px),
+                                  width: barWidth,
                                   zIndex: isDragging ? 30 : 15,
                                 }}
                               >
-                                <span className="truncate mr-1 font-medium">{t.title}</span>
+                                {/* Thanh tiến độ phủ nền: nhìn được % hoàn thành mà không cần đọc số */}
                                 {t.progress > 0 && (
-                                  <span className="ml-auto font-mono text-[10px] opacity-80 shrink-0">
-                                    {t.progress}%
-                                  </span>
+                                  <span
+                                    aria-hidden
+                                    className={cn(
+                                      "absolute inset-y-0 left-0 pointer-events-none rounded-l-md",
+                                      t.progress >= 100 && "rounded-r-md",
+                                      b.overdue ? "bg-destructive/30" : t.completedAt ? "bg-success/30" : "bg-sky-500/40",
+                                    )}
+                                    style={{ width: `${Math.min(t.progress, 100)}%` }}
+                                  />
+                                )}
+                                {isNarrow ? (
+                                  <>
+                                    {t.progress > 0 && (
+                                      <span className="relative mx-auto font-mono text-[10px] shrink-0 text-foreground/80 font-medium">
+                                        {t.progress}%
+                                      </span>
+                                    )}
+                                    <span className="absolute left-[calc(100%+6px)] top-1/2 -translate-y-1/2 whitespace-nowrap text-xs font-medium text-foreground pointer-events-none drop-shadow-xs">
+                                      {t.title}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="relative truncate mr-1 font-medium">{t.title}</span>
+                                    {t.progress > 0 && (
+                                      <span className="relative ml-auto font-mono text-[11px] shrink-0 text-foreground/80 font-medium">
+                                        {t.progress}%
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                                 {project.canEdit && !t.completedAt && t.dueDate && (
                                   <span
                                     onPointerDown={(e) => onPointerDown(e, t, "resize")}
-                                    className="absolute right-0 top-0 h-full w-2.5 cursor-ew-resize hover:bg-foreground/20 rounded-r-md"
+                                    className="absolute right-0 top-0 h-full w-2.5 cursor-ew-resize bg-foreground/10 hover:bg-foreground/30 rounded-r-md z-10"
                                     aria-label="Kéo đổi hạn"
                                   />
                                 )}
@@ -521,10 +620,18 @@ export function TimelineGanttView() {
 
                     {/* Phụ thuộc (mũi tên từ cuối thanh trước → đầu thanh sau) */}
                     <svg
-                      className="absolute inset-0 pointer-events-none"
+                      className="absolute inset-0 pointer-events-none z-20 text-primary"
                       width={days * px}
                       height={gridHeight}
                     >
+                      <defs>
+                        <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                          <path d="M0,1 L7,4 L0,7 z" fill="currentColor" />
+                        </marker>
+                        <marker id="arrow-warn" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                          <path d="M0,1 L7,4 L0,7 z" fill="rgb(239, 68, 68)" />
+                        </marker>
+                      </defs>
                       {rows.flatMap((t) =>
                         t.dependsOnIds.map((depId) => {
                           const dep = rows.find((x) => x.id === depId);
@@ -535,24 +642,24 @@ export function TimelineGanttView() {
                           const y2 = (rowIndex.get(t.id) ?? 0) * ROW + ROW / 2;
                           const x1 = a.left + a.width;
                           const x2 = b.left;
+                          const isReverse = x2 < x1;
                           return (
                             <path
                               key={`${depId}-${t.id}`}
-                              d={`M${x1},${y1} C${x1 + 14},${y1} ${x2 - 14},${y2} ${x2},${y2}`}
+                              d={
+                                isReverse
+                                  ? `M${x1},${y1} H${x1 + 10} V${y1 + (y2 > y1 ? 14 : -14)} H${x2 - 10} V${y2} H${x2}`
+                                  : `M${x1},${y1} C${x1 + 20},${y1} ${x2 - 20},${y2} ${x2},${y2}`
+                              }
                               fill="none"
-                              stroke="hsl(var(--muted-foreground))"
-                              strokeWidth={1.5}
-                              strokeDasharray="4 2"
-                              markerEnd="url(#arrow)"
+                              stroke={isReverse ? "rgb(239, 68, 68)" : "currentColor"}
+                              strokeWidth={2}
+                              strokeDasharray={isReverse ? "3 2" : undefined}
+                              markerEnd={isReverse ? "url(#arrow-warn)" : "url(#arrow)"}
                             />
                           );
                         }),
                       )}
-                      <defs>
-                        <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-                          <path d="M0,0 L6,3 L0,6 z" fill="hsl(var(--muted-foreground))" />
-                        </marker>
-                      </defs>
                     </svg>
                   </div>
                 </div>

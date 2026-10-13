@@ -6,12 +6,12 @@ import {
   Bell,
   GraduationCap,
   ShieldAlert,
+  ShieldCheck,
   Sliders,
   Sparkles,
   UserCircle,
   Users,
 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -25,6 +25,7 @@ import { AiSettingsView } from "./AiSettingsView";
 import { MembersTab } from "./MembersTab";
 import { ProfileTab } from "./ProfileTab";
 import { SkillsCatalogTab } from "./SkillsCatalogTab";
+import { WorkspaceAuditTab } from "./WorkspaceAuditTab";
 import { WorkspaceSettingsTab } from "./WorkspaceSettingsTab";
 
 const LAST_WS_KEY = "st.lastWorkspace";
@@ -36,7 +37,7 @@ const readLastWorkspace = () => {
   }
 };
 
-type SettingsTab = "profile" | "notifications" | "members" | "skills" | "settings" | "ai";
+type SettingsTab = "profile" | "notifications" | "members" | "skills" | "settings" | "audit" | "ai";
 
 /** Cài đặt & thông báo (UC-05/06/23/29): 3 phân nhóm rõ ràng (Cá nhân / Workspace / Hệ thống toàn cục) kèm RBAC */
 export function SettingsNotificationsView() {
@@ -49,7 +50,7 @@ export function SettingsNotificationsView() {
   const [wsId, setWsIdState] = React.useState<string | null>(() => params.get("ws") ?? readLastWorkspace());
   const [activeTab, setActiveTab] = React.useState<SettingsTab>(() => {
     const t = params.get("tab") as SettingsTab | null;
-    if (t && ["profile", "notifications", "members", "skills", "settings", "ai"].includes(t)) return t;
+    if (t && ["profile", "notifications", "members", "skills", "settings", "audit", "ai"].includes(t)) return t;
     return "profile";
   });
 
@@ -65,14 +66,7 @@ export function SettingsNotificationsView() {
     return () => window.removeEventListener("st:workspace-changed", handler);
   }, []);
 
-  const setWsId = (id: string) => {
-    setWsIdState(id);
-    try {
-      localStorage.setItem(LAST_WS_KEY, id);
-    } catch {
-      /* private mode */
-    }
-  };
+
 
   const isSuperAdmin = Boolean(
     auth.user?.isSuperAdmin || (auth.user as unknown as { platformRole?: string })?.platformRole === "ROOT_ADMIN"
@@ -102,25 +96,7 @@ export function SettingsNotificationsView() {
         title="Thông báo & Cài đặt hệ thống"
         description="Quản lý tài khoản cá nhân, thông báo thời gian thực, thành viên workspace, tham số vận hành và cấu hình AI."
         breadcrumbs={[{ label: ws?.name ?? "Workspace", href: "/workspaces" }, { label: "Cài đặt & Thông báo" }]}
-      >
-        {auth.workspaces.length > 0 && effective && (
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-muted-foreground">Workspace</span>
-            <Select value={effective} onValueChange={setWsId}>
-              <SelectTrigger className="h-8 text-xs w-56 bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {auth.workspaces.map((w) => (
-                  <SelectItem key={w.id} value={w.id} className="text-xs">
-                    {w.name} · {w.role}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </PageHeader>
+      />
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* Sidebar phân nhóm (Cá nhân / Workspace / Hệ thống toàn cục) */}
@@ -239,6 +215,30 @@ export function SettingsNotificationsView() {
                 </Badge>
               )}
             </button>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => handleTabChange("audit")}
+                className={cn(
+                  "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
+                  activeTab === "audit"
+                    ? "bg-primary text-primary-foreground shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
+                  <span>Nhật ký kiểm toán</span>
+                </div>
+                <Badge
+                  variant={activeTab === "audit" ? "secondary" : "outline"}
+                  className="text-[9px] px-1 py-0 font-mono"
+                >
+                  Owner/Admin
+                </Badge>
+              </button>
+            )}
           </div>
 
           {/* Nhóm 3: HỆ THỐNG TOÀN CỤC */}
@@ -310,6 +310,24 @@ export function SettingsNotificationsView() {
                 )}
                 <WorkspaceSettingsTab workspaceId={effective} canEdit={canEdit} />
               </div>
+            ) : (
+              <NoWorkspace />
+            )
+          )}
+
+          {activeTab === "audit" && (
+            effective && ws ? (
+              isAdmin ? (
+                <WorkspaceAuditTab workspaceId={effective} />
+              ) : (
+                <Alert className="border-rose-500/30 bg-rose-500/5 text-rose-900 dark:text-rose-200 py-3">
+                  <ShieldAlert className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                  <AlertTitle className="text-xs font-semibold">Không có quyền truy cập Nhật ký kiểm toán</AlertTitle>
+                  <AlertDescription className="text-xs">
+                    Tính năng Nhật ký kiểm toán (Audit Log) chỉ dành cho Chủ sở hữu (OWNER) và Quản trị viên (ADMIN) của Workspace.
+                  </AlertDescription>
+                </Alert>
+              )
             ) : (
               <NoWorkspace />
             )

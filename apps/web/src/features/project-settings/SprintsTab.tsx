@@ -21,8 +21,8 @@ export function SprintsTab({ project }: { project: ProjectDetail }) {
       </CardHeader>
       <CardContent>
         <Button asChild className="gap-1.5">
-          <Link href={`/projects/${project.id}/sprints`}>
-            Mở trang Sprint <ArrowRight className="h-4 w-4" />
+          <Link href={`/projects/${project.id}/dashboard`}>
+            Mở Dashboard & Báo cáo Sprint <ArrowRight className="h-4 w-4" />
           </Link>
         </Button>
       </CardContent>
