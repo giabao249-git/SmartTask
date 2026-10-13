@@ -11,7 +11,7 @@ export function middleware(req: NextRequest) {
   if (pathname === "/") {
     return NextResponse.next();
   }
-  if (pathname.startsWith("/login")) {
+  if (pathname.startsWith("/login") || pathname.startsWith("/register")) {
     if (hasSession) return NextResponse.redirect(new URL("/workspaces", req.url));
     return NextResponse.next();
   }
