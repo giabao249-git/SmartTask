@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Sun, Moon, ArrowRight, Menu, X, Shield, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 interface LandingHeaderProps {
   isAuthenticated?: boolean;
@@ -42,19 +43,12 @@ export function LandingHeader({ isAuthenticated }: LandingHeaderProps) {
       <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo & Brand Badge */}
         <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground font-black text-sm shadow-sm transition-transform group-hover:scale-105">
-              ST
-            </div>
-            <div className="flex flex-col">
-              <span className="font-extrabold text-base tracking-tight text-foreground">
-                SmartTask
-              </span>
-            </div>
+          <Link href="/" className="flex items-center group">
+            <BrandLogo size="md" variant="full" />
           </Link>
           <Badge
             variant="outline"
-            className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/5 px-2 py-0.5"
+            className="hidden xl:inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/5 px-2 py-0.5 whitespace-nowrap"
           >
             <Shield className="h-3 w-3" />
             100% BYOK · Free Agile
@@ -62,12 +56,12 @@ export function LandingHeader({ isAuthenticated }: LandingHeaderProps) {
         </div>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-muted-foreground">
+        <nav className="hidden lg:flex items-center gap-5 xl:gap-6 text-sm font-medium text-muted-foreground">
           {navLinks.map((link) => (
             <a
               key={link.href}
               href={link.href}
-              className="transition-colors hover:text-foreground"
+              className="transition-colors hover:text-foreground whitespace-nowrap"
             >
               {link.label}
             </a>

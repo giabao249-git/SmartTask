@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 interface LandingFooterProps {
   isAuthenticated?: boolean;
@@ -58,14 +59,7 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
           {/* Brand Info */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-black text-xs">
-                ST
-              </div>
-              <span className="font-extrabold text-base tracking-tight text-foreground">
-                SmartTask
-              </span>
-            </div>
+            <BrandLogo size="md" variant="full" />
             <p className="text-xs text-muted-foreground leading-relaxed">
               Nền tảng quản lý dự án Agile &amp; Kanban thời gian thực thế hệ mới theo mô hình BYOK (Bring Your Own Key).
               Tự do kết nối Gemini, OpenAI và DeepSeek.

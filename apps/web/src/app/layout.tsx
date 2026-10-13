@@ -11,6 +11,14 @@ export const metadata: Metadata = {
   title: "SmartTask — Quản trị dự án Agile & Cân bằng tải AI",
   description:
     "Nền tảng quản trị dự án Agile/Kanban thời gian thực, cân bằng tải nhân sự theo ma trận kỹ năng và AI Agent phân rã yêu cầu thành công việc.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

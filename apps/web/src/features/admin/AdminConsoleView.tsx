@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Building2, Cpu, Gauge, RefreshCw, ShieldAlert, Users2 } from "lucide-react";
 import { BlastRadiusDrawer } from "./BlastRadiusDrawer";
+import { BrandIcon } from "@/components/brand/BrandLogo";
 
 const ADMIN_TABS = [
   { key: "overview", label: "Tổng quan", icon: Gauge },
@@ -171,7 +172,7 @@ export function AdminConsoleView() {
           </Button>
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-2 min-w-0">
-            <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
+            <BrandIcon size={20} className="shrink-0" />
             <span className="font-semibold tracking-tight text-sm truncate">SmartTask Mission Control</span>
             <Badge variant="destructive" className="font-mono text-[10px] px-1.5 py-0 hidden sm:inline-flex">
               PLATFORM ADMIN

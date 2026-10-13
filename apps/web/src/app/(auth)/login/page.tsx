@@ -5,11 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Lock, Mail, User, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useAuth } from "@/lib/auth";
 import { describeError } from "@/lib/api";
 import { resolveLandingPath } from "@/lib/landing";
@@ -63,11 +64,8 @@ function LoginForm() {
 
   return (
     <Card className="w-full max-w-md shadow-lg border-border/80">
-      <CardHeader className="text-center space-y-1.5 pb-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-xl mx-auto mb-2">
-          ST
-        </div>
-        <CardTitle className="text-2xl font-bold tracking-tight">SmartTask</CardTitle>
+      <CardHeader className="text-center space-y-2 pb-4 flex flex-col items-center">
+        <BrandLogo size="lg" variant="full" showBadge badgeText="Agile + AI" className="justify-center mb-1" />
         <CardDescription className="text-xs text-muted-foreground">
           Nền tảng quản trị dự án Agile/Kanban & AI Agent cân bằng tải
         </CardDescription>

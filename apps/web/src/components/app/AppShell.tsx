@@ -31,6 +31,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { ShortcutsDialog } from "@/components/app/ShortcutsDialog";
+import { BrandIcon } from "@/components/brand/BrandLogo";
 import { useModKey } from "@/lib/hooks/use-mod-key";
 import { TaskSearchGroup } from "@/features/search/TaskSearchGroup";
 import { PlatformBanner } from "@/components/app/PlatformBanner";
@@ -619,10 +620,10 @@ export function AppShell({ children }: AppShellProps) {
         <div className="flex h-14 items-center px-3 border-b border-border/60 shrink-0 overflow-hidden">
           <Link
             href="/workspaces"
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-xs shrink-0 select-none hover:opacity-90 transition-opacity"
+            className="flex h-8 w-8 items-center justify-center shrink-0 select-none hover:opacity-90 transition-opacity"
             title={workspace?.name ?? "SmartTask"}
           >
-            ST
+            <BrandIcon size={32} />
           </Link>
           <div
             className={cn(
@@ -739,9 +740,7 @@ export function AppShell({ children }: AppShellProps) {
         <SheetContent side="left" className="w-[260px] p-0 flex flex-col">
           <SheetHeader className="h-14 px-3 border-b border-border/60 flex flex-row items-center justify-between space-y-0">
             <div className="flex items-center gap-2 overflow-hidden">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-xs shrink-0">
-                ST
-              </div>
+              <BrandIcon size={32} />
               <div className="flex flex-col truncate">
                 <SheetTitle className="font-semibold text-xs tracking-tight text-foreground truncate text-left">
                   {workspace?.name ?? "SmartTask"}
