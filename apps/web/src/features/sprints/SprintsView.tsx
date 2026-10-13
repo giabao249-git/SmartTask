@@ -80,7 +80,7 @@ export function SprintsView() {
   );
   const selectedId = params.get("sprint") ?? rows[0]?.id ?? null;
   const selected = rows.find((s) => s.id === selectedId) ?? rows[0] ?? null;
-  const select = (id: string) => router.replace(`/projects/${project.id}/sprints?sprint=${id}`, { scroll: false });
+  const select = (id: string) => router.replace(`/projects/${project.id}/dashboard?sprint=${id}`, { scroll: false });
   const can = project.canManage && project.status === "ACTIVE";
 
   return (

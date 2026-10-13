@@ -570,7 +570,7 @@ export function AppShell({ children }: AppShellProps) {
             </CommandItem>
             <CommandItem
               onSelect={() => {
-                if (projectBase) router.push(`${projectBase}/assistant`);
+                if (projectBase) router.push(`${projectBase}/ai-decompose`);
                 setCommandOpen(false);
               }}
               className="cursor-pointer"
@@ -580,7 +580,7 @@ export function AppShell({ children }: AppShellProps) {
             </CommandItem>
             <CommandItem
               onSelect={() => {
-                if (projectBase) router.push(`${projectBase}/people?tab=balance`);
+                if (projectBase) router.push(`${projectBase}/people?tab=load`);
                 setCommandOpen(false);
               }}
               className="cursor-pointer"
@@ -817,7 +817,7 @@ export function AppShell({ children }: AppShellProps) {
             {/* Project Breadcrumb */}
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 truncate">
               <Link
-                href={projectBase ? `${projectBase}/work` : "/workspaces"}
+                href={projectBase ? `${projectBase}/dashboard` : "/workspaces"}
                 className="font-semibold text-foreground/90 hover:text-foreground flex items-center gap-1.5 hover:underline truncate"
               >
                 <FolderKanban className="h-3.5 w-3.5 text-primary shrink-0" />

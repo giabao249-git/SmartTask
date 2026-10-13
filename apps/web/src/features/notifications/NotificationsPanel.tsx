@@ -96,6 +96,21 @@ export function NotificationsPanel({ compact = false, onNavigate }: { compact?: 
           </div>
         )}
       </ScrollArea>
+      {compact && (
+        <div className="p-2 border-t border-border/60 bg-muted/20 flex items-center justify-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs text-muted-foreground hover:text-foreground h-7"
+            onClick={() => {
+              onNavigate?.();
+              router.push("/settings?tab=notifications");
+            }}
+          >
+            Mở trang Thông báo & Cài đặt →
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -111,7 +126,7 @@ function linkOf(n: NotificationView): string | null {
     if (!pid) return null;
     const task = /^\/p\/[^/]+\/t\/([A-Za-z0-9]+-\d+)(#.*)?$/.exec(l);
     if (task) return `/projects/${pid}/tasks/${task[1]}${task[2] ?? ""}`;
-    if (/^\/p\/[^/]+\/sprints/.test(l)) return `/projects/${pid}/sprints${typeof n.data?.sprintId === "string" ? `?sprint=${n.data.sprintId}` : ""}`;
+    if (/^\/p\/[^/]+\/sprints/.test(l)) return `/projects/${pid}/dashboard${typeof n.data?.sprintId === "string" ? `?sprint=${n.data.sprintId}` : ""}`;
     return `/projects/${pid}/dashboard`;
   }
   if (l) return l;

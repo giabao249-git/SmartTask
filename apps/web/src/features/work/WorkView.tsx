@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bot, CalendarRange, Grid2X2, Kanban, ListTodo, Minimize2, Scale } from "lucide-react";
+import { Bot, CalendarRange, Grid2X2, Kanban, ListTodo, Minimize2, Scale, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -132,7 +132,17 @@ function WorkBody() {
       <Button
         variant="outline"
         size="sm"
-        onClick={() => router.push(`/projects/${project.id}/people?tab=balance`)}
+        onClick={() => router.push(`/projects/${project.id}/ai-decompose`)}
+        className="h-8 text-xs gap-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10 px-2.5 shadow-2xs"
+        title="Phân rã yêu cầu công việc thành WBS bằng AI"
+      >
+        <Sparkles className="h-3.5 w-3.5" />
+        <span className="hidden xl:inline">Phân rã AI</span>
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => router.push(`/projects/${project.id}/people?tab=load`)}
         className="h-8 text-xs gap-1 text-info hover:text-info border-info/30 hover:bg-info/10 px-2.5 shadow-2xs"
         title="Cân bằng tải công việc bằng AI"
       >
