@@ -939,7 +939,7 @@ export function AppShell({ children }: AppShellProps) {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onSelect={() => {
-                      void auth.logout().then(() => router.replace("/login"));
+                      void auth.logout().then(() => router.replace("/"));
                     }}
                     className="text-xs text-destructive focus:text-destructive"
                   >

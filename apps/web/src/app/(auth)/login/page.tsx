@@ -84,7 +84,7 @@ function LoginForm() {
   const params = useSearchParams();
   const auth = useAuth();
   const next = params.get("next");
-  const tabParam = params.get("tab");
+  const tabParam = params.get("tab") || params.get("mode");
 
   const isRegisterInitial = tabParam === "register";
   const [activeTab, setActiveTab] = React.useState<"login" | "register">(
@@ -113,6 +113,17 @@ function LoginForm() {
     }
     void resolveLandingPath(auth.workspaces).then((path) => router.replace(path));
   }, [auth.status, auth.workspaces, next, router]);
+
+  // Đồng bộ tab khi URL query param thay đổi (tab=register hoặc mode=register)
+  React.useEffect(() => {
+    if (tabParam === "register") {
+      setActiveTab("register");
+      setError(null);
+      setSelectedDemoIndex(null);
+    } else if (tabParam === "login") {
+      setActiveTab("login");
+    }
+  }, [tabParam]);
 
   // Đánh giá độ mạnh mật khẩu (chế độ đăng ký)
   const passwordStrength = React.useMemo(() => {

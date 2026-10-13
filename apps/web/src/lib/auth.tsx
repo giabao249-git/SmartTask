@@ -47,6 +47,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Nếu ở client không có cờ st_session thì chắc chắn chưa đăng nhập,
+      // chuyển ngay sang anonymous với độ trễ 0ms thay vì đợi request POST /auth/refresh thất bại.
+      const hasSessionCookie =
+        typeof document !== "undefined" &&
+        document.cookie.includes(`${SESSION_FLAG_COOKIE}=1`);
+
+      if (!hasSessionCookie && !tokenStore.get()) {
+        setStatus("anonymous");
+        return;
+      }
+
       const token = tokenStore.get() ?? (await refreshAccessToken());
       if (cancelled) return;
       if (!token) {
@@ -130,14 +141,13 @@ export function useAuth(): AuthState {
   return ctx;
 }
 
-/** Chuyển về /login khi chưa đăng nhập (dùng trong layout dashboard). */
+/** Chuyển về landing page (/) khi chưa đăng nhập (dùng trong layout dashboard). */
 export function useRequireAuth(): AuthState {
   const auth = useAuth();
   const router = useRouter();
   React.useEffect(() => {
     if (auth.status === "anonymous") {
-      const next = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/";
-      router.replace(`/login?next=${encodeURIComponent(next)}`);
+      router.replace("/");
     }
   }, [auth.status, router]);
   return auth;

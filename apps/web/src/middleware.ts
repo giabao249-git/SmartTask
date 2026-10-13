@@ -6,7 +6,7 @@ import { SESSION_FLAG_COOKIE } from "@/lib/auth-cookie";
  * Kiểm thật sự vẫn ở client (refresh cookie httpOnly của API) — middleware chỉ tránh nháy màn.
  */
 export function middleware(req: NextRequest) {
-  const { pathname, search } = req.nextUrl;
+  const { pathname } = req.nextUrl;
   const hasSession = req.cookies.has(SESSION_FLAG_COOKIE);
   if (pathname === "/") {
     return NextResponse.next();
@@ -16,9 +16,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
   if (!hasSession) {
-    const url = new URL("/login", req.url);
-    url.searchParams.set("next", pathname + search);
-    return NextResponse.redirect(url);
+    // Khi chưa đăng nhập thì trỏ thẳng về landing page (/) thay vì ép người dùng vào /login
+    return NextResponse.redirect(new URL("/", req.url));
   }
   return NextResponse.next();
 }
