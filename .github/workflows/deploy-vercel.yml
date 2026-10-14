@@ -1,0 +1,29 @@
+name: Deploy Vercel
+
+# Mỗi lần main đổi (ai push/merge cũng được) → gọi Deploy Hook của Vercel để build bản mới nhất của main.
+# Cần secret VERCEL_DEPLOY_HOOK (Vercel → Project → Settings → Git → Deploy Hooks). Render tự deploy API riêng.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vercel
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Kích hoạt deploy Vercel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gọi Deploy Hook
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "Chưa đặt secret VERCEL_DEPLOY_HOOK — bỏ qua."
+            exit 1
+          fi
+          curl -fsS -X POST "$HOOK"
+          echo
