@@ -5,6 +5,7 @@ import { ERROR_CODES } from "@smarttask/shared";
  * Fetch wrapper duy nhất của web (docs 11 §2): baseURL từ NEXT_PUBLIC_API_URL, `Authorization: Bearer` lấy từ bộ nhớ,
  * gặp 401 thì gọi `POST /auth/refresh` (cookie httpOnly `rt`, credentials include) rồi thử lại đúng một lần.
  * Mọi lỗi HTTP ném `ApiError { code, status, details }` với `code` theo `packages/shared/errors.ts`.
+ * Khi deploy (Vercel), đặt NEXT_PUBLIC_API_URL trỏ tới API trên Render, có đuôi /api/v1.
  */
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api/v1").replace(/\/+$/, "");
 
