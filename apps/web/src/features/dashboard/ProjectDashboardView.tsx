@@ -124,9 +124,11 @@ export function ProjectDashboardView() {
               <Plus className="h-4 w-4" /> Tạo sprint
             </Button>
           )}
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => router.push(`/projects/${project.id}/settings`)}>
-            <Settings2 className="h-4 w-4" /> Cấu hình
-          </Button>
+          {canManage && (
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => router.push(`/projects/${project.id}/settings`)}>
+              <Settings2 className="h-4 w-4" /> Cấu hình
+            </Button>
+          )}
           <Button size="sm" className="gap-1.5" onClick={() => router.push(`/projects/${project.id}/assistant`)}>
             <Bot className="h-4 w-4" /> Trợ lý AI
           </Button>

@@ -239,6 +239,17 @@ export function AppShell({ children }: AppShellProps) {
     }
   };
 
+  const isWorkspaceAdmin = Boolean(
+    currentUser?.isSuperAdmin ||
+      workspace?.role === "OWNER" ||
+      workspace?.role === "ADMIN" ||
+      auth.workspaces.some((w) => w.role === "OWNER" || w.role === "ADMIN")
+  );
+
+  const canManageProject = Boolean(
+    projectCtx ? projectCtx.canManage : isWorkspaceAdmin
+  );
+
   const navItems = React.useMemo(
     () =>
       projectBase
@@ -270,21 +281,18 @@ export function AppShell({ children }: AppShellProps) {
               badgeVariant: "info" as const,
               dotColor: "bg-info",
             },
-            {
-              title: "Cấu hình dự án",
-              href: `${projectBase}/settings`,
-              icon: Settings2,
-            },
+            ...(canManageProject
+              ? [
+                  {
+                    title: "Cấu hình dự án",
+                    href: `${projectBase}/settings`,
+                    icon: Settings2,
+                  },
+                ]
+              : []),
           ]
         : [],
-    [projectBase]
-  );
-
-  const isWorkspaceAdmin = Boolean(
-    currentUser?.isSuperAdmin ||
-      workspace?.role === "OWNER" ||
-      workspace?.role === "ADMIN" ||
-      auth.workspaces.some((w) => w.role === "OWNER" || w.role === "ADMIN")
+    [projectBase, canManageProject]
   );
 
   const secondaryNavItems = React.useMemo(
