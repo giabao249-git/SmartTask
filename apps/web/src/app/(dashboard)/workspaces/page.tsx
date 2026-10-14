@@ -87,7 +87,7 @@ export default function WorkspacesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Không gian làm việc & Dự án"
-        description={ws ? `Dự án Agile trong workspace ${ws.name} — vai của bạn: ${ws.role}.` : "Chọn hoặc tạo workspace để bắt đầu."}
+        description={ws ? `Dự án Agile trong workspace ${ws.name} — vai trò Workspace: ${ws.role}.` : "Chọn hoặc tạo workspace để bắt đầu."}
         breadcrumbs={[{ label: "Workspace" }, { label: "Danh sách dự án" }]}
       >
         <div className="flex items-center gap-2">
@@ -345,7 +345,7 @@ function ProjectCard({ project: p, onOpen }: { project: ProjectListItem; onOpen:
         <span className="font-mono">{p._count?.tasks ?? 0} công việc</span>
       </CardContent>
       <CardFooter className="p-4 pt-0 mt-auto flex items-center justify-between">
-        <span className="text-[11px] text-muted-foreground">{p.myRole ? `Vai: ${p.myRole}` : "Bạn chưa là thành viên"} · {p._count?.members ?? 0} người</span>
+        <span className="text-[11px] text-muted-foreground">{p.myRole ? `Vai trò dự án: ${p.myRole}` : "Chưa tham gia dự án"} · {p._count?.members ?? 0} người</span>
         <Button variant="ghost" size="sm" onClick={onOpen} className="h-7 text-xs gap-1">
           Mở dự án <ArrowRight className="h-3.5 w-3.5" />
         </Button>

@@ -719,15 +719,25 @@ export function AppShell({ children }: AppShellProps) {
                       {currentUser?.fullName}
                     </span>
                     <span className="text-[10px] text-muted-foreground truncate">
-                      {projectCtx?.myRole ?? workspace?.role ?? ""}{workspace ? ` · ${workspace.name}` : ""}
+                      {projectCtx
+                        ? `${workspace?.role ?? "MEMBER"} (WS) · ${projectCtx.myRole ?? "MEMBER"} (${projectCtx.key})`
+                        : `${workspace?.role ?? ""}${workspace ? ` · ${workspace.name}` : ""}`}
                     </span>
                   </div>
                 </div>
               </TooltipTrigger>
               {!isExpanded && (
-                <TooltipContent side="right">
+                <TooltipContent side="right" className="space-y-1">
                   <div className="text-xs font-semibold">{currentUser?.fullName}</div>
-                  <div className="text-[10px] text-muted-foreground">{workspace?.role ?? "Thành viên"}</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    Workspace: <span className="font-semibold text-foreground">{workspace?.role ?? "Thành viên"}</span>
+                    {workspace ? ` (${workspace.name})` : ""}
+                  </div>
+                  {projectCtx && (
+                    <div className="text-[10px] text-muted-foreground">
+                      Dự án {projectCtx.key}: <span className="font-semibold text-foreground">{projectCtx.myRole ?? "Thành viên"}</span>
+                    </div>
+                  )}
                 </TooltipContent>
               )}
             </Tooltip>
@@ -785,7 +795,9 @@ export function AppShell({ children }: AppShellProps) {
                   {currentUser?.fullName}
                 </span>
                 <span className="text-[10px] text-muted-foreground truncate">
-                  {projectCtx?.myRole ?? workspace?.role ?? ""}{workspace ? ` · ${workspace.name}` : ""}
+                  {projectCtx
+                    ? `${workspace?.role ?? "MEMBER"} (WS) · ${projectCtx.myRole ?? "MEMBER"} (${projectCtx.key})`
+                    : `${workspace?.role ?? ""}${workspace ? ` · ${workspace.name}` : ""}`}
                 </span>
               </div>
             </div>
