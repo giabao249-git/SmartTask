@@ -883,7 +883,7 @@ export function AppShell({ children }: AppShellProps) {
                 <NotificationsPanel compact onNavigate={() => setBellOpen(false)} />
                 <div className="p-2 border-t border-border/60 text-center bg-muted/20">
                   <Link
-                    href="/settings"
+                    href="/settings?tab=notifications"
                     onClick={() => setBellOpen(false)}
                     className="text-[11px] text-primary hover:underline font-medium"
                   >
