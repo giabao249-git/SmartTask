@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Columns3, Flag, Info, ShieldAlert, Tags, Users } from "lucide-react";
+import { Columns3, Info, ShieldAlert, Tags, Users } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/app/PageHeader";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { GeneralTab } from "./GeneralTab";
-import { SprintsTab } from "./SprintsTab";
 import { ColumnsTab } from "./ColumnsTab";
 import { LabelsTab } from "./LabelsTab";
 import { ProjectMembersTab } from "./ProjectMembersTab";
@@ -71,7 +70,7 @@ export function ProjectSettingsView() {
     <div className="space-y-6">
       <PageHeader
         title={`Cấu hình dự án · ${project.key}`}
-        description="Sprint, cột Kanban (WIP, cột hoàn thành), nhãn và nhân sự dự án."
+        description="Cột Kanban (WIP, cột hoàn thành), nhãn, nhân sự và thông tin dự án."
         breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: "Cấu hình" }]}
       />
       {project.status === "ARCHIVED" && (
@@ -80,11 +79,8 @@ export function ProjectSettingsView() {
           <AlertDescription className="text-[11px]">Chỉ đọc; mở lại ở tab Chung.</AlertDescription>
         </Alert>
       )}
-      <Tabs defaultValue={params.get("tab") ?? "columns"} className="space-y-4">
-        <TabsList className="grid w-full lg:w-[720px] grid-cols-5">
-          <TabsTrigger value="sprints" className="text-xs gap-1.5">
-            <Flag className="h-3.5 w-3.5" /> Sprint
-          </TabsTrigger>
+      <Tabs defaultValue={params.get("tab") && params.get("tab") !== "sprints" ? params.get("tab")! : "columns"} className="space-y-4">
+        <TabsList className="grid w-full lg:w-[600px] grid-cols-4">
           <TabsTrigger value="columns" className="text-xs gap-1.5">
             <Columns3 className="h-3.5 w-3.5" /> Cột
           </TabsTrigger>
@@ -98,9 +94,6 @@ export function ProjectSettingsView() {
             <Info className="h-3.5 w-3.5" /> Chung
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="sprints">
-          <SprintsTab project={project} />
-        </TabsContent>
         <TabsContent value="columns">
           <ColumnsTab project={project} />
         </TabsContent>
