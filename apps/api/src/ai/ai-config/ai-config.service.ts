@@ -86,6 +86,14 @@ const CONFIG_SELECT = {
   isActive: true,
   notes: true,
   createdById: true,
+  createdBy: {
+    select: {
+      id: true,
+      fullName: true,
+      shortName: true,
+      avatarUrl: true,
+    },
+  },
   createdAt: true,
   updatedAt: true,
   catalog: {
@@ -145,6 +153,7 @@ export class AiConfigService implements OnModuleInit {
   async resolve(
     workspaceId: string | null,
     purpose: AiPurpose,
+    userId?: string,
   ): Promise<ResolvedAiConfig> {
     // Chỉ e2e/CI mới ép provider giả; môi trường thường ưu tiên cấu hình AI của workspace.
     if (this.config.get('AI_FORCE_FAKE', { infer: true }))
@@ -158,6 +167,26 @@ export class AiConfigService implements OnModuleInit {
       select: CONFIG_SELECT,
       orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
     });
+
+    // 1. Ưu tiên cấu hình BYOK cá nhân của user trước (nếu có cấu hình riêng đang bật cho purpose này hoặc GENERAL)
+    const personalPick = userId
+      ? rows.find(
+          (r) =>
+            r.workspaceId === workspaceId &&
+            r.createdById === userId &&
+            r.purpose === purpose,
+        ) ??
+        rows.find(
+          (r) =>
+            r.workspaceId === workspaceId &&
+            r.createdById === userId &&
+            r.purpose === AiPurpose.GENERAL,
+        )
+      : null;
+
+    if (personalPick) return this.fromRow(personalPick, purpose);
+
+    // 2. Dự phòng cấu hình dùng chung của Workspace
     const pick =
       rows.find(
         (r) => r.workspaceId === workspaceId && r.purpose === purpose,
@@ -360,9 +389,35 @@ export class AiConfigService implements OnModuleInit {
 
   // ── ai_configs theo workspace (UC-40) ──────────────────────
 
-  async listConfigs(workspaceId: string) {
+  async listConfigs(workspaceId: string, userId?: string) {
+    let whereClause: Prisma.AiConfigWhereInput = { workspaceId };
+
+    if (userId) {
+      const role = await this.wsAccess.roleOf(userId, workspaceId);
+      // Nếu là MEMBER: Chỉ thấy cấu hình do workspace cấp (ADMIN/OWNER tạo hoặc hệ thống) + cấu hình của chính mình
+      if (role === WorkspaceRole.MEMBER) {
+        const admins = await this.prisma.workspaceMember.findMany({
+          where: {
+            workspaceId,
+            role: { in: [WorkspaceRole.OWNER, WorkspaceRole.ADMIN] },
+          },
+          select: { userId: true },
+        });
+        const adminUserIds = admins.map((a) => a.userId);
+
+        whereClause = {
+          workspaceId,
+          OR: [
+            { createdById: userId },
+            { createdById: null },
+            { createdById: { in: adminUserIds } },
+          ],
+        };
+      }
+    }
+
     const rows = await this.prisma.aiConfig.findMany({
-      where: { workspaceId },
+      where: whereClause,
       select: CONFIG_SELECT,
       orderBy: [
         { purpose: 'asc' },

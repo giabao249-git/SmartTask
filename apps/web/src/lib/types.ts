@@ -305,6 +305,12 @@ export interface AiConfigItem {
   isActive: boolean;
   notes: string | null;
   createdById: string | null;
+  createdBy?: {
+    id: string;
+    fullName: string;
+    shortName: string | null;
+    avatarUrl: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
   catalog: {

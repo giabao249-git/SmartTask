@@ -88,8 +88,11 @@ export class AiAdminController {
     WorkspaceRole.MEMBER,
   )
   @ApiOperation({ summary: 'Cấu hình AI của workspace (khoá đã che)' })
-  listConfigs(@Param('wsId', ParseUUIDPipe) wsId: string) {
-    return this.aiConfig.listConfigs(wsId);
+  listConfigs(
+    @CurrentUser() user: JwtUser,
+    @Param('wsId', ParseUUIDPipe) wsId: string,
+  ) {
+    return this.aiConfig.listConfigs(wsId, user.id);
   }
 
   @Post('workspaces/:wsId/ai-configs')

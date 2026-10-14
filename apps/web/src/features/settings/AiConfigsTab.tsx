@@ -360,7 +360,7 @@ export function AiConfigsTab({ workspaceId, canEdit }: AiConfigsTabProps) {
                                 </Badge>
                               ) : c.createdById ? (
                                 <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground border-border/70">
-                                  Thành viên
+                                  {c.createdBy?.fullName ? `Thành viên: ${c.createdBy.shortName ?? c.createdBy.fullName}` : "Thành viên"}
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground border-border/70">
