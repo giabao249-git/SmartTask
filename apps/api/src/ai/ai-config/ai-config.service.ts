@@ -481,6 +481,18 @@ export class AiConfigService implements OnModuleInit {
       select: CONFIG_SELECT,
     });
     if (!row || !row.workspaceId) throw AppError.notFound({ id });
+
+    // Hỗ trợ BYOK cá nhân: Người tạo được toàn quyền sửa/xóa/gọi thử cấu hình của chính mình
+    if (row.createdById === userId) {
+      await this.wsAccess.assertRole(userId, row.workspaceId, [
+        WorkspaceRole.OWNER,
+        WorkspaceRole.ADMIN,
+        WorkspaceRole.MEMBER,
+      ]);
+      return row;
+    }
+
+    // Nếu không phải người tạo, yêu cầu vai trò OWNER hoặc ADMIN của workspace
     await this.wsAccess.assertRole(userId, row.workspaceId, [
       WorkspaceRole.OWNER,
       WorkspaceRole.ADMIN,

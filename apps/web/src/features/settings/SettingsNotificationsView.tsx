@@ -34,7 +34,6 @@ import { ProfileTab } from "./ProfileTab";
 import { SkillsCatalogTab } from "./SkillsCatalogTab";
 import { WorkspaceSettingsTab } from "./WorkspaceSettingsTab";
 import { SecurityTab } from "./SecurityTab";
-import { PersonalAiKeysTab } from "./PersonalAiKeysTab";
 import { NotificationsTab } from "./NotificationsTab";
 
 const LAST_WS_KEY = "st.lastWorkspace";
@@ -50,7 +49,6 @@ export type SettingsTab =
   | "profile"
   | "security"
   | "notifications"
-  | "personal-ai"
   | "workspace-general"
   | "members"
   | "skills"
@@ -67,7 +65,7 @@ interface TabDefinition {
 }
 
 const ALL_TABS: TabDefinition[] = [
-  // Cá nhân (4 tabs)
+  // Cá nhân (3 tabs)
   {
     id: "profile",
     label: "Hồ sơ & Tài khoản",
@@ -88,13 +86,6 @@ const ALL_TABS: TabDefinition[] = [
     category: "personal",
     icon: Bell,
     keywords: ["thông báo", "chuông", "email", "push", "tin nhắn", "notification"],
-  },
-  {
-    id: "personal-ai",
-    label: "Khóa AI cá nhân (BYOK)",
-    category: "personal",
-    icon: Sparkles,
-    keywords: ["khóa ai", "byok", "gemini", "openai", "deepseek", "key", "api key", "cá nhân"],
   },
 
   // Workspace (4 tabs)
@@ -121,17 +112,17 @@ const ALL_TABS: TabDefinition[] = [
   },
   {
     id: "workspace-ai",
-    label: "Trợ lý AI Đội nhóm",
+    label: "Trợ lý AI & Model Catalog",
     category: "workspace",
     icon: Sparkles,
-    keywords: ["ai đội nhóm", "model", "token", "prompt", "quota", "workspace ai", "chi phí"],
+    keywords: ["ai đội nhóm", "model", "token", "prompt", "quota", "workspace ai", "chi phí", "byok", "khóa ai", "api key"],
   },
 ];
 
 /**
- * Trung tâm Cài đặt & Tùy chọn (Quy hoạch chuẩn hóa 8 tab):
- * - Nhóm Cá nhân: profile, security, notifications, personal-ai
- * - Nhóm Workspace: workspace-general, members, skills, workspace-ai
+ * Trung tâm Cài đặt & Tùy chọn (Quy hoạch chuẩn hóa 7 tab):
+ * - Nhóm Cá nhân (3 tabs): profile, security, notifications
+ * - Nhóm Workspace (4 tabs): workspace-general, members, skills, workspace-ai (Hỗ trợ cả BYOK cá nhân & đội nhóm)
  * - Cầu nối sang /admin (Platform Mission Control) và /audit (Audit Log chuyên dụng)
  */
 export function SettingsNotificationsView() {
@@ -149,7 +140,7 @@ export function SettingsNotificationsView() {
   const resolveTab = (tabParam: string | null): SettingsTab => {
     if (!tabParam) return "profile";
     if (tabParam === "settings") return "workspace-general";
-    if (tabParam === "ai") return "workspace-ai";
+    if (tabParam === "ai" || tabParam === "personal-ai") return "workspace-ai";
     if (tabParam === "audit") {
       // Sẽ được redirect bằng useEffect
       return "workspace-general";
@@ -311,9 +302,14 @@ export function SettingsNotificationsView() {
                       <span>{tab.label}</span>
                     </div>
 
-                    {!isAdmin && ["workspace-general", "skills", "workspace-ai"].includes(tab.id) && (
+                    {!isAdmin && ["workspace-general", "skills"].includes(tab.id) && (
                       <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground border-border/80">
                         Chỉ xem
+                      </Badge>
+                    )}
+                    {!isAdmin && tab.id === "workspace-ai" && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/10">
+                        BYOK
                       </Badge>
                     )}
                   </button>
@@ -377,8 +373,6 @@ export function SettingsNotificationsView() {
           {activeTab === "security" && <SecurityTab />}
 
           {activeTab === "notifications" && <NotificationsTab />}
-
-          {activeTab === "personal-ai" && <PersonalAiKeysTab />}
 
           {activeTab === "workspace-general" && (
             effective && ws ? (

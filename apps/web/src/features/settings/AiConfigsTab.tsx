@@ -62,6 +62,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { api, describeError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import type {
   AiConfigItem,
@@ -115,6 +116,8 @@ interface AiConfigsTabProps {
 }
 
 export function AiConfigsTab({ workspaceId, canEdit }: AiConfigsTabProps) {
+  const auth = useAuth();
+  const currentUserId = auth.user?.id;
   const qc = useQueryClient();
   const configKey = ["workspaces", workspaceId, "ai-configs"];
   const modelsKey = ["ai-config", "models"];
@@ -295,11 +298,9 @@ export function AiConfigsTab({ workspaceId, canEdit }: AiConfigsTabProps) {
             </CardDescription>
           </div>
 
-          {canEdit && (
-            <Button size="sm" onClick={handleOpenCreate} className="h-8 text-xs gap-1.5 shrink-0">
-              <Plus className="h-3.5 w-3.5" /> Thêm cấu hình
-            </Button>
-          )}
+          <Button size="sm" onClick={handleOpenCreate} className="h-8 text-xs gap-1.5 shrink-0">
+            <Plus className="h-3.5 w-3.5" /> Thêm cấu hình
+          </Button>
         </CardHeader>
 
         <CardContent className="p-4 pt-0">
@@ -319,9 +320,9 @@ export function AiConfigsTab({ workspaceId, canEdit }: AiConfigsTabProps) {
             <EmptyState
               icon={Bot}
               title="Chưa có cấu hình AI API riêng cho workspace"
-              description="Hệ thống hiện đang sử dụng model Gemini mặc định từ biến môi trường của server. Thêm cấu hình để dùng khoá API riêng hoặc model tùy biến (GPT-4o, Ollama...)."
-              actionLabel={canEdit ? "Thêm cấu hình AI đầu tiên" : undefined}
-              onAction={canEdit ? handleOpenCreate : undefined}
+              description="Hệ thống hiện đang sử dụng model Gemini mặc định từ biến môi trường của server. Thêm cấu hình để dùng khoá API riêng (BYOK cá nhân/đội nhóm) hoặc model tùy biến (GPT-4o, DeepSeek, Ollama...)."
+              actionLabel="Thêm cấu hình AI đầu tiên"
+              onAction={handleOpenCreate}
             />
           ) : (
             <div className="rounded-lg border border-border/70 overflow-hidden">
@@ -342,14 +343,31 @@ export function AiConfigsTab({ workspaceId, canEdit }: AiConfigsTabProps) {
                     const test = testResults[c.id];
                     const isTesting = testingId === c.id;
                     const meta = PURPOSE_META[c.purpose] ?? PURPOSE_META.GENERAL;
+                    const isCreator = Boolean(currentUserId && c.createdById === currentUserId);
+                    const canManage = canEdit || isCreator;
 
                     return (
                       <TableRow key={c.id} className="hover:bg-muted/30">
                         <TableCell className="align-top py-3">
                           <div className="space-y-1">
-                            <Badge variant={meta.badgeVariant} className="text-[10px] px-1.5 py-0">
-                              {meta.label}
-                            </Badge>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge variant={meta.badgeVariant} className="text-[10px] px-1.5 py-0">
+                                {meta.label}
+                              </Badge>
+                              {isCreator ? (
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
+                                  Khóa của bạn (Cá nhân)
+                                </Badge>
+                              ) : c.createdById ? (
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground border-border/70">
+                                  Thành viên
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground border-border/70">
+                                  Toàn Workspace
+                                </Badge>
+                              )}
+                            </div>
                             <div className="font-semibold text-foreground text-xs">{c.name}</div>
                             {c.isDefault && (
                               <span className="inline-flex items-center text-[10px] text-primary font-medium gap-1">
@@ -415,8 +433,8 @@ export function AiConfigsTab({ workspaceId, canEdit }: AiConfigsTabProps) {
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={isTesting || !canEdit}
-                              title={canEdit ? "Gọi thử một lượt ngắn tới nhà cung cấp" : "Cần vai OWNER/ADMIN để gọi thử"}
+                              disabled={isTesting || !canManage}
+                              title={canManage ? "Gọi thử một lượt ngắn tới nhà cung cấp" : "Chỉ người tạo hoặc Quản trị viên mới có quyền gọi thử"}
                               onClick={() => testConnection(c.id)}
                               className="h-7 text-xs gap-1"
                             >
@@ -446,7 +464,7 @@ export function AiConfigsTab({ workspaceId, canEdit }: AiConfigsTabProps) {
                         </TableCell>
 
                         <TableCell className="align-top py-3 text-right">
-                          {canEdit && (
+                          {canManage && (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
@@ -456,6 +474,13 @@ export function AiConfigsTab({ workspaceId, canEdit }: AiConfigsTabProps) {
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => handleOpenEdit(c)} className="text-xs">
                                   <Pencil className="h-3.5 w-3.5 mr-1.5" /> Chỉnh sửa
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => testConnection(c.id)}
+                                  disabled={isTesting}
+                                  className="text-xs"
+                                >
+                                  <TestTube className="h-3.5 w-3.5 mr-1.5 text-info" /> Gọi thử ping
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
@@ -572,7 +597,7 @@ export function AiConfigsTab({ workspaceId, canEdit }: AiConfigsTabProps) {
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={editingConfig ? "••••••••••••••••••••••••" : "Nhập khoá API (sk-... hoặc AIza...)"}
+                  placeholder={editingConfig ? "••••••••••••••••••••••••" : "Nhập khoá API bí mật..."}
                   className="h-8 text-xs font-mono"
                 />
               </div>

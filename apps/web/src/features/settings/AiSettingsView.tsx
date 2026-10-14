@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BarChart3, Cpu, KeyRound, ShieldAlert, Sparkles, UserCog } from "lucide-react";
+import { BarChart3, Cpu, KeyRound, Sparkles, UserCog } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AiConfigsTab } from "./AiConfigsTab";
@@ -47,11 +47,11 @@ export function AiSettingsView({ workspaceId, canEdit }: AiSettingsViewProps) {
       </div>
 
       {!canEdit && (
-        <Alert className="border-amber-500/30 bg-amber-500/5 text-amber-900 dark:text-amber-200 py-3">
-          <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          <AlertTitle className="text-xs font-semibold">Chế độ xem (Chỉ đọc)</AlertTitle>
+        <Alert className="border-blue-500/30 bg-blue-500/5 text-blue-950 dark:text-blue-200 py-3">
+          <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <AlertTitle className="text-xs font-semibold">Cấu hình AI Workspace & Cá nhân (BYOK)</AlertTitle>
           <AlertDescription className="text-xs">
-            Bạn đang đăng nhập với vai trò Thành viên: chỉ xem được cấu hình (khoá API luôn được che) và danh mục model. Gọi thử kết nối, sổ token, sửa khoá API hay chính sách prompt cần vai OWNER / ADMIN của workspace.
+            Bạn đang tham gia với vai trò Thành viên: bạn có thể <strong>tự do thêm khóa API cá nhân (BYOK)</strong>, chỉnh sửa, kiểm tra kết nối ping và xóa cấu hình do chính bạn tạo (khóa được mã hóa AES-256-GCM bảo mật tuyệt đối). Các cấu hình dùng chung của toàn Workspace và sổ token chi phí thuộc quyền quản lý của Quản trị viên (OWNER / ADMIN).
           </AlertDescription>
         </Alert>
       )}

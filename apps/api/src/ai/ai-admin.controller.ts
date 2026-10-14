@@ -93,9 +93,14 @@ export class AiAdminController {
   }
 
   @Post('workspaces/:wsId/ai-configs')
-  @WorkspaceRoles(WorkspaceRole.OWNER, WorkspaceRole.ADMIN)
+  @WorkspaceRoles(
+    WorkspaceRole.OWNER,
+    WorkspaceRole.ADMIN,
+    WorkspaceRole.MEMBER,
+  )
   @ApiOperation({
-    summary: 'Thêm cấu hình (khoá mã hoá AES-GCM, không bao giờ trả lại)',
+    summary:
+      'Thêm cấu hình AI (khoá mã hoá AES-GCM, hỗ trợ BYOK cá nhân/đội nhóm)',
   })
   createConfig(
     @CurrentUser() user: JwtUser,
