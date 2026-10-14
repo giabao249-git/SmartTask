@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     position: "bottom-right",
   },
   // `next build` khi `next dev` đang chạy làm hỏng .next của dev → build ra thư mục riêng
+  // (script `build` đặt NEXT_DIST_DIR=.next-build; Vercel build bằng `npx next build` nên ra `.next`)
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
 };
 
