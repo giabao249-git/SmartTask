@@ -1,6 +1,11 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma, WorkspaceRole } from '@prisma/client';
+import {
+  Prisma,
+  ProjectRole,
+  ProjectStatus,
+  WorkspaceRole,
+} from '@prisma/client';
 import * as crypto from 'crypto';
 import { AppError } from '../common/app-error';
 import { PrismaService } from '../prisma/prisma.service';
@@ -334,7 +339,47 @@ export class WorkspacesService {
       },
       orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
     });
-    return rows.map((r) => ({ ...r.user, role: r.role, joinedAt: r.joinedAt }));
+
+    const userIds = rows.map((r) => r.user.id);
+    const projectMembers = await this.prisma.projectMember.findMany({
+      where: {
+        userId: { in: userIds },
+        project: { workspaceId, status: { not: ProjectStatus.ARCHIVED } },
+      },
+      select: {
+        userId: true,
+        role: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+            key: true,
+          },
+        },
+      },
+    });
+
+    const projectsByUser = new Map<
+      string,
+      Array<{ id: string; name: string; key: string; role: ProjectRole }>
+    >();
+    for (const pm of projectMembers) {
+      const list = projectsByUser.get(pm.userId) ?? [];
+      list.push({
+        id: pm.project.id,
+        name: pm.project.name,
+        key: pm.project.key,
+        role: pm.role,
+      });
+      projectsByUser.set(pm.userId, list);
+    }
+
+    return rows.map((r) => ({
+      ...r.user,
+      role: r.role,
+      joinedAt: r.joinedAt,
+      projects: projectsByUser.get(r.user.id) ?? [],
+    }));
   }
 
   /** OWNER không đổi vai qua đây (dùng transfer-ownership); không tự hạ vai OWNER của mình. */

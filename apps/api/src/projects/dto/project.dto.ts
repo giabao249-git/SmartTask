@@ -100,6 +100,26 @@ export class PutProjectMembersDto {
   members!: ProjectMemberItemDto[];
 }
 
+export class AddProjectMembersDto {
+  @ApiProperty({
+    type: [String],
+    description: 'Danh sách ID thành viên cần thêm vào dự án',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @IsUUID('4', { each: true })
+  userIds!: string[];
+
+  @ApiPropertyOptional({
+    enum: ProjectRole,
+    default: ProjectRole.MEMBER,
+  })
+  @IsOptional()
+  @IsEnum(ProjectRole)
+  role?: ProjectRole;
+}
+
 export class ColumnItemDto {
   @ApiPropertyOptional({ description: 'Bỏ trống = cột mới' })
   @IsOptional()

@@ -207,14 +207,34 @@ export function SettingsNotificationsView() {
 
   const personalTabs = filteredTabs.filter((t) => t.category === "personal");
   const workspaceTabs = filteredTabs.filter((t) => t.category === "workspace");
+  const isPersonalTab = ["profile", "security", "notifications"].includes(activeTab);
+
+  const headerTitle = isPersonalTab
+    ? "Cài đặt Tài khoản Cá nhân"
+    : `Cài đặt Không gian làm việc · ${ws?.name ?? "Workspace"}`;
+  const headerDescription = isPersonalTab
+    ? "Quản lý hồ sơ cá nhân, bảo mật tài khoản và tùy chọn kênh thông báo thời gian thực."
+    : `Quản lý danh bạ nhân sự, phân quyền dự án, tham số quy tắc và cấu hình Trợ lý AI của workspace ${ws?.name ?? ""}.`;
+  const breadcrumbs = isPersonalTab
+    ? [{ label: "Trang chủ", href: "/" }, { label: "Cài đặt Cá nhân" }]
+    : [{ label: ws?.name ?? "Workspace", href: "/workspaces" }, { label: "Cài đặt Workspace" }];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Trung tâm Cài đặt & Tùy chọn"
-        description="Quản lý hồ sơ cá nhân, bảo mật tài khoản, thông báo thời gian thực, thành viên workspace và cấu hình Trợ lý AI."
-        breadcrumbs={[{ label: ws?.name ?? "Workspace", href: "/workspaces" }, { label: "Cài đặt & Tùy chọn" }]}
-      />
+        title={headerTitle}
+        description={headerDescription}
+        breadcrumbs={breadcrumbs}
+      >
+        {!isPersonalTab && ws && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground hidden sm:inline">Vai trò của bạn:</span>
+            <Badge variant="outline" className="text-xs font-mono px-2.5 py-1 border-primary/40 bg-primary/5 text-primary font-semibold">
+              {ws.role}
+            </Badge>
+          </div>
+        )}
+      </PageHeader>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* Sidebar điều hướng Cài đặt (8 Tabs phân nhóm rõ ràng) */}

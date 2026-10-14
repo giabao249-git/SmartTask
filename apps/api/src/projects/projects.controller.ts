@@ -23,6 +23,7 @@ import {
   type JwtUser,
 } from '../common/decorators/current-user.decorator';
 import {
+  AddProjectMembersDto,
   CreateProjectDto,
   LabelDto,
   PutColumnsDto,
@@ -104,6 +105,16 @@ export class ProjectsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
   ) {
     return this.projects.members(user.id, projectId);
+  }
+
+  @Post('projects/:projectId/members')
+  @ApiOperation({ summary: 'Thêm một hoặc nhiều thành viên vào dự án' })
+  addMembers(
+    @CurrentUser() user: JwtUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: AddProjectMembersDto,
+  ) {
+    return this.projects.addMembers(user.id, projectId, dto);
   }
 
   @Put('projects/:projectId/members')

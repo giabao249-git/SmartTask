@@ -390,6 +390,12 @@ export interface WorkspaceMemberView {
   department?: string | null;
   title?: string | null;
   managerUserId?: string | null;
+  projects?: Array<{
+    id: string;
+    name: string;
+    key: string;
+    role: ProjectRole;
+  }>;
 }
 
 export interface SprintView {

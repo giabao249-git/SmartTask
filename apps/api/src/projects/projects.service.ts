@@ -10,6 +10,7 @@ import { WorkloadService } from '../workload/workload.service';
 import { SkillEvidenceService } from '../metrics/skill-evidence.service';
 import { isoDate, toDate, weekStartOf } from '../workload/domain/calendar';
 import type {
+  AddProjectMembersDto,
   CreateProjectDto,
   LabelDto,
   PutColumnsDto,
@@ -254,6 +255,64 @@ export class ProjectsService {
       role: m.role,
       joinedAt: m.joinedAt,
     }));
+  }
+
+  /** Thêm một hoặc nhiều thành viên vào dự án mà không thay thế danh sách cũ. */
+  async addMembers(
+    userId: string,
+    projectId: string,
+    dto: AddProjectMembersDto,
+  ) {
+    const access = await this.access.assertManage(userId, projectId);
+    const targetRole = dto.role ?? ProjectRole.MEMBER;
+    const ids = [...new Set(dto.userIds)];
+
+    if (!ids.length) {
+      throw AppError.unprocessable('VALIDATION_FAILED', {
+        fields: ['userIds không được rỗng'],
+      });
+    }
+
+    const inWs = await this.prisma.workspaceMember.findMany({
+      where: {
+        workspaceId: access.workspaceId,
+        userId: { in: ids },
+        role: { not: 'VIEWER' },
+      },
+      select: { userId: true },
+    });
+
+    if (inWs.length !== ids.length) {
+      throw AppError.unprocessable('VALIDATION_FAILED', {
+        fields: ['Có người không thuộc workspace hoặc có vai trò VIEWER'],
+      });
+    }
+
+    if (targetRole === ProjectRole.PM) {
+      if (ids.length !== 1) {
+        throw new AppError(
+          'PROJECT_PM_REQUIRED',
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          { hint: 'Chỉ có thể gán tối đa 1 PM duy nhất cho dự án' },
+        );
+      }
+      // Hạ cấp PM cũ xuống MEMBER
+      await this.prisma.projectMember.updateMany({
+        where: { projectId, role: ProjectRole.PM },
+        data: { role: ProjectRole.MEMBER },
+      });
+    }
+
+    await this.prisma.projectMember.createMany({
+      data: ids.map((uid) => ({
+        projectId,
+        userId: uid,
+        role: targetRole,
+      })),
+      skipDuplicates: true,
+    });
+
+    return this.members(userId, projectId);
   }
 
   /** Thay toàn bộ thành viên; đúng một PM; mọi người phải thuộc workspace; người bị gỡ mất assignee trong dự án. */

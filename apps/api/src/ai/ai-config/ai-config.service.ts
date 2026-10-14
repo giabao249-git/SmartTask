@@ -170,7 +170,7 @@ export class AiConfigService implements OnModuleInit {
 
     // 1. Ưu tiên cấu hình BYOK cá nhân của user trước (nếu có cấu hình riêng đang bật cho purpose này hoặc GENERAL)
     const personalPick = userId
-      ? rows.find(
+      ? (rows.find(
           (r) =>
             r.workspaceId === workspaceId &&
             r.createdById === userId &&
@@ -181,7 +181,7 @@ export class AiConfigService implements OnModuleInit {
             r.workspaceId === workspaceId &&
             r.createdById === userId &&
             r.purpose === AiPurpose.GENERAL,
-        )
+        ))
       : null;
 
     if (personalPick) return this.fromRow(personalPick, purpose);

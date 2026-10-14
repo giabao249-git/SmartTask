@@ -2,13 +2,15 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Award, CalendarRange, Users2 } from "lucide-react";
+import { Award, CalendarRange, UserPlus, Users2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/app/PageHeader";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useAuth } from "@/lib/auth";
 import { WorkloadView } from "@/features/workload/WorkloadView";
+import { AddProjectMemberModal } from "./AddProjectMemberModal";
 import { TeamSkillsView } from "./TeamSkillsView";
 import { TeamView } from "./TeamView";
 
@@ -29,6 +31,8 @@ export function PeopleView() {
   const me = useAuth().user?.id;
   const raw = params.get("tab") ?? "team";
   const tab: TabKey = (TABS.find((t) => t.key === (ALIAS[raw] ?? raw))?.key ?? "team") as TabKey;
+  const [addMemberOpen, setAddMemberOpen] = React.useState(false);
+
   // "?tab=mine" cũ = mở hồ sơ của chính mình
   React.useEffect(() => {
     if (raw !== "mine" || !me) return;
@@ -45,12 +49,36 @@ export function PeopleView() {
     router.replace(`?${next.toString()}`, { scroll: false });
   };
 
+  const canManage = Boolean(project.canManage && project.status === "ACTIVE");
+
   return (
     <div className="space-y-4">
       <PageHeader
         title={`Nhân sự · ${project.key}`}
         description="Ai đang làm gì, còn bao nhiêu giờ, làm được gì — kỹ năng tính từ việc đã làm, không từ tự khai."
-        breadcrumbs={[{ label: "Workspace", href: "/workspaces" }, { label: project.name, href: `/projects/${project.id}/dashboard` }, { label: TABS.find((t) => t.key === tab)?.label ?? "Nhân sự" }]}
+        breadcrumbs={[
+          { label: "Workspace", href: "/workspaces" },
+          { label: project.name, href: `/projects/${project.id}/dashboard` },
+          { label: TABS.find((t) => t.key === tab)?.label ?? "Nhân sự" },
+        ]}
+      >
+        {canManage && (
+          <Button
+            size="sm"
+            onClick={() => setAddMemberOpen(true)}
+            className="h-8 text-xs gap-1.5 shrink-0"
+          >
+            <UserPlus className="h-3.5 w-3.5" /> Thêm thành viên vào dự án
+          </Button>
+        )}
+      </PageHeader>
+
+      <AddProjectMemberModal
+        projectId={project.id}
+        workspaceId={project.workspaceId}
+        open={addMemberOpen}
+        onOpenChange={setAddMemberOpen}
+        existingMemberIds={project.members.map((m) => m.id)}
       />
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-4">
