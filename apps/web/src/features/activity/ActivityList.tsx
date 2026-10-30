@@ -107,7 +107,7 @@ export function ActivityList({ projectId, taskId, compact = false, limit = 30 }:
       ) : (
         <ol className="space-y-3">
           {displayedItems.map((a) => (
-            <li key={a.id} className="flex items-start gap-2.5 text-xs">
+            <li key={a.id} className="flex items-start gap-3 text-sm">
               <UserAvatar name={a.actor?.fullName ?? "Hệ thống"} avatar={a.actor?.avatarUrl ?? undefined} size="sm" className="mt-0.5 shrink-0" />
               <div className="min-w-0 flex-1 leading-relaxed">
                 <span className="font-semibold text-foreground">{a.actor?.shortName ?? a.actor?.fullName ?? "Hệ thống"}</span>{" "}

@@ -749,8 +749,8 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-xs font-bold uppercase tracking-wider text-foreground/80 border-b border-border">
                     <tr>
                       <th className="text-left px-3.5 py-3 font-semibold whitespace-nowrap">
                         Thời gian
@@ -1101,8 +1101,8 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                       Các trường dữ liệu thay đổi ({diffs.length})
                     </div>
                     <div className="overflow-hidden rounded-lg border border-border">
-                      <table className="w-full text-xs">
-                        <thead className="bg-muted/50 text-[11px] text-muted-foreground border-b border-border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50 text-xs text-muted-foreground border-b border-border">
                           <tr>
                             <th className="text-left px-3 py-1.5 font-medium">
                               Trường (Field)
@@ -1115,7 +1115,7 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-border font-mono text-[11px]">
+                        <tbody className="divide-y divide-border font-mono text-xs">
                           {diffs.map((d) => (
                             <tr key={d.key}>
                               <td className="px-3 py-2 font-semibold text-foreground">

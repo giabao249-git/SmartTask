@@ -2,6 +2,7 @@
 
 @layer base {
   :root {
+    font-size: 16px;
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -13,7 +14,7 @@
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted-foreground: 215.4 20% 38%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
@@ -34,6 +35,11 @@
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
   }
+  @media (min-width: 768px) {
+    :root {
+      font-size: 16.5px;
+    }
+  }
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
@@ -46,7 +52,7 @@
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted-foreground: 215 20% 70%;
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
@@ -109,6 +115,21 @@ body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+/* Chuẩn hoá hệ thống Font Size tối thiểu theo WCAG 2.1 AA & Modern Web Guidance:
+   Nâng cấp các chữ mô tả phụ không bị quá bé (10px, 11px) lên mức dễ đọc (12px, 13px) */
+@layer utilities {
+  .text-\[10px\] {
+    font-size: 0.75rem !important; /* ~12.5px */
+    line-height: 1.125rem !important;
+  }
+  .text-\[11px\] {
+    font-size: 0.8125rem !important; /* ~13.5px */
+    line-height: 1.175rem !important;
+  }
 }
 
 /* Kết quả của Trợ lý AI hiện dần từ trên xuống, mờ → rõ (kiểu Gemini). Tắt khi người dùng chọn giảm chuyển động. */
@@ -132,3 +153,4 @@ body {
     animation: none;
   }
 }
+

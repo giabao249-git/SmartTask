@@ -362,7 +362,7 @@ export function AppShell({ children }: AppShellProps) {
             <Link key={item.href} href={item.href} onClick={onNavigate} className="block w-full">
               <div
                 className={cn(
-                  "flex items-center rounded-md text-xs font-medium transition-colors group cursor-pointer relative overflow-hidden h-9.5 w-full px-3 py-2",
+                  "flex items-center rounded-md text-sm font-medium transition-colors group cursor-pointer relative overflow-hidden h-9.5 w-full px-3 py-2",
                   isActive
                     ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -439,7 +439,7 @@ export function AppShell({ children }: AppShellProps) {
             <Link key={item.href} href={item.href} onClick={onNavigate} className="block w-full">
               <div
                 className={cn(
-                  "flex items-center rounded-md text-xs font-medium transition-colors group cursor-pointer relative overflow-hidden h-9.5 w-full px-3 py-2",
+                  "flex items-center rounded-md text-sm font-medium transition-colors group cursor-pointer relative overflow-hidden h-9.5 w-full px-3 py-2",
                   isActive
                     ? "bg-primary text-primary-foreground font-semibold"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"

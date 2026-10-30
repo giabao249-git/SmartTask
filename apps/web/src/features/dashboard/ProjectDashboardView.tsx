@@ -376,7 +376,7 @@ function Stat({
               {value}
               {hint && <span className="text-xs text-muted-foreground font-normal ml-1.5">({hint})</span>}
             </div>
-            <div className="text-xs font-medium text-muted-foreground mt-1.5 truncate">{label}</div>
+            <div className="text-sm font-medium text-foreground/80 mt-1.5 truncate">{label}</div>
           </div>
         </CardContent>
       </Card>
