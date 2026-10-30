@@ -102,6 +102,7 @@ function LoginForm() {
     isRegisterInitial ? null : 0
   );
   const [busy, setBusy] = React.useState(false);
+  const [passwordTouched, setPasswordTouched] = React.useState(false);
   const [error, setError] = React.useState<{ code: string; message: string } | null>(null);
 
   // Đã có phiên (F5 hoặc quay lại /login) → vào thẳng nơi đang làm dở
@@ -152,13 +153,20 @@ function LoginForm() {
   };
 
   const submit = async (mode: "login" | "register") => {
-    if (mode === "register" && !agreeTerms) {
-      toast.error("Vui lòng đồng ý với Điều khoản dịch vụ và Chính sách bảo mật");
-      return;
-    }
-    if (mode === "register" && password !== confirmPassword) {
-      toast.error("Mật khẩu xác nhận không khớp");
-      return;
+    if (mode === "register") {
+      if (password.length < 8) {
+        setPasswordTouched(true);
+        toast.error("Mật khẩu phải có tối thiểu 8 ký tự");
+        return;
+      }
+      if (password !== confirmPassword) {
+        toast.error("Mật khẩu xác nhận không khớp");
+        return;
+      }
+      if (!agreeTerms) {
+        toast.error("Vui lòng đồng ý với Điều khoản dịch vụ và Chính sách bảo mật");
+        return;
+      }
     }
 
     setBusy(true);
@@ -395,6 +403,7 @@ function LoginForm() {
           {/* TAB 2: ĐĂNG KÝ */}
           <TabsContent value="register" className="space-y-4 focus-visible:outline-none">
             <form
+              noValidate
               onSubmit={(e) => {
                 e.preventDefault();
                 void submit("register");
@@ -430,7 +439,11 @@ function LoginForm() {
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-9 pr-9 text-xs h-9"
+                      onBlur={() => setPasswordTouched(true)}
+                      className={cn(
+                        "pl-9 pr-9 text-xs h-9 transition-colors",
+                        passwordTouched && password.length > 0 && password.length < 8 && "border-destructive focus-visible:ring-destructive"
+                      )}
                       required
                       minLength={8}
                       autoComplete="new-password"
@@ -450,6 +463,12 @@ function LoginForm() {
                     </button>
                   </div>
                 </Field>
+
+                {passwordTouched && password.length > 0 && password.length < 8 && (
+                  <p className="text-[11px] text-destructive pt-1 flex items-center gap-1 animate-in fade-in duration-150">
+                    <span>Mật khẩu phải có tối thiểu 8 ký tự</span>
+                  </p>
+                )}
 
                 {/* Password Strength Indicator */}
                 {password.length > 0 && (

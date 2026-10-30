@@ -144,4 +144,41 @@ describe('Auth & tài khoản (e2e)', () => {
     expect(res.headers['set-cookie'][0]).toMatch(/rt=;/);
     await api().post('/api/v1/auth/refresh').set('Cookie', cookie).expect(401);
   });
+
+  it('TC-GUEST-04: Đăng nhập sai quá 5 lần/phút → 429 RATE_LIMITED', async () => {
+    // Đã có 5 lần POST /auth/login trước đó trong cùng 1 phút, lần thứ 6 này phải bị 429
+    const res = await api()
+      .post('/api/v1/auth/login')
+      .send({ email, password: 'MatKhauMoi@456' })
+      .expect(429);
+    expect(res.body.code).toBe('RATE_LIMITED');
+  });
+
+  it('TC-GUEST-05 / TC-GUEST-06: POST /auth/refresh qua header x-refresh-token và body fallback → 200', async () => {
+    const altEmail = uniqueEmail('rt-fallback');
+    const reg = await api()
+      .post('/api/v1/auth/register')
+      .send({ email: altEmail, password: 'Password@123', fullName: 'Fallback User' })
+      .expect(201);
+    const rt = reg.body.refreshToken as string;
+    expect(rt).toBeTruthy();
+
+    // 1. Refresh qua header x-refresh-token (không gửi Cookie)
+    const resHeader = await api()
+      .post('/api/v1/auth/refresh')
+      .set('x-refresh-token', rt)
+      .expect(200);
+    expect(resHeader.body.accessToken).toBeTruthy();
+    expect(resHeader.body.refreshToken).toBeTruthy();
+
+    // 2. Refresh qua request body (không gửi Cookie)
+    const rt2 = resHeader.body.refreshToken as string;
+    const resBody = await api()
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: rt2 })
+      .expect(200);
+    expect(resBody.body.accessToken).toBeTruthy();
+
+    await prisma.user.deleteMany({ where: { email: altEmail } });
+  });
 });

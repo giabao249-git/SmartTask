@@ -72,6 +72,7 @@ function SortableTaskItem({
   currentUserId,
   isFocused,
   isSelected,
+  disabled = false,
 }: {
   task: TaskListItem;
   projectKey: string;
@@ -80,8 +81,13 @@ function SortableTaskItem({
   currentUserId?: string;
   isFocused?: boolean;
   isSelected?: boolean;
+  disabled?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, data: { type: "Task", task } });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    data: { type: "Task", task },
+    disabled,
+  });
   return (
     <div
       ref={setNodeRef}
@@ -89,7 +95,7 @@ function SortableTaskItem({
       data-focused={isFocused ? "true" : undefined}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       {...attributes}
-      {...listeners}
+      {...(disabled ? {} : listeners)}
     >
       <TaskCard task={task} projectKey={projectKey} onClick={onClick} onClaim={onClaim} currentUserId={currentUserId} isDragging={isDragging} isFocused={isFocused} isSelected={isSelected} />
     </div>
@@ -594,8 +600,12 @@ export function KanbanBoard() {
       },
     );
 
-  const handleDragStart = (e: DragStartEvent) => setActiveTask(local.find((t) => t.id === e.active.id) ?? null);
+  const handleDragStart = (e: DragStartEvent) => {
+    if (!project.canEdit) return;
+    setActiveTask(local.find((t) => t.id === e.active.id) ?? null);
+  };
   const handleDragOver = (e: DragOverEvent) => {
+    if (!project.canEdit) return;
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const overTask = local.find((t) => t.id === over.id);
@@ -609,7 +619,7 @@ export function KanbanBoard() {
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
     setActiveTask(null);
-    if (!over) return;
+    if (!project.canEdit || !over) return;
     const original = tasksQuery.data?.find((t) => t.id === active.id);
     const moved = local.find((t) => t.id === active.id);
     if (!original || !moved) return;
@@ -1319,20 +1329,41 @@ function Column({
 }) {
   const sel = useWorkSelection();
   const isOverWip = showWip && col.wipLimit != null && tasks.length > col.wipLimit;
+  const isAtLimit = showWip && col.wipLimit != null && tasks.length === col.wipLimit;
   return (
-    <div className={cn("flex flex-col rounded-xl border bg-muted/25 transition-all p-3", dense ? "min-h-[120px]" : "min-h-[520px]", isOverWip ? "border-warning ring-1 ring-warning/40 bg-warning/5" : "border-border/70")}>
+    <div
+      className={cn(
+        "flex flex-col rounded-xl border bg-muted/25 transition-all p-3",
+        dense ? "min-h-[120px]" : "min-h-[520px]",
+        isOverWip
+          ? "border-destructive ring-1 ring-destructive/40 bg-destructive/5"
+          : isAtLimit
+            ? "border-warning/70 bg-warning/5"
+            : "border-border/70",
+      )}
+    >
       <div className="flex items-center justify-between pb-3 mb-3 border-b border-border/50">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-foreground">{col.name}</h3>
-          <Badge variant={isOverWip ? "warning" : "secondary"} className="font-mono text-xs tabular-nums px-1.5 py-0" title={col.wipLimit ? "Giới hạn WIP" : undefined}>
+          <Badge
+            variant={isOverWip ? "destructive" : isAtLimit ? "warning" : "secondary"}
+            className="font-mono text-xs tabular-nums px-1.5 py-0"
+            title={col.wipLimit ? `Giới hạn WIP: ${col.wipLimit}` : undefined}
+          >
             {tasks.length}
-            {showWip && col.wipLimit ? `/${col.wipLimit}` : ""}
+            {showWip && col.wipLimit != null ? `/${col.wipLimit}` : ""}
           </Badge>
         </div>
         {isOverWip && (
-          <div className="flex items-center gap-1 text-[11px] font-medium text-warning" title="Vượt WIP">
+          <div className="flex items-center gap-1 text-[11px] font-medium text-destructive" title="Vượt giới hạn WIP">
             <AlertTriangle className="h-3.5 w-3.5" />
             <span className="hidden xl:inline">Vượt WIP</span>
+          </div>
+        )}
+        {!isOverWip && isAtLimit && (
+          <div className="flex items-center gap-1 text-[11px] font-medium text-warning" title="Đã đạt giới hạn WIP">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            <span className="hidden xl:inline">Đầy WIP</span>
           </div>
         )}
       </div>
@@ -1348,6 +1379,7 @@ function Column({
                 currentUserId={currentUserId}
                 isFocused={focusedId === task.id}
                 isSelected={sel.isSelected(task.id)}
+                disabled={!canEdit}
               />
               {canEdit && (
                 <div

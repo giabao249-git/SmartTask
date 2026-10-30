@@ -56,6 +56,7 @@ export class ProjectAccessService {
     const isWsAdmin =
       workspaceRole === WorkspaceRole.OWNER ||
       workspaceRole === WorkspaceRole.ADMIN;
+    const isViewer = workspaceRole === WorkspaceRole.VIEWER;
     return {
       projectId,
       workspaceId: project.workspaceId,
@@ -63,8 +64,8 @@ export class ProjectAccessService {
       projectArchived: project.status === ProjectStatus.ARCHIVED,
       workspaceRole,
       projectRole,
-      canManage: isWsAdmin || projectRole === ProjectRole.PM,
-      canEdit: isWsAdmin || projectRole !== null,
+      canManage: !isViewer && (isWsAdmin || projectRole === ProjectRole.PM),
+      canEdit: !isViewer && (isWsAdmin || projectRole !== null),
     };
   }
 

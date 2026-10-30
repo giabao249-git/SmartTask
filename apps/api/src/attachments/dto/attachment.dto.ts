@@ -27,7 +27,7 @@ export class SignAttachmentDto {
   @ApiProperty({ example: 123456, maximum: MAX_ATTACHMENT_BYTES })
   @IsInt()
   @Min(1)
-  @Max(MAX_ATTACHMENT_BYTES)
+  @Max(MAX_ATTACHMENT_BYTES, { message: 'ATTACHMENT_TOO_LARGE' })
   sizeBytes!: number;
 }
 

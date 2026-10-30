@@ -9,6 +9,15 @@ const nextConfig: NextConfig = {
   // `next build` khi `next dev` đang chạy làm hỏng .next của dev → build ra thư mục riêng
   // Trên Vercel (biến VERCEL) luôn dùng `.next` vì Vercel chỉ tìm thư mục này, bất kể script `build` đặt NEXT_DIST_DIR
   distDir: process.env.VERCEL ? ".next" : (process.env.NEXT_DIST_DIR ?? ".next"),
+  async redirects() {
+    return [
+      {
+        source: "/workload",
+        destination: "/workspaces",
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

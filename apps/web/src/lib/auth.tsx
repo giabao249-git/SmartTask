@@ -3,7 +3,13 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, refreshAccessToken, tokenStore } from "./api";
+import {
+  api,
+  refreshAccessToken,
+  tokenStore,
+  getFallbackRefreshToken,
+  setFallbackRefreshToken,
+} from "./api";
 import { disconnectSocket } from "./socket";
 import type { MeResponse, UserView, WorkspaceSummary } from "./types";
 
@@ -53,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         typeof document !== "undefined" &&
         document.cookie.includes(`${SESSION_FLAG_COOKIE}=1`);
 
-      if (!hasSessionCookie && !tokenStore.get()) {
+      if (!hasSessionCookie && !tokenStore.get() && !getFallbackRefreshToken()) {
         setStatus("anonymous");
         return;
       }
@@ -70,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {
         if (!cancelled) {
           tokenStore.set(null);
+          setFallbackRefreshToken(null);
           setStatus("anonymous");
           setSessionFlag(false);
         }
@@ -85,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () =>
       tokenStore.subscribe((t) => {
         if (!t) {
+          setFallbackRefreshToken(null);
           setMe(null);
           setStatus("anonymous");
           setSessionFlag(false);
@@ -96,8 +104,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = React.useCallback<AuthState["login"]>(
     async (email, password) => {
       queryClient.clear();
-      const res = await api.post<{ user: UserView; accessToken: string }>("/auth/login", { email, password }, { anonymous: true });
+      const res = await api.post<{ user: UserView; accessToken: string; refreshToken?: string }>("/auth/login", { email, password }, { anonymous: true });
       tokenStore.set(res.accessToken);
+      if (res.refreshToken) {
+        setFallbackRefreshToken(res.refreshToken);
+      }
       await loadMe();
       return res.user;
     },
@@ -106,8 +117,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = React.useCallback<AuthState["register"]>(
     async (email, password, fullName) => {
-      const res = await api.post<{ user: UserView; accessToken: string }>("/auth/register", { email, password, fullName }, { anonymous: true });
+      const res = await api.post<{ user: UserView; accessToken: string; refreshToken?: string }>("/auth/register", { email, password, fullName }, { anonymous: true });
       tokenStore.set(res.accessToken);
+      if (res.refreshToken) {
+        setFallbackRefreshToken(res.refreshToken);
+      }
       await loadMe();
       return res.user;
     },
@@ -116,12 +130,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = React.useCallback(async () => {
     try {
-      await api.post("/auth/logout");
+      const fallbackRt = getFallbackRefreshToken();
+      await api.post("/auth/logout", fallbackRt ? { refreshToken: fallbackRt } : undefined, {
+        headers: fallbackRt ? { "X-Refresh-Token": fallbackRt } : undefined,
+      });
     } catch {
       // token đã hết hạn cũng coi như đăng xuất xong
     }
     disconnectSocket();
     tokenStore.set(null);
+    setFallbackRefreshToken(null);
     queryClient.clear();
     setMe(null);
     setStatus("anonymous");

@@ -1,11 +1,27 @@
 "use client";
 
+import * as React from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { AppShell } from "@/components/app/AppShell";
-import { useRequireAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const auth = useRequireAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const auth = useAuth();
+  const isInvitation = pathname?.startsWith("/invitations");
+
+  React.useEffect(() => {
+    if (!isInvitation && auth.status === "anonymous") {
+      router.replace("/");
+    }
+  }, [auth.status, isInvitation, router]);
+
+  if (isInvitation) {
+    return <main className="min-h-screen bg-background flex flex-col justify-center">{children}</main>;
+  }
+
   if (auth.status !== "authenticated")
     return (
       <div className="flex min-h-screen">

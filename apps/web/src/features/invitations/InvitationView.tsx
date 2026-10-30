@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, Mail } from "lucide-react";
@@ -61,17 +62,33 @@ export function InvitationView({ token }: { token: string }) {
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground space-y-1">
             {preview.data.email && <p>Dành riêng cho: {preview.data.email}</p>}
-            <p>
-              Bạn đang đăng nhập là <span className="font-medium text-foreground">{auth.user?.fullName}</span> ({auth.user?.email}).
-            </p>
+            {auth.user ? (
+              <p>
+                Bạn đang đăng nhập là <span className="font-medium text-foreground">{auth.user?.fullName}</span> ({auth.user?.email}).
+              </p>
+            ) : (
+              <p className="text-amber-600 font-medium">
+                Vui lòng{" "}
+                <Link href={`/login?next=/invitations/${token}`} className="underline text-primary">
+                  đăng nhập
+                </Link>{" "}
+                bằng tài khoản tương ứng để chấp nhận lời mời.
+              </p>
+            )}
           </CardContent>
           <CardFooter className="gap-2 justify-end">
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => router.push("/workspaces")}>
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => router.push(auth.user ? "/workspaces" : "/login")}>
               Để sau
             </Button>
-            <Button size="sm" className="text-xs gap-1.5" disabled={accept.isPending} onClick={() => accept.mutate()}>
-              {accept.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Tham gia workspace
-            </Button>
+            {auth.user ? (
+              <Button size="sm" className="text-xs gap-1.5" disabled={accept.isPending} onClick={() => accept.mutate()}>
+                {accept.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Tham gia workspace
+              </Button>
+            ) : (
+              <Button size="sm" className="text-xs gap-1.5" onClick={() => router.push(`/login?next=/invitations/${token}`)}>
+                Đăng nhập để tham gia
+              </Button>
+            )}
           </CardFooter>
         </Card>
       )}

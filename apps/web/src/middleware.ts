@@ -8,7 +8,7 @@ import { SESSION_FLAG_COOKIE } from "@/lib/auth-cookie";
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hasSession = req.cookies.has(SESSION_FLAG_COOKIE);
-  if (pathname === "/") {
+  if (pathname === "/" || pathname.startsWith("/invitations")) {
     return NextResponse.next();
   }
   if (pathname.startsWith("/login") || pathname.startsWith("/register")) {

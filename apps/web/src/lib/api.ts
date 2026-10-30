@@ -79,6 +79,37 @@ export const tokenStore = {
   },
 };
 
+// ── Refresh token fallback cho môi trường cross-domain khi cookie bị chặn ──
+let fallbackRefreshToken: string | null = null;
+const RT_STORAGE_KEY = "st_fallback_rt";
+
+export function getFallbackRefreshToken(): string | null {
+  if (fallbackRefreshToken) return fallbackRefreshToken;
+  if (typeof window !== "undefined") {
+    try {
+      return localStorage.getItem(RT_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function setFallbackRefreshToken(rt: string | null): void {
+  fallbackRefreshToken = rt;
+  if (typeof window !== "undefined") {
+    try {
+      if (rt) {
+        localStorage.setItem(RT_STORAGE_KEY, rt);
+      } else {
+        localStorage.removeItem(RT_STORAGE_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  }
+}
+
 let refreshing: Promise<string | null> | null = null;
 
 /** Gọi refresh một lần cho mọi request 401 đồng thời; thất bại → xoá token (AppShell sẽ chuyển về /login). */
@@ -86,16 +117,31 @@ export async function refreshAccessToken(): Promise<string | null> {
   if (!refreshing) {
     refreshing = (async () => {
       try {
-        const res = await fetch(`${API_URL}/auth/refresh`, { method: "POST", credentials: "include" });
+        const fallbackRt = getFallbackRefreshToken();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (fallbackRt) {
+          headers["X-Refresh-Token"] = fallbackRt;
+        }
+        const res = await fetch(`${API_URL}/auth/refresh`, {
+          method: "POST",
+          headers,
+          credentials: "include",
+          body: fallbackRt ? JSON.stringify({ refreshToken: fallbackRt }) : undefined,
+        });
         if (!res.ok) {
           tokenStore.set(null);
+          setFallbackRefreshToken(null);
           return null;
         }
-        const body = (await res.json()) as { accessToken: string };
+        const body = (await res.json()) as { accessToken: string; refreshToken?: string };
         tokenStore.set(body.accessToken);
+        if (body.refreshToken) {
+          setFallbackRefreshToken(body.refreshToken);
+        }
         return body.accessToken;
       } catch {
         tokenStore.set(null);
+        setFallbackRefreshToken(null);
         return null;
       } finally {
         refreshing = null;

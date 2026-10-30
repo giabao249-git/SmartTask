@@ -258,6 +258,33 @@ describe('Dự án, sprint, task (e2e)', () => {
       .expect(200);
     expect(back.body.completedAt).toBeNull();
     t1.version = back.body.version;
+
+    // TC-VIEW-01: Viewer cố tình kéo thả task trên Kanban bị chặn 403 Forbidden
+    await api()
+      .patch(`/api/v1/tasks/${t1.id}/move`)
+      .set(auth(viewer))
+      .send({ version: t1.version, columnId: col('TODO').id })
+      .expect(403);
+
+    // TC-MEM-03: Gửi version cũ phát sinh xung đột phiên bản 409 TASK_VERSION_CONFLICT
+    const conflict = await api()
+      .patch(`/api/v1/tasks/${t1.id}`)
+      .set(auth(dev))
+      .send({ version: t1.version - 1, description: 'Sửa trên bản cũ' })
+      .expect(409);
+    expect(conflict.body.code).toBe('TASK_VERSION_CONFLICT');
+
+    // TC-MEM-05: Upload tệp đính kèm 14.5MB bị chặn với mã định danh ATTACHMENT_TOO_LARGE
+    const oversize = await api()
+      .post(`/api/v1/tasks/${t1.id}/attachments/sign`)
+      .set(auth(dev))
+      .send({
+        fileName: 'test-attachment-14.5MB.bin',
+        mime: 'application/octet-stream',
+        sizeBytes: 15204352, // 14.5 MiB
+      })
+      .expect(400);
+    expect(oversize.body.code).toBe('ATTACHMENT_TOO_LARGE');
   });
 
   it('subtask: một cấp; tiến độ cha = trung bình subtask; xoá cha xoá cả con', async () => {

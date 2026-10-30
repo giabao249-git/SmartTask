@@ -43,25 +43,25 @@ export class AuthController {
     @Body() dto: RegisterDto,
     @Headers('user-agent') ua: string | undefined,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ user: AuthUserView; accessToken: string }> {
+  ): Promise<{ user: AuthUserView; accessToken: string; refreshToken?: string }> {
     const { user, tokens } = await this.auth.register(dto, ua);
     this.setRefreshCookie(res, tokens);
-    return { user, accessToken: tokens.accessToken };
+    return { user, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('login')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Đăng nhập (UC-02) — 10 lần/phút/IP' })
+  @ApiOperation({ summary: 'Đăng nhập (UC-02) — 5 lần/phút/IP' })
   async login(
     @Body() dto: LoginDto,
     @Headers('user-agent') ua: string | undefined,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ user: AuthUserView; accessToken: string }> {
+  ): Promise<{ user: AuthUserView; accessToken: string; refreshToken?: string }> {
     const { user, tokens } = await this.auth.login(dto, ua);
     this.setRefreshCookie(res, tokens);
-    return { user, accessToken: tokens.accessToken };
+    return { user, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
   }
 
   @Public()
@@ -75,10 +75,10 @@ export class AuthController {
     @Req() req: Request,
     @Headers('user-agent') ua: string | undefined,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ accessToken: string }> {
+  ): Promise<{ accessToken: string; refreshToken?: string }> {
     const tokens = await this.auth.refresh(this.readRefreshCookie(req), ua);
     this.setRefreshCookie(res, tokens);
-    return { accessToken: tokens.accessToken };
+    return { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
   }
 
   @Public()
@@ -90,22 +90,45 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
     await this.auth.logout(this.readRefreshCookie(req));
-    res.clearCookie(REFRESH_COOKIE, { path: this.cookiePath() });
+    const isProd =
+      this.config.get('NODE_ENV', { infer: true }) === 'production' ||
+      process.env.NODE_ENV === 'production';
+    res.clearCookie(REFRESH_COOKIE, {
+      path: this.cookiePath(),
+      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd ? true : this.config.get('COOKIE_SECURE', { infer: true }),
+    });
   }
 
   private readRefreshCookie(req: Request): string | undefined {
-    // @types/express khai cookies là any; ép về unknown trước khi kiểm tra kiểu.
+    // 1. Ưu tiên đọc từ httpOnly cookie
     const cookies = (req as unknown as { cookies?: Record<string, unknown> })
       .cookies;
-    const value: unknown = cookies?.[REFRESH_COOKIE];
-    return typeof value === 'string' ? value : undefined;
+    const cookieVal: unknown = cookies?.[REFRESH_COOKIE];
+    if (typeof cookieVal === 'string' && cookieVal.trim().length > 0) {
+      return cookieVal.trim();
+    }
+    // 2. Fallback: đọc từ header x-refresh-token (phòng khi cross-site cookie bị browser chặn)
+    const headerVal = req.headers['x-refresh-token'];
+    if (typeof headerVal === 'string' && headerVal.trim().length > 0) {
+      return headerVal.trim();
+    }
+    // 3. Fallback: đọc từ request body { refreshToken: string }
+    const bodyVal = (req.body as Record<string, unknown> | undefined)?.refreshToken;
+    if (typeof bodyVal === 'string' && bodyVal.trim().length > 0) {
+      return bodyVal.trim();
+    }
+    return undefined;
   }
 
   private setRefreshCookie(res: Response, tokens: TokenPair): void {
+    const isProd =
+      this.config.get('NODE_ENV', { infer: true }) === 'production' ||
+      process.env.NODE_ENV === 'production';
     res.cookie(REFRESH_COOKIE, tokens.refreshToken, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: this.config.get('COOKIE_SECURE', { infer: true }),
+      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd ? true : this.config.get('COOKIE_SECURE', { infer: true }),
       path: this.cookiePath(),
       expires: tokens.refreshExpiresAt,
     });

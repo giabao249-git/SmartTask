@@ -87,12 +87,21 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // So sánh số với số: HttpStatus là enum số, status đến từ exception.getStatus().
     const S = HttpStatus as unknown as Record<string, number>;
     switch (status) {
-      case S.BAD_REQUEST:
+      case S.BAD_REQUEST: {
+        const msgs = Array.isArray(message) ? message : [message];
+        if (msgs.includes('ATTACHMENT_TOO_LARGE')) {
+          return {
+            code: 'ATTACHMENT_TOO_LARGE',
+            message: ERROR_CODES.ATTACHMENT_TOO_LARGE,
+            details: { fields: msgs },
+          };
+        }
         return {
           code: 'VALIDATION_FAILED',
           message: ERROR_CODES.VALIDATION_FAILED,
-          details: { fields: Array.isArray(message) ? message : [message] },
+          details: { fields: msgs },
         };
+      }
       case S.UNAUTHORIZED:
         return {
           code: 'UNAUTHENTICATED',

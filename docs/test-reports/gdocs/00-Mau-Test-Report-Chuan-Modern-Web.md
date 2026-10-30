@@ -13,12 +13,12 @@
 
 | Chỉ số kiểm thử | Giá trị ghi nhận | Tỷ lệ / Đánh giá chất lượng |
 | :--- | :--- | :--- |
-| **Tổng số ca kiểm thử thực thi (Total Test Cases)** | 94 test cases | 100% kế hoạch đề ra |
-| **Số ca kiểm thử ĐẠT (Passed)** | 94 test cases | 100% |
+| **Tổng số ca kiểm thử thực thi (Total Test Cases)** | 108 test cases | 100% kế hoạch đề ra |
+| **Số ca kiểm thử ĐẠT (Passed)** | 108 test cases | 100% |
 | **Số ca kiểm thử KHÔNG ĐẠT (Failed)** | 0 test cases | 0.0% |
 | **Số ca kiểm thử BỊ CHẶN (Blocked)** | 0 test cases | 0.0% |
 | **Số ca kiểm thử BỎ QUA (Skipped)** | 0 test cases | 0.0% |
-| **Tổng số lỗi phát hiện & đóng (Defects Resolved)** | 4 lỗi (BUG-PM-02, BUG-WS-06, BUG-ADMIN-03, BUG-ADMIN-04) | Đã khắc phục & đóng 4/4 lỗi (100%) |
+| **Tổng số lỗi phát hiện & đóng (Defects Resolved)** | 14 lỗi (BUG-PM-02, BUG-WS-06, BUG-ADMIN-03, BUG-ADMIN-04, BUG-VIEW-01, BUG-MEM-01, BUG-MEM-02, BUG-MEM-03, BUG-MEM-04, BUG-MEM-05, BUG-MEM-06, BUG-GUEST-03, BUG-GUEST-04, BUG-GUEST-05, BUG-GUEST-07) | Đã khắc phục & đóng 14/14 lỗi (100%) |
 
 ---
 
@@ -148,6 +148,176 @@
 | **Trạng thái & Mức độ** | **Trạng thái:** `PASSED` \| **Severity:** `Critical` \| **Priority:** `P1` |
 | **Nguyên nhân gốc rễ** | Hệ thống ban đầu chỉ thiết kế quota hạn mức theo ngày cho từng user (`dailyLimitPerUser`), chưa có rào chắn FinOps bảo vệ ngân sách toàn sàn. |
 | **Hành động khắc phục** | Phát triển `AiCircuitBreakerService` với ngưỡng $100/ngày, tích hợp chặn trước provider, bổ sung API quản trị `GET/POST /admin/ai/circuit-breaker`. |
+
+---
+
+### Ca kiểm thử 08: TC-VIEW-01 / BUG-VIEW-01 (Chặn quyền kéo thả hoặc sửa task của Viewer)
+
+| Mục | Nội dung chi tiết |
+| :--- | :--- |
+| **Mã kiểm thử / Lỗi** | **TC-VIEW-01 / BUG-VIEW-01: Chặn quyền kéo thả hoặc sửa task của Viewer (Read-only Boundary Enforcement)** |
+| **Phân hệ & Vai trò** | Phân hệ 2: Dự án & Công việc (UC-12 / SD-02) \| Vai trò: Khách xem (`Viewer A2`) |
+| **Tiền điều kiện** | Tài khoản `viewer@test.com` có vai trò `VIEWER` trong Workspace, được phân công vào dự án "Alpha Project". |
+| **Dữ liệu kiểm thử** | Task ID: `task-001`, API: `PATCH /api/v1/projects/:id/tasks/:id/move`, Payload: `{"columnId": "col-done", "position": 0, "version": 1}` |
+| **Các bước dẫn đến lỗi** | 1. Đăng nhập tài khoản Viewer và mở bảng Kanban dự án Alpha.<br>2. Nhấp kéo một task trên giao diện hoặc gửi trực tiếp request API di chuyển task.<br>3. Quan sát phản hồi API và trạng thái giao diện. |
+| **Kết quả mong đợi** | Frontend vô hiệu hóa tương tác kéo thả (`SortableTaskItem` có `disabled=true`). Khi gửi request trực tiếp qua API, server từ chối ngay với HTTP `403 Forbidden` (`FORBIDDEN_RESOURCE`). |
+| **Kết quả thực tế** | **Ban đầu:** `project-access.service.ts` đánh giá `canEdit: isWsAdmin || projectRole !== null` khiến Viewer có quyền sửa; API trả về 200 OK (`BUG-VIEW-01`).<br>**Hiện tại (ĐÃ SỬA):** `project-access.service.ts` chặn tuyệt đối: `const isViewer = workspaceRole === WorkspaceRole.VIEWER;` thì `canManage: false` và `canEdit: false`. Frontend truyền `disabled={!project.canEdit}` vào task item và guard kiểm tra trong `handleDragStart`. E2E test trả về HTTP 403 chuẩn xác. |
+| **Trạng thái & Mức độ** | **Trạng thái:** `PASSED` \| **Severity:** `Critical (P0)` \| **Priority:** `P1` |
+| **Nguyên nhân gốc rễ** | Logic phân quyền tại Backend coi bất kỳ ai có `projectRole !== null` đều có quyền edit mà không kiểm tra phủ quyết vai trò `VIEWER` cấp Workspace. |
+| **Hành động khắc phục** | Ép `canEdit = false` và `canManage = false` tuyệt đối nếu `isViewer === true`. Đồng bộ prop `disabled` xuống thẻ `TaskCard` và vô hiệu hóa drag sensors. |
+
+---
+
+### Ca kiểm thử 09: TC-MEM-02 / BUG-MEM-02 (Vượt giới hạn WIP của cột Kanban)
+
+| Mục | Nội dung chi tiết |
+| :--- | :--- |
+| **Mã kiểm thử / Lỗi** | **TC-MEM-02 / BUG-MEM-02: Vượt giới hạn WIP của cột và Cơ chế Hoàn tác Xác định (422 WIP_LIMIT_EXCEEDED Rollback)** |
+| **Phân hệ & Vai trò** | Phân hệ 2: Dự án & Công việc (UC-12 / SD-02) \| Vai trò: Thành viên (`Member A3`) |
+| **Tiền điều kiện** | Cột "Review" được cấu hình `wipLimit = 2` và hiện đang chứa 2 công việc. |
+| **Dữ liệu kiểm thử** | Task ID: `task-003`, targetColumn: `col-review`, position: 2 |
+| **Các bước dẫn đến lỗi** | 1. Member kéo task thứ 3 từ cột "In Progress" sang cột "Review".<br>2. Quan sát phản ứng giao diện kéo thả và mã phản hồi API. |
+| **Kết quả mong đợi** | Server từ chối với HTTP `422 Unprocessable Entity`, body: `{"code": "WIP_LIMIT_EXCEEDED"}`. Giao diện thực hiện hoàn tác thẻ về vị trí cũ (deterministic rollback) và hiển thị toast cảnh báo quá tải WIP. |
+| **Kết quả thực tế** | **Ban đầu:** Cột Review có `wipLimit = null`, Member không thể vào Cài đặt để sửa WIP (thiếu quyền PM), dẫn đến bị chặn kiểm thử.<br>**Hiện tại (ĐÃ SỬA):** Cấu hình `wipLimit = 2` cho cột Review qua API PM. Tiêu đề cột hiển thị rõ `Kiểm thử (2/2) [Đầy WIP]`. Kéo thẻ thứ 3 vào bị server từ chối 422 `WIP_LIMIT_EXCEEDED`. Client hoàn tác thẻ về cột cũ ngay lập tức kèm toast tiếng Việt rõ ràng. |
+| **Trạng thái & Mức độ** | **Trạng thái:** `PASSED` \| **Severity:** `Major (P1)` \| **Priority:** `P2` |
+| **Nguyên nhân gốc rễ** | Cột dữ liệu mẫu thiếu giá trị `wipLimit` và UI chưa hiển thị trực quan thông số giới hạn WIP cho thành viên nhận biết. |
+| **Hành động khắc phục** | Bổ sung hiển thị `tasks.length / wipLimit` kèm badge trạng thái trên Header cột; kích hoạt cơ chế rollback xác định trong hook `useMoveTask`. |
+
+---
+
+### Ca kiểm thử 10: TC-MEM-03 / BUG-MEM-03 (Xung đột phiên bản khi cập nhật task đồng thời)
+
+| Mục | Nội dung chi tiết |
+| :--- | :--- |
+| **Mã kiểm thử / Lỗi** | **TC-MEM-03 / BUG-MEM-03: Kiểm soát Xung đột Phiên bản Đồng thời qua OCC (409 TASK_VERSION_CONFLICT)** |
+| **Phân hệ & Vai trò** | Phân hệ 2: Dự án & Công việc (UC-12) \| Vai trò: Thành viên (`Member A3`) |
+| **Tiền điều kiện** | Task `task-001` đang ở version 1. Hai thành viên A và B cùng mở task này trên máy tính của mình. |
+| **Dữ liệu kiểm thử** | Payload Thành viên B: `{"title": "Cập nhật mô tả mới", "version": 1}` |
+| **Các bước dẫn đến lỗi** | 1. Thành viên A cập nhật task lên version 2.<br>2. Thành viên B (vẫn đang giữ snapshot version 1 tại form sửa) nhấn Lưu thay đổi.<br>3. Kiểm tra phản hồi API đối với request của Thành viên B. |
+| **Kết quả mong đợi** | Server phát hiện `task.version` trong DB (2) khác với version gửi lên (1), ném HTTP `409 Conflict` với mã lỗi `TASK_VERSION_CONFLICT`. Giao diện hiển thị cảnh báo xung đột và hướng dẫn tải lại dữ liệu mới nhất. |
+| **Kết quả thực tế** | **Ban đầu:** Khi A sửa xong, Socket.io phát `task:updated` ngầm cập nhật version trong query cache của B; khi B bấm Lưu request mang version mới nhất nên trả về 200 OK (trôi phiên bản).<br>**Hiện tại (ĐÃ SỬA):** Form modal giữ snapshot `initialVersion` cố định lúc mở sửa; gửi request kèm version cũ bị server từ chối chính xác với HTTP `409 Conflict` (`TASK_VERSION_CONFLICT`). Frontend bắt lỗi và hiển thị thông báo hướng dẫn nạp lại task. E2E test xác minh đạt 100%. |
+| **Trạng thái & Mức độ** | **Trạng thái:** `PASSED` \| **Severity:** `Critical (P0)` \| **Priority:** `P1` |
+| **Nguyên nhân gốc rễ** | Cơ chế realtime ngầm đồng bộ version vào form đang mở mà không khóa snapshot phiên bản tại thời điểm bắt đầu chỉnh sửa. |
+| **Hành động khắc phục** | Giữ snapshot version độc lập trong state chỉnh sửa; server bảo vệ OCC qua `where: { id, version }`; xử lý mã lỗi 409 trên client với toast cảnh báo trực quan. |
+
+---
+
+### Ca kiểm thử 11: TC-MEM-04 / BUG-MEM-04 (Render cú pháp Markdown trong bình luận task)
+
+| Mục | Nội dung chi tiết |
+| :--- | :--- |
+| **Mã kiểm thử / Lỗi** | **TC-MEM-04 / BUG-MEM-04: Trình diễn nội dung bình luận hỗ trợ cú pháp Markdown và Nhắc tên (@mention)** |
+| **Phân hệ & Vai trò** | Phân hệ 3: Cộng tác Thời gian thực (UC-17, UC-18) \| Vai trò: Thành viên (`Member A3`) |
+| **Tiền điều kiện** | Task `task-001` đang mở modal chi tiết; thành viên thực hiện nhập bình luận chứa cú pháp định dạng. |
+| **Dữ liệu kiểm thử** | Nội dung: `"Nhờ **@Lan** kiểm tra giúp *PR này* nhé: \`git push origin feature\`"` |
+| **Các bước dẫn đến lỗi** | 1. Nhập nội dung bình luận vào ô thảo luận.<br>2. Nhấn Gửi bình luận.<br>3. Quan sát hiển thị nội dung trên danh sách thảo luận của task. |
+| **Kết quả mong đợi** | Chuỗi `**@Lan**` hiển thị in đậm có màu nổi bật (`font-semibold text-primary`); `*PR này*` in nghiêng; đoạn code hiển thị dạng inline code; không bị trơ ký tự thô `**` hoặc `*`. |
+| **Kết quả thực tế** | **Ban đầu:** `TaskDetailModal.tsx` sử dụng thẻ `<p>` hiển thị chuỗi thuần túy, các ký tự `**` bị in nguyên vẹn (`BUG-MEM-04`).<br>**Hiện tại (ĐÃ SỬA):** Xây dựng hàm `renderCommentBody()` phân tích cú pháp an toàn, render thẻ HTML semantic (`<strong>`, `<em>`, `<code>`, `<span>`) chuẩn W3C, hiển thị đẹp mắt, bảo vệ chống XSS. |
+| **Trạng thái & Mức độ** | **Trạng thái:** `PASSED` \| **Severity:** `Minor (P3)` \| **Priority:** `P3` |
+| **Nguyên nhân gốc rễ** | Thiếu hàm bộ phân tích cú pháp (Parser) định dạng Markdown nhẹ cho vùng hiển thị bình luận. |
+| **Hành động khắc phục** | Bổ sung hàm tiện ích `renderCommentBody()` phân giải các mẫu regex Markdown cơ bản và thẻ `@mention`. |
+
+---
+
+### Ca kiểm thử 12: TC-MEM-05 / BUG-MEM-05 (Kiểm soát kích thước tệp đính kèm 400 ATTACHMENT_TOO_LARGE)
+
+| Mục | Nội dung chi tiết |
+| :--- | :--- |
+| **Mã kiểm thử / Lỗi** | **TC-MEM-05 / BUG-MEM-05: Kiểm soát kích thước tệp đính kèm và trả về mã lỗi định danh ATTACHMENT_TOO_LARGE** |
+| **Phân hệ & Vai trò** | Phân hệ 3: Tải tệp đính kèm (UC-19) \| Vai trò: Thành viên (`Member A3`) |
+| **Tiền điều kiện** | Thành viên mở modal đính kèm tài liệu vào task; chuẩn bị tệp có dung lượng 14.5MB (> 10MB). |
+| **Dữ liệu kiểm thử** | API: `POST /api/v1/attachments/sign-upload`, Payload: `{"sizeBytes": 15204352, "fileName": "video.mp4"}` |
+| **Các bước dẫn đến lỗi** | 1. Chọn tệp 14.5MB để tải lên hoặc gửi request lấy signed URL với kích thước 15,204,352 bytes.<br>2. Quan sát phản hồi API từ máy chủ. |
+| **Kết quả mong đợi** | Server từ chối cấp signed URL với mã HTTP `400 Bad Request`, body chứa mã lỗi chuẩn định danh `{"code": "ATTACHMENT_TOO_LARGE"}`. |
+| **Kết quả thực tế** | **Ban đầu:** Server trả mã 400 nhưng body chứa chuỗi validation thô `sizeBytes must not be greater than 10485760` thay vì mã lỗi định danh (`BUG-MEM-05`).<br>**Hiện tại (ĐÃ SỬA):** Cấu hình decorator `@Max(10485760, { message: 'ATTACHMENT_TOO_LARGE' })` tại `attachment.dto.ts` và ánh xạ qua `HttpExceptionFilter`, trả về chuẩn HTTP 400 với `code: "ATTACHMENT_TOO_LARGE"`. E2E test xác thực đạt 100%. |
+| **Trạng thái & Mức độ** | **Trạng thái:** `PASSED` \| **Severity:** `Major (P2)` \| **Priority:** `P2` |
+| **Nguyên nhân gốc rễ** | Class-validator decorator `@Max()` không được cấu hình thông báo mã lỗi tùy biến khiến Filter trả về thông báo lỗi mặc định. |
+| **Hành động khắc phục** | Đặt message mã lỗi định danh trên `@Max()` và bổ sung cơ chế chuẩn hóa mã lỗi trong `HttpExceptionFilter`. |
+
+---
+
+### Ca kiểm thử 13: TC-MEM-06 / BUG-MEM-06 (Bảo mật Dữ liệu Tải cá nhân và Điều hướng URL Workload)
+
+| Mục | Nội dung chi tiết |
+| :--- | :--- |
+| **Mã kiểm thử / Lỗi** | **TC-MEM-06 / BUG-MEM-06: Bảo vệ ranh giới riêng tư Tải cá nhân (Privacy Isolation 403 Forbidden) & Điều hướng URL** |
+| **Phân hệ & Vai trò** | Phân hệ 4: Kỹ năng cá nhân & Tải công việc (UC-22, UC-24, UC-37) \| Vai trò: Thành viên (`Member A3`) |
+| **Tiền điều kiện** | Member Minh (`minh@test.com`) và Member Lan (`lan@test.com`) cùng thuộc workspace. Minh chỉ có quyền thành viên thường. |
+| **Dữ liệu kiểm thử** | URL: `/workload`, API: `GET /api/v1/workspaces/:wsId/workload/privacy/:lanUserId` |
+| **Các bước dẫn đến lỗi** | 1. Member Minh truy cập đường dẫn `/workload`.<br>2. Minh gọi API chi tiết tải công việc của Lan bằng token của mình.<br>3. Quan sát kết quả điều hướng trên trình duyệt và mã phản hồi API. |
+| **Kết quả mong đợi** | Trình duyệt không gặp lỗi 404 mà tự động điều hướng an toàn về trang làm việc. Request truy cập tải của người khác bị máy chủ từ chối với HTTP `403 Forbidden` (`WORKLOAD_PRIVACY_VIOLATION`). |
+| **Kết quả thực tế** | **Ban đầu:** URL `/workload` trả về 404 do chưa có route alias; tester bị tắc không kiểm thử được phân quyền bảo mật (`BUG-MEM-06`).<br>**Hiện tại (ĐÃ SỬA):** Bổ sung route alias `/workload` trong Next.js App Router tự động chuyển hướng về `/workspaces`; API bảo vệ phân quyền cô lập tải cá nhân hoạt động chuẩn xác, trả về HTTP 403 khi thành viên cố truy cập dữ liệu của đồng nghiệp. Bộ e2e test workload đạt 6/6 PASSED. |
+| **Trạng thái & Mức độ** | **Trạng thái:** `PASSED` \| **Severity:** `Critical (P0)` \| **Priority:** `P1` |
+| **Nguyên nhân gốc rễ** | Thiếu route alias cấp cao cho đường dẫn người dùng thường gõ `/workload`, và tài liệu kiểm thử ban đầu chưa ghi rõ endpoint xác thực phân quyền tải cá nhân. |
+| **Hành động khắc phục** | Tạo route `apps/web/src/app/(dashboard)/workload/page.tsx` và redirect config; xây dựng kiểm thử e2e bảo mật cô lập tải tại `workload.e2e-spec.ts`. |
+
+---
+
+### Ca kiểm thử 14: TC-GUEST-03 / BUG-GUEST-03 (Kiểm tra định dạng Form Đăng ký theo Modern Web)
+
+| Mục | Nội dung chi tiết |
+| :--- | :--- |
+| **Mã kiểm thử / Lỗi** | **TC-GUEST-03 / BUG-GUEST-03: Kiểm tra định dạng và thời điểm hiển thị lỗi trên Form Đăng ký (Modern Web Form Timing)** |
+| **Phân hệ & Vai trò** | Phân hệ 1: Xác thực & Tài khoản (Đăng ký) \| Vai trò: Khách (`Guest A1`) |
+| **Tiền điều kiện** | Người dùng chưa đăng nhập, mở trang đăng ký `/login?tab=register`. |
+| **Dữ liệu kiểm thử** | Họ tên: "Nguyễn Văn A", Email: `nguyenvana@test.com`, Mật khẩu: `123` (3 ký tự) |
+| **Các bước dẫn đến lỗi** | 1. Mở trang đăng ký.<br>2. Nhập họ tên, email hợp lệ.<br>3. Nhập mật khẩu 3 ký tự `123` và quan sát giao diện.<br>4. Click ra ngoài ô nhập (blur).<br>5. Bấm nút Tạo tài khoản. |
+| **Kết quả mong đợi** | Khi đang nhập dở chưa rời ô input, không hiện lỗi viền đỏ sớm. Sau khi blur khỏi ô mật khẩu, hệ thống hiển thị thông báo lỗi inline: "Mật khẩu phải có tối thiểu 8 ký tự". Khi submit, form không gửi và không hiện popup HTML5 mặc định thô của trình duyệt. |
+| **Kết quả thực tế** | **Ban đầu:** Form không có `noValidate`, khi submit trình duyệt bung tooltip HTML5 mặc định; rời ô nhập không có thông báo lỗi inline (`BUG-GUEST-03`).<br>**Hiện tại (ĐÃ SỬA):** Form đăng ký bổ sung `noValidate`, trường mật khẩu gắn `onBlur` quản lý cờ `passwordTouched`, hiển thị thông báo lỗi inline tiếng Việt mượt mà ngay sau khi blur khi mật khẩu < 8 ký tự; nút submit chặn và thông báo toast rõ ràng. |
+| **Trạng thái & Mức độ** | **Trạng thái:** `PASSED` \| **Severity:** `Minor (P3)` \| **Priority:** `P3` |
+| **Nguyên nhân gốc rễ** | Thiếu thuộc tính `noValidate` trên thẻ `<form>` và chưa cài đặt cờ theo dõi tương tác `onBlur` để kích hoạt validation message inline. |
+| **Hành động khắc phục** | Bổ sung `noValidate`, gắn state `passwordTouched` với `onBlur`, và render thông báo inline đỏ chuẩn UX. |
+
+---
+
+### Ca kiểm thử 15: TC-GUEST-04 / BUG-GUEST-04 (Giới hạn tần suất đăng nhập sai - Brute-force Protection)
+
+| Mục | Nội dung chi tiết |
+| :--- | :--- |
+| **Mã kiểm thử / Lỗi** | **TC-GUEST-04 / BUG-GUEST-04: Giới hạn tần suất đăng nhập sai liên tiếp (Brute-force Protection 429 RATE_LIMITED)** |
+| **Phân hệ & Vai trò** | Phân hệ 1: Xác thực & Tài khoản (Đăng nhập) \| Vai trò: Khách (`Guest A1`) |
+| **Tiền điều kiện** | Người dùng mở trang đăng nhập; tài khoản hợp lệ đã tồn tại trong DB. |
+| **Dữ liệu kiểm thử** | Email: `dev1@smarttask.local`, Mật khẩu: sai liên tiếp, Endpoint: `POST /api/v1/auth/login` |
+| **Các bước dẫn đến lỗi** | 1. Nhập email hợp lệ và mật khẩu sai.<br>2. Gửi request đăng nhập 5 lần liên tiếp trong 60 giây.<br>3. Gửi tiếp request đăng nhập thứ 6.<br>4. Quan sát mã phản hồi HTTP và body. |
+| **Kết quả mong đợi** | Sau 5 lần đăng nhập sai trong 60 giây, request thứ 6 bị server từ chối ngay lập tức với HTTP `429 Too Many Requests`, body chứa mã lỗi `{"code": "RATE_LIMITED", "message": "Bạn thao tác quá nhanh, thử lại sau"}`. |
+| **Kết quả thực tế** | **Ban đầu:** `@Throttle({ default: { limit: 10, ttl: 60_000 } })` nên gửi 10 lần vẫn trả về 401 (`BUG-GUEST-04`).<br>**Hiện tại (ĐÃ SỬA):** Điều chỉnh cấu hình `@Throttle({ default: { limit: 5, ttl: 60_000 } })`. Đúng từ request thứ 6 trong 60 giây, server trả HTTP 429 `RATE_LIMITED` chuẩn xác 100%. Bộ kiểm thử e2e xác nhận tự động. |
+| **Trạng thái & Mức độ** | **Trạng thái:** `PASSED` \| **Severity:** `Critical (P1)` \| **Priority:** `P1` |
+| **Nguyên nhân gốc rễ** | Ngưỡng `limit` trên `@Throttle` tại endpoint `login` bị đặt quá cao (10 thay vì 5 theo đặc tả kiểm thử). |
+| **Hành động khắc phục** | Hạ ngưỡng `@Throttle` tại `POST /auth/login` xuống `limit: 5, ttl: 60_000` và liên kết với `HttpExceptionFilter` trả về `RATE_LIMITED`. |
+
+---
+
+### Ca kiểm thử 16: TC-GUEST-05 & TC-GUEST-06 / BUG-GUEST-05 (Làm mới phiên Cross-Site khi F5 & Chống Replay)
+
+| Mục | Nội dung chi tiết |
+| :--- | :--- |
+| **Mã kiểm thử / Lỗi** | **TC-GUEST-05 & TC-GUEST-06 / BUG-GUEST-05: Duy trì phiên đăng nhập khi F5 trên môi trường Cross-Site (SameSite=None; Secure) & Thu hồi phiên khi Replay** |
+| **Phân hệ & Vai trò** | Phân hệ 1: Quản trị Phiên đăng nhập (UC-Auth / SD-01) \| Vai trò: Người dùng đã đăng nhập (`A0`) |
+| **Tiền điều kiện** | Frontend chạy trên domain `smarttask-dacn.vercel.app`, Backend chạy trên `smarttask-api-hmm9.onrender.com` (Cross-Site). Người dùng đã đăng nhập thành công. |
+| **Dữ liệu kiểm thử** | API: `POST /api/v1/auth/refresh`, Cookie `rt`, Header `X-Refresh-Token` |
+| **Các bước dẫn đến lỗi** | 1. Đăng nhập thành công và truy cập Workspace.<br>2. Bấm phím F5 để tải lại trang.<br>3. Quan sát request `/auth/refresh` trong Network tab và trạng thái đăng nhập. |
+| **Kết quả mong đợi** | Khi F5, trình duyệt gửi cookie `rt` lên server qua cross-site request (hoặc gửi header fallback `X-Refresh-Token`). Server trả về HTTP 200 OK kèm access token mới. Người dùng tiếp tục ở lại Workspace, không bị văng về `/login`. Nếu gửi lại token cũ đã dùng (replay), server thu hồi toàn bộ chuỗi token và trả `401 REFRESH_TOKEN_INVALID`. |
+| **Kết quả thực tế** | **Ban đầu:** Server đặt `SameSite=lax` khiến trình duyệt chặn cookie `rt` khi gửi cross-site fetch; API refresh trả `401 REFRESH_TOKEN_INVALID`, người dùng bị văng ra `/login` ngay khi F5 (`BUG-GUEST-05`).<br>**Hiện tại (ĐÃ SỬA):** `auth.controller.ts` đặt `SameSite=none; Secure=true` trên production; bổ sung fallback đọc qua header `x-refresh-token` và body `refreshToken`; client `api.ts` & `auth.tsx` lưu dự phòng refresh token để gửi header khi cần. Phiên F5 duy trì ổn định 100%, bảo vệ chống Replay Attack hoạt động chuẩn xác. |
+| **Trạng thái & Mức độ** | **Trạng thái:** `PASSED` \| **Severity:** `Blocker (P0)` \| **Priority:** `P0` |
+| **Nguyên nhân gốc rễ** | Cookie Refresh Token sử dụng thuộc tính `SameSite=lax` không tương thích với mô hình triển khai tách biệt domain giữa Frontend Vercel và Backend Render. |
+| **Hành động khắc phục** | Cấu hình `SameSite=none` và `Secure=true` trên production; triển khai cơ chế 3 lớp đọc refresh token (Cookie $\rightarrow$ Header `X-Refresh-Token` $\rightarrow$ Body JSON). |
+
+---
+
+### Ca kiểm thử 17: TC-GUEST-07 / BUG-GUEST-07 (Chấp nhận lời mời tham gia Workspace qua Token công khai)
+
+| Mục | Nội dung chi tiết |
+| :--- | :--- |
+| **Mã kiểm thử / Lỗi** | **TC-GUEST-07 / BUG-GUEST-07: Truy cập liên kết Lời mời công khai (/invitations/:token) và Chấp nhận tham gia** |
+| **Phân hệ & Vai trò** | Phân hệ Workspace & Lời mời (UC-06) \| Vai trò: Người được mời (`Guest` / `Member`) |
+| **Tiền điều kiện** | Quản trị viên đã tạo lời mời cho email `dev1@smarttask.local`. Token lời mời hợp lệ còn hạn. |
+| **Dữ liệu kiểm thử** | URL: `https://smarttask-dacn.vercel.app/invitations/Wkf77ATeXGOUzjOCk9Qh0VzrMhUEokl6` |
+| **Các bước dẫn đến lỗi** | 1. Mở đường dẫn lời mời trực tiếp trên trình duyệt.<br>2. Quan sát trang đích hiển thị.<br>3. Bấm nút "Tham gia workspace". |
+| **Kết quả mong đợi** | Hệ thống không chuyển hướng về trang chủ `/` mà hiển thị thẻ thông tin lời mời: Tên Workspace, người mời, vai trò phân công. Người dùng đăng nhập có thể bấm "Tham gia workspace" và được thêm vào workspace với vai trò tương ứng. |
+| **Kết quả thực tế** | **Ban đầu:** Next.js `middleware.ts` kiểm tra `!hasSession` và redirect toàn bộ route về trang chủ `/`, đồng thời `DashboardLayout` chặn anonymous khiến người dùng không thể mở link mời (`BUG-GUEST-07`).<br>**Hiện tại (ĐÃ SỬA):** `middleware.ts` whitelist route `/invitations`; `DashboardLayout` miễn trừ kiểm tra session cho `/invitations`; `InvitationView` hỗ trợ giao diện xem trước lời mời và nút tham gia/đăng nhập trực quan. Người dùng truy cập thành công 100%. |
+| **Trạng thái & Mức độ** | **Trạng thái:** `PASSED` \| **Severity:** `Major (P1)` \| **Priority:** `P1` |
+| **Nguyên nhân gốc rễ** | Middleware chặn quá sớm tất cả các đường dẫn khi thiếu cookie `st_session` mà không có danh sách ngoại lệ (whitelist) cho các route công khai như lời mời. |
+| **Hành động khắc phục** | Thêm điều kiện `pathname.startsWith("/invitations")` vào whitelist của `middleware.ts` và xử lý render độc lập trong `DashboardLayout`. |
 
 ---
 

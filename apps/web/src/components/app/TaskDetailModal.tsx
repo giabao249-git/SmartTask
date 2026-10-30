@@ -891,6 +891,55 @@ function DateField({
   );
 }
 
+/** Parse và hiển thị định dạng Markdown cơ bản (in đậm, in nghiêng, code, @mention) trong bình luận */
+function renderCommentBody(text: string): React.ReactNode {
+  if (!text) return null;
+  const re = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|@[a-zA-Z0-9_\u00C0-\u024F\u1EA0-\u1EF9]+(?:\s*\([^)]+\))?)/gu;
+  const parts: React.ReactNode[] = [];
+  let cur = 0;
+  let keyCounter = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > cur) {
+      parts.push(text.slice(cur, match.index));
+    }
+    const token = match[0];
+    if (token.startsWith("`") && token.endsWith("`") && token.length >= 2) {
+      parts.push(
+        <code key={`c-${keyCounter++}`} className="bg-muted px-1 py-0.5 rounded text-[11px] font-mono text-foreground">
+          {token.slice(1, -1)}
+        </code>
+      );
+    } else if (token.startsWith("**") && token.endsWith("**") && token.length >= 4) {
+      parts.push(
+        <strong key={`b-${keyCounter++}`} className="font-bold text-foreground">
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else if (token.startsWith("*") && token.endsWith("*") && token.length >= 2) {
+      parts.push(
+        <em key={`i-${keyCounter++}`} className="italic">
+          {token.slice(1, -1)}
+        </em>
+      );
+    } else if (token.startsWith("@")) {
+      parts.push(
+        <span key={`m-${keyCounter++}`} className="font-semibold text-primary">
+          {token}
+        </span>
+      );
+    } else {
+      parts.push(token);
+    }
+    cur = re.lastIndex;
+  }
+  if (cur < text.length) {
+    parts.push(text.slice(cur));
+  }
+  return parts;
+}
+
 /** Bình luận + @mention: gõ "@" → gợi ý từ GET /projects/:id/members/suggest (docs 05 §6 — người chọn tường minh). */
 function CommentsPanel({ taskId, project }: { taskId: string; project: ProjectDetail }) {
   const comments = useComments(taskId);
@@ -927,7 +976,7 @@ function CommentsPanel({ taskId, project }: { taskId: string; project: ProjectDe
                     </Button>
                   )}
                 </div>
-                <p className="text-xs whitespace-pre-wrap leading-relaxed">{c.body}</p>
+                <p className="text-xs whitespace-pre-wrap leading-relaxed">{renderCommentBody(c.body)}</p>
               </div>
             </div>
           ))}
