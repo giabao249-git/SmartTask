@@ -42,15 +42,20 @@ async function bootstrap(): Promise<void> {
     .addBearerAuth()
     .addCookieAuth('rt')
     .build();
-  SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, doc), {
+  const document = SwaggerModule.createDocument(app, doc);
+  SwaggerModule.setup('docs', app, document, {
     jsonDocumentUrl: 'docs-json',
+    swaggerOptions: { persistAuthorization: true },
+  });
+  SwaggerModule.setup('api/docs', app, document, {
+    jsonDocumentUrl: 'api/docs-json',
     swaggerOptions: { persistAuthorization: true },
   });
 
   const port = config.get('PORT', { infer: true });
   await app.listen(port);
   Logger.log(
-    `API chạy tại http://localhost:${port}/${API_PREFIX} · Swagger: http://localhost:${port}/docs`,
+    `API chạy tại http://localhost:${port}/${API_PREFIX} · Swagger: http://localhost:${port}/docs (hoặc /api/docs)`,
     'Bootstrap',
   );
 }
