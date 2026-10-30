@@ -182,7 +182,7 @@ export function AdminConsoleView() {
 
         <div className="flex items-center gap-2 shrink-0">
           {telemetry?.maintenance?.mode !== "DISABLED" && telemetry?.maintenance?.mode && (
-            <Badge variant="warning" className="text-[10px] font-mono">
+            <Badge variant="warning" className="text-xs font-medium">
               ĐANG BẢO TRÌ · {telemetry.maintenance.mode}
             </Badge>
           )}

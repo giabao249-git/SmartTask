@@ -121,12 +121,14 @@ export function AppShell({ children }: AppShellProps) {
   const [bellOpen, setBellOpen] = React.useState(false);
   const auth = useAuth();
 
-  // Read pinned state from localStorage on client
+  // Read pinned state from localStorage on client, default to pinned on desktop
   React.useEffect(() => {
     try {
       const saved = localStorage.getItem("st.sidebar.pinned");
-      if (saved === "true") {
-        setIsPinned(true);
+      if (saved === null) {
+        setIsPinned(window.innerWidth >= 1024);
+      } else {
+        setIsPinned(saved === "true");
       }
     } catch {}
   }, []);
@@ -328,7 +330,7 @@ export function AppShell({ children }: AppShellProps) {
       ...(currentUser?.isSuperAdmin
         ? [
             {
-              title: "Quản trị Nền tảng (Platform)",
+              title: "Quản trị nền tảng",
               href: "/admin",
               icon: ShieldAlert,
               badge: "Admin",
@@ -498,7 +500,7 @@ export function AppShell({ children }: AppShellProps) {
     <div
       className={cn(
         "flex min-h-screen w-full bg-background text-foreground transition-[padding] duration-200 ease-in-out",
-        isPinned ? "md:pl-[260px]" : "md:pl-14"
+        isPinned ? "md:pl-[272px]" : "md:pl-14"
       )}
     >
       {/* Bảng lệnh Ctrl/Super + K */}
@@ -624,7 +626,7 @@ export function AppShell({ children }: AppShellProps) {
         onBlur={handleBlur}
         className={cn(
           "fixed top-0 bottom-0 left-0 z-50 hidden md:flex flex-col border-r border-border bg-card/95 backdrop-blur-md transition-all duration-200 ease-in-out",
-          isPinned ? "w-[260px] shadow-none" : isHovered ? "w-[260px] shadow-2xl" : "w-14 shadow-none"
+          isPinned ? "w-[272px] shadow-none" : isHovered ? "w-[272px] shadow-2xl" : "w-14 shadow-none"
         )}
       >
         {/* Workspace Brand / Header */}
@@ -639,7 +641,7 @@ export function AppShell({ children }: AppShellProps) {
           <div
             className={cn(
               "flex items-center justify-between min-w-0 flex-1 ml-2.5 overflow-hidden whitespace-nowrap transition-all duration-200",
-              isExpanded ? "opacity-100 max-w-[190px]" : "opacity-0 max-w-0 pointer-events-none"
+              isExpanded ? "opacity-100 flex-1" : "opacity-0 w-0 pointer-events-none"
             )}
           >
             <div className="flex flex-col truncate flex-1 min-w-0">
@@ -655,7 +657,7 @@ export function AppShell({ children }: AppShellProps) {
               size="icon"
               onClick={togglePin}
               className={cn(
-                "h-7 w-7 text-muted-foreground hover:text-foreground shrink-0 ml-1",
+                "h-7 w-7 text-muted-foreground hover:text-foreground shrink-0 ml-1.5",
                 isPinned && "text-primary hover:text-primary"
               )}
               aria-label={isPinned ? `Bỏ ghim sidebar (${mod}+B)` : `Ghim sidebar (${mod}+B)`}
@@ -690,7 +692,7 @@ export function AppShell({ children }: AppShellProps) {
                   <div
                     className={cn(
                       "flex items-center justify-between min-w-0 flex-1 overflow-hidden whitespace-nowrap transition-all duration-200",
-                      isExpanded ? "opacity-100 max-w-[170px]" : "opacity-0 max-w-0 pointer-events-none"
+                      isExpanded ? "opacity-100 flex-1" : "opacity-0 w-0 pointer-events-none"
                     )}
                   >
                     <span className="truncate flex-1 text-left text-xs">Trợ lý AI</span>
@@ -723,7 +725,7 @@ export function AppShell({ children }: AppShellProps) {
                   <div
                     className={cn(
                       "flex flex-col min-w-0 flex-1 overflow-hidden whitespace-nowrap transition-all duration-200",
-                      isExpanded ? "opacity-100 max-w-[170px]" : "opacity-0 max-w-0 pointer-events-none"
+                      isExpanded ? "opacity-100 flex-1" : "opacity-0 w-0 pointer-events-none"
                     )}
                   >
                     <span className="text-xs font-semibold text-foreground truncate">
@@ -731,8 +733,8 @@ export function AppShell({ children }: AppShellProps) {
                     </span>
                     <span className="text-xs text-muted-foreground truncate">
                       {projectCtx
-                        ? `${workspace?.role ?? "MEMBER"} (WS) · ${projectCtx.myRole ?? "MEMBER"} (${projectCtx.key})`
-                        : `${workspace?.role ?? ""}${workspace ? ` · ${workspace.name}` : ""}`}
+                        ? `${projectCtx.myRole ?? workspace?.role ?? "Thành viên"} · ${projectCtx.key}`
+                        : `${workspace?.name ?? "SmartTask"}${workspace?.role ? ` · ${workspace.role}` : ""}`}
                     </span>
                   </div>
                 </div>
@@ -758,7 +760,7 @@ export function AppShell({ children }: AppShellProps) {
 
       {/* Mobile Drawer Sidebar (< 768px) */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-[260px] p-0 flex flex-col">
+        <SheetContent side="left" className="w-[280px] p-0 flex flex-col">
           <SheetHeader className="h-14 px-3 border-b border-border/60 flex flex-row items-center justify-between space-y-0">
             <div className="flex items-center gap-2 overflow-hidden">
               <BrandIcon size={32} />
@@ -807,8 +809,8 @@ export function AppShell({ children }: AppShellProps) {
                 </span>
                 <span className="text-xs text-muted-foreground truncate">
                   {projectCtx
-                    ? `${workspace?.role ?? "MEMBER"} (WS) · ${projectCtx.myRole ?? "MEMBER"} (${projectCtx.key})`
-                    : `${workspace?.role ?? ""}${workspace ? ` · ${workspace.name}` : ""}`}
+                    ? `${projectCtx.myRole ?? workspace?.role ?? "Thành viên"} · ${projectCtx.key}`
+                    : `${workspace?.name ?? "SmartTask"}${workspace?.role ? ` · ${workspace.role}` : ""}`}
                 </span>
               </div>
             </div>
@@ -1071,7 +1073,7 @@ export function WorkspaceSwitcher({ onWorkspaceChange, className }: WorkspaceSwi
           variant="ghost"
           size="sm"
           className={cn(
-            "h-8 px-2 gap-1.5 text-xs hover:bg-muted/80 focus-visible:ring-1 max-w-[170px] sm:max-w-[210px] justify-between border border-border/50 bg-background/60",
+            "h-8 px-2 gap-1.5 text-xs hover:bg-muted/80 focus-visible:ring-1 max-w-[190px] sm:max-w-[240px] justify-between border border-border/50 bg-background/60",
             className
           )}
         >
