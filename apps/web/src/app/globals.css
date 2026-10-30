@@ -35,11 +35,6 @@
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
   }
-  @media (min-width: 768px) {
-    :root {
-      font-size: 16.5px;
-    }
-  }
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
@@ -115,21 +110,8 @@ body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   line-height: 1.5;
-}
-
-/* Chuẩn hoá hệ thống Font Size tối thiểu theo WCAG 2.1 AA & Modern Web Guidance:
-   Nâng cấp các chữ mô tả phụ không bị quá bé (10px, 11px) lên mức dễ đọc (12px, 13px) */
-@layer utilities {
-  .text-\[10px\] {
-    font-size: 0.75rem !important; /* ~12.5px */
-    line-height: 1.125rem !important;
-  }
-  .text-\[11px\] {
-    font-size: 0.8125rem !important; /* ~13.5px */
-    line-height: 1.175rem !important;
-  }
 }
 
 /* Kết quả của Trợ lý AI hiện dần từ trên xuống, mờ → rõ (kiểu Gemini). Tắt khi người dùng chọn giảm chuyển động. */

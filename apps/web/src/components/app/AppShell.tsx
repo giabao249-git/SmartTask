@@ -82,6 +82,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+interface ShellNavItem {
+  title: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: string;
+  badgeVariant?: "default" | "secondary" | "destructive" | "outline" | "info" | "success" | "warning";
+  dotColor?: string;
+}
+
 interface AppShellProps {
   children: React.ReactNode;
 }
@@ -250,7 +259,7 @@ export function AppShell({ children }: AppShellProps) {
     projectCtx ? projectCtx.canManage : isWorkspaceAdmin
   );
 
-  const navItems = React.useMemo(
+  const navItems: ShellNavItem[] = React.useMemo(
     () =>
       projectBase
         ? [
@@ -258,15 +267,11 @@ export function AppShell({ children }: AppShellProps) {
               title: "Dashboard",
               href: `${projectBase}/dashboard`,
               icon: LayoutDashboard,
-              badge: "Sprint & Báo cáo",
-              badgeVariant: "secondary" as const,
             },
             {
               title: "Công việc",
               href: `${projectBase}/work`,
               icon: Kanban,
-              badge: "4 cách xem",
-              badgeVariant: "secondary" as const,
             },
             {
               title: "Nhân sự & kỹ năng",
@@ -277,8 +282,6 @@ export function AppShell({ children }: AppShellProps) {
               title: "Trợ lý AI",
               href: `${projectBase}/assistant`,
               icon: Bot,
-              badge: "Chat & Nháp",
-              badgeVariant: "info" as const,
               dotColor: "bg-info",
             },
             ...(canManageProject
@@ -295,7 +298,7 @@ export function AppShell({ children }: AppShellProps) {
     [projectBase, canManageProject]
   );
 
-  const secondaryNavItems = React.useMemo(
+  const secondaryNavItems: ShellNavItem[] = React.useMemo(
     () => [
       {
         title: "Không gian làm việc",
@@ -382,15 +385,15 @@ export function AppShell({ children }: AppShellProps) {
                 <div
                   className={cn(
                     "flex items-center gap-2 min-w-0 flex-1 ml-2.5 overflow-hidden whitespace-nowrap transition-all duration-200",
-                    expanded ? "opacity-100 max-w-[180px]" : "opacity-0 max-w-0 pointer-events-none"
+                    expanded ? "opacity-100" : "opacity-0 max-w-0 pointer-events-none"
                   )}
                 >
-                  <span className="truncate flex-1">{item.title}</span>
+                  <span className="truncate flex-1 text-sm">{item.title}</span>
                   {item.badge && (
                     <Badge
                       variant={item.badgeVariant || "secondary"}
                       className={cn(
-                        "text-[11px] font-medium tracking-wide px-1.5 py-0 h-4.5 font-mono shrink-0",
+                        "text-[11px] font-medium px-1.5 py-0 h-4.5 shrink-0",
                         isActive && "bg-primary-foreground/20 text-primary-foreground border-transparent"
                       )}
                     >
@@ -410,7 +413,7 @@ export function AppShell({ children }: AppShellProps) {
               <TooltipContent side="right" className="flex items-center gap-1.5 text-xs font-medium">
                 <span>{item.title}</span>
                 {item.badge && (
-                  <Badge variant={item.badgeVariant || "secondary"} className="text-[11px] font-medium px-1.5 py-0 font-mono">
+                  <Badge variant={item.badgeVariant || "secondary"} className="text-[11px] font-medium px-1.5 py-0">
                     {item.badge}
                   </Badge>
                 )}
@@ -454,14 +457,14 @@ export function AppShell({ children }: AppShellProps) {
                 <div
                   className={cn(
                     "flex items-center gap-2 min-w-0 flex-1 ml-2.5 overflow-hidden whitespace-nowrap transition-all duration-200",
-                    expanded ? "opacity-100 max-w-[180px]" : "opacity-0 max-w-0 pointer-events-none"
+                    expanded ? "opacity-100" : "opacity-0 max-w-0 pointer-events-none"
                   )}
                 >
-                  <span className="truncate flex-1">{item.title}</span>
+                  <span className="truncate flex-1 text-sm">{item.title}</span>
                   {item.badge && (
                     <Badge
                       variant={item.badgeVariant || "secondary"}
-                      className="text-[11px] font-medium tracking-wide px-1.5 py-0 h-4.5 font-mono shrink-0"
+                      className="text-[11px] font-medium px-1.5 py-0 h-4.5 shrink-0"
                     >
                       {item.badge}
                     </Badge>
@@ -479,7 +482,7 @@ export function AppShell({ children }: AppShellProps) {
               <TooltipContent side="right" className="flex items-center gap-1.5 text-xs font-medium">
                 <span>{item.title}</span>
                 {item.badge && (
-                  <Badge variant={item.badgeVariant || "secondary"} className="text-[11px] font-medium px-1.5 py-0 font-mono">
+                  <Badge variant={item.badgeVariant || "secondary"} className="text-[11px] font-medium px-1.5 py-0">
                     {item.badge}
                   </Badge>
                 )}
@@ -850,9 +853,9 @@ export function AppShell({ children }: AppShellProps) {
                   <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/60 hidden sm:inline" />
                   {/* Huy hiệu sprint dẫn tới trang Dashboard (mặc định mở sprint đang chạy) */}
                   <Link href={`${projectBase}/dashboard`} className="hidden sm:inline-flex" aria-label="Mở báo cáo Sprint trên Dashboard">
-                    <Badge variant="outline" className="text-[11px] font-mono font-medium truncate max-w-[130px] sm:max-w-none hover:bg-muted">
+                    <Badge variant="outline" className="text-xs font-normal text-muted-foreground bg-muted/40 border-border/70 hover:bg-muted hover:text-foreground transition-colors truncate max-w-[140px] sm:max-w-none">
                       {projectCtx.activeSprint
-                        ? `${projectCtx.activeSprint.name}`
+                        ? projectCtx.activeSprint.name
                         : "Chưa có sprint"}
                     </Badge>
                   </Link>
