@@ -1,6 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { WorkspaceLifecycleStatus } from '@prisma/client';
+import { AiCircuitBreakerService } from '../ai/ai-circuit-breaker.service';
+import { TokenRevocationService } from '../auth/token-revocation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminAuditService } from './admin-audit.service';
 import { AdminService } from './admin.service';
@@ -77,6 +79,32 @@ describe('AdminService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: ConfigService, useValue: mockConfig },
         PlatformStateService,
+        {
+          provide: TokenRevocationService,
+          useValue: {
+            revokeUser: jest.fn().mockResolvedValue(undefined),
+            revokeAllForUser: jest.fn().mockResolvedValue(undefined),
+            banUser: jest.fn().mockResolvedValue(undefined),
+            unbanUser: jest.fn().mockResolvedValue(undefined),
+            checkToken: jest.fn().mockResolvedValue('OK'),
+          },
+        },
+        {
+          provide: AiCircuitBreakerService,
+          useValue: {
+            getStatus: jest.fn().mockResolvedValue({
+              isOpen: false,
+              currentCost: 10,
+              budgetLimit: 100,
+              currency: 'USD',
+              resetsAt: new Date().toISOString(),
+            }),
+            getBudget: jest.fn().mockResolvedValue(100),
+            setBudget: jest.fn().mockResolvedValue(undefined),
+            setSimulatedTrip: jest.fn(),
+            assertCircuitBreaker: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compile();
 

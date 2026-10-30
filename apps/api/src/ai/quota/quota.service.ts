@@ -5,6 +5,7 @@ import { AppError } from '../../common/app-error';
 import type { Env } from '../../config/env.schema';
 import { PrismaService } from '../../prisma/prisma.service';
 import { mergeSettings } from '../../workspaces/workspace-settings';
+import { AiCircuitBreakerService } from '../ai-circuit-breaker.service';
 
 export interface QuotaStatus {
   used: number;
@@ -26,6 +27,7 @@ export class QuotaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService<Env, true>,
+    private readonly circuitBreaker: AiCircuitBreakerService,
   ) {}
 
   async status(
@@ -73,6 +75,9 @@ export class QuotaService {
     purpose: Purpose,
     endpoint: string,
   ): Promise<QuotaStatus> {
+    // 1. Kiểm tra ngắt mạch chi phí AI toàn nền tảng ($100/ngày)
+    await this.circuitBreaker.assertCircuitBreaker();
+
     const ws = await this.prisma.workspace.findUniqueOrThrow({
       where: { id: workspaceId },
       select: { settings: true },

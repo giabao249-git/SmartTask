@@ -50,6 +50,20 @@ export class UpdateUserPlatformRoleDto {
   reason: string;
 }
 
+export class UpdateUserStatusDto {
+  @ApiProperty({
+    description:
+      'Trạng thái hoạt động (true: mở khóa, false: khóa toàn cục / Global Ban)',
+  })
+  @IsBoolean()
+  isActive: boolean;
+
+  @ApiPropertyOptional({ description: 'Lý do khóa / mở khóa tài khoản' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
 export type MaintenanceLevel = 'DISABLED' | 'READ_ONLY' | 'FULL';
 
 export class SetMaintenanceModeDto {
@@ -152,3 +166,30 @@ export class QueryUsersDto {
   @Min(1)
   page?: number = 1;
 }
+
+export class SetAiCircuitBreakerDto {
+  @ApiPropertyOptional({
+    description:
+      'Ngưỡng ngân sách chi phí AI theo ngày (USD), mặc định 100',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  dailyBudgetUsd?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Mô phỏng ngắt mạch phục vụ kiểm thử (true: ngắt, false: reset)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  simulateTrip?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Lý do thay đổi cấu hình ngắt mạch',
+  })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+

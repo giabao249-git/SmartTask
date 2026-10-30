@@ -188,6 +188,30 @@ export class RealtimeGateway
     this.server?.to(roomOfWorkspace(workspaceId)).emit(event, payload);
   }
 
+  /**
+   * Ngắt toàn bộ kết nối phòng workspace khi bị đình chỉ (Cascade Suspension - TC-ADMIN-01)
+   * Phát sự kiện workspace:suspended và ngắt kết nối các socket trong room với mã disconnect 4403
+   */
+  disconnectWorkspaceRoom(
+    workspaceId: string,
+    code = 4403,
+    reason?: string,
+  ): void {
+    const room = roomOfWorkspace(workspaceId);
+    this.logger.warn(
+      `[Cascade Suspension] Đình chỉ workspace ${workspaceId}: ngắt kết nối socket phòng ${room} với mã ${code}`,
+    );
+    if (this.server) {
+      this.server.to(room).emit('workspace:suspended', {
+        workspaceId,
+        code: 'WORKSPACE_SUSPENDED',
+        disconnectCode: code,
+        reason: reason ?? 'Workspace đã bị đình chỉ hoạt động bởi Ban Quản trị',
+      });
+      this.server.in(room).disconnectSockets(true);
+    }
+  }
+
   toUser(userId: string, event: string, payload: unknown): void {
     this.server?.to(roomOfUser(userId)).emit(event, payload);
   }

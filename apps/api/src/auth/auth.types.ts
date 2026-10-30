@@ -1,6 +1,7 @@
 export interface AccessPayload {
   sub: string;
   email: string;
+  iat?: number;
 }
 
 export interface RefreshPayload {

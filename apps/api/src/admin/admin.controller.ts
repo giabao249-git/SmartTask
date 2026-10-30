@@ -27,8 +27,10 @@ import {
   CreateSupportSessionDto,
   QueryUsersDto,
   QueryWorkspacesDto,
+  SetAiCircuitBreakerDto,
   SetMaintenanceModeDto,
   UpdateUserPlatformRoleDto,
+  UpdateUserStatusDto,
   UpdateWorkspaceStatusDto,
 } from './dto/admin.dto';
 
@@ -93,6 +95,21 @@ export class AdminController {
     return this.adminService.updateUserPlatformRole(id, dto, user, ip, ua);
   }
 
+  @Patch('users/:id/status')
+  @ApiOperation({
+    summary: 'Khóa tài khoản Người dùng Toàn cục (Global Ban) hoặc Mở khóa',
+  })
+  @RequirePlatformRole('ROOT_ADMIN', 'SECURITY_AUDITOR')
+  updateUserStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUserStatusDto,
+    @CurrentUser() user: JwtUser,
+    @Ip() ip?: string,
+    @Headers('user-agent') ua?: string,
+  ) {
+    return this.adminService.updateUserStatus(id, dto, user, ip, ua);
+  }
+
   @Post('users/:id/revoke-sessions')
   @ApiOperation({
     summary: 'Thu hồi toàn bộ phiên đăng nhập của người dùng (Kill switch)',
@@ -113,6 +130,30 @@ export class AdminController {
   getAiCosts(@Query('days') days?: string) {
     const daysNum = days ? parseInt(days, 10) : 30;
     return this.adminService.getAiFinOpsCosts(daysNum);
+  }
+
+  @Get('ai/circuit-breaker')
+  @ApiOperation({
+    summary:
+      'Xem trạng thái ngắt mạch Chi phí AI FinOps toàn nền tảng (ngưỡng $100/ngày)',
+  })
+  @RequirePlatformRole('ROOT_ADMIN', 'FINOPS_OPERATOR')
+  getAiCircuitBreaker() {
+    return this.adminService.getAiCircuitBreakerStatus();
+  }
+
+  @Post('ai/circuit-breaker')
+  @ApiOperation({
+    summary: 'Cấu hình ngưỡng chi phí AI FinOps hoặc mô phỏng ngắt mạch',
+  })
+  @RequirePlatformRole('ROOT_ADMIN', 'FINOPS_OPERATOR')
+  setAiCircuitBreaker(
+    @Body() dto: SetAiCircuitBreakerDto,
+    @CurrentUser() user: JwtUser,
+    @Ip() ip?: string,
+    @Headers('user-agent') ua?: string,
+  ) {
+    return this.adminService.setAiCircuitBreaker(dto, user, ip, ua);
   }
 
   @Get('health/telemetry')

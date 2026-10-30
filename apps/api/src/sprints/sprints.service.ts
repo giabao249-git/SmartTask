@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, SprintStatus } from '@prisma/client';
+import * as crypto from 'crypto';
 import { ProjectAccessService } from '../common/access/project-access.service';
 import { AppError } from '../common/app-error';
 import {
@@ -187,7 +188,7 @@ export class SprintsService {
     }
   }
 
-  /** Đóng sprint: việc chưa xong về backlog hoặc sang sprint khác (PLANNED/ACTIVE cùng dự án). */
+  /** Đóng sprint: việc chưa xong về backlog hoặc sang sprint khác (PLANNED/ACTIVE cùng dự án). Chống bấm lặp bằng Idempotency-Key. */
   async close(
     userId: string,
     sprintId: string,
@@ -196,36 +197,24 @@ export class SprintsService {
   ) {
     const s = await this.load(sprintId);
     await this.access.assertManage(userId, s.projectId);
-    if (s.status === SprintStatus.CLOSED && idempotencyKey) {
-      // Lần bấm lặp với cùng khoá: trả đúng kết quả lần đầu (nhật ký sprint.closed giữ khoá + việc đã chuyển)
-      const logs = await this.prisma.activityLog.findMany({
-        where: { projectId: s.projectId, action: 'sprint.closed' },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-        select: { diff: true },
+
+    const idemKey = idempotencyKey
+      ? `idem_sp_${crypto.createHash('sha256').update(`${sprintId}:${idempotencyKey}`).digest('hex').slice(0, 50)}`
+      : null;
+
+    if (idemKey) {
+      const cached = await this.prisma.platformSetting.findUnique({
+        where: { key: idemKey },
       });
-      const hit = logs
-        .map(
-          (l) =>
-            (l.diff ?? {}) as {
-              sprintId?: string;
-              idempotencyKey?: string;
-              movedTaskIds?: string[];
-              movedTo?: string | null;
-            },
-        )
-        .find(
-          (d) => d.sprintId === sprintId && d.idempotencyKey === idempotencyKey,
-        );
-      if (hit)
-        return {
-          ...s,
-          movedTaskIds: hit.movedTaskIds ?? [],
-          movedTo: hit.movedTo ?? 'backlog',
-        };
+      if (cached?.value) {
+        return cached.value as any;
+      }
     }
-    if (s.status !== SprintStatus.ACTIVE)
+
+    if (s.status === SprintStatus.CLOSED && !idemKey) {
       throw new AppError('SPRINT_NOT_ACTIVE', HttpStatus.CONFLICT);
+    }
+
     let targetSprintId: string | null = null;
     if (dto.moveOpenTo !== 'backlog') {
       const target = await this.prisma.sprint.findFirst({
@@ -239,26 +228,106 @@ export class SprintsService {
       if (!target) throw AppError.notFound({ moveOpenTo: dto.moveOpenTo });
       targetSprintId = target.id;
     }
-    const movedTaskIds = await this.prisma.$transaction(async (tx) => {
-      // Chụp số cuối TRƯỚC khi chuyển việc dở — sau bước này sprint không còn giữ chúng nữa
-      await this.forecast.snapshotSprint(sprintId, new Date(), tx);
-      const open = await tx.task.findMany({
-        where: { sprintId, deletedAt: null, completedAt: null },
-        select: { id: true },
-      });
-      const ids = open.map((t) => t.id);
-      if (ids.length) {
-        await tx.task.updateMany({
-          where: { id: { in: ids } },
-          data: { sprintId: targetSprintId, version: { increment: 1 } },
+
+    const { closedSprint, movedTaskIds, alreadyHandled } =
+      await this.prisma.$transaction(async (tx) => {
+        // 1. Kiểm tra lại idempotency trong transaction (tránh race condition giữa các request đồng thời)
+        if (idemKey) {
+          const cachedInTx = await tx.platformSetting.findUnique({
+            where: { key: idemKey },
+          });
+          if (cachedInTx?.value) {
+            return {
+              closedSprint: cachedInTx.value as any,
+              movedTaskIds: [],
+              alreadyHandled: true,
+            };
+          }
+        }
+
+        // 2. Lock dòng Sprint bằng FOR UPDATE để serialize các request đóng cùng lúc
+        const rows = await tx.$queryRaw<
+          Array<{ id: string; status: SprintStatus }>
+        >`
+          SELECT id, status FROM sprints WHERE id = ${sprintId}::uuid FOR UPDATE
+        `;
+        const lockedSprint = rows[0];
+        if (!lockedSprint) throw AppError.notFound({ sprintId });
+
+        if (lockedSprint.status === SprintStatus.CLOSED) {
+          if (idemKey) {
+            const cachedInTx = await tx.platformSetting.findUnique({
+              where: { key: idemKey },
+            });
+            if (cachedInTx?.value) {
+              return {
+                closedSprint: cachedInTx.value as any,
+                movedTaskIds: [],
+                alreadyHandled: true,
+              };
+            }
+          }
+          throw new AppError('SPRINT_NOT_ACTIVE', HttpStatus.CONFLICT);
+        }
+
+        if (lockedSprint.status !== SprintStatus.ACTIVE) {
+          throw new AppError('SPRINT_NOT_ACTIVE', HttpStatus.CONFLICT);
+        }
+
+        // Chụp số cuối TRƯỚC khi chuyển việc dở — sau bước này sprint không còn giữ chúng nữa
+        await this.forecast.snapshotSprint(sprintId, new Date(), tx);
+        const open = await tx.task.findMany({
+          where: { sprintId, deletedAt: null, completedAt: null },
+          select: { id: true },
         });
-      }
-      await tx.sprint.update({
-        where: { id: sprintId },
-        data: { status: SprintStatus.CLOSED, closedAt: new Date() },
+        const ids = open.map((t) => t.id);
+        if (ids.length) {
+          await tx.task.updateMany({
+            where: { id: { in: ids } },
+            data: { sprintId: targetSprintId, version: { increment: 1 } },
+          });
+        }
+        await tx.sprint.update({
+          where: { id: sprintId },
+          data: { status: SprintStatus.CLOSED, closedAt: new Date() },
+        });
+
+        const updated = await tx.sprint.findUniqueOrThrow({
+          where: { id: sprintId },
+          select: SPRINT_SELECT,
+        });
+        const finalResult = {
+          ...updated,
+          movedTaskIds: ids,
+          movedTo: targetSprintId ?? 'backlog',
+        };
+
+        if (idemKey) {
+          await tx.platformSetting.upsert({
+            where: { key: idemKey },
+            create: {
+              key: idemKey,
+              value: finalResult as unknown as Prisma.InputJsonValue,
+              updatedBy: userId,
+            },
+            update: {
+              value: finalResult as unknown as Prisma.InputJsonValue,
+              updatedBy: userId,
+            },
+          });
+        }
+
+        return {
+          closedSprint: finalResult,
+          movedTaskIds: ids,
+          alreadyHandled: false,
+        };
       });
-      return ids;
-    });
+
+    if (alreadyHandled) {
+      return closedSprint;
+    }
+
     this.emit(SPRINT_EVENTS.closed, {
       projectId: s.projectId,
       sprintId,
@@ -268,11 +337,8 @@ export class SprintsService {
       idempotencyKey,
       at: new Date(),
     });
-    const closed = await this.prisma.sprint.findUniqueOrThrow({
-      where: { id: sprintId },
-      select: SPRINT_SELECT,
-    });
-    return { ...closed, movedTaskIds, movedTo: targetSprintId ?? 'backlog' };
+
+    return closedSprint;
   }
 
   /** Kéo task từ backlog/sprint khác vào sprint này (chỉ task gốc; subtask theo cha). */

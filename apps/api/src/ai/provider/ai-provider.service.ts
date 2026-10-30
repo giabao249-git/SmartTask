@@ -20,6 +20,7 @@ import {
 import { GeminiPromptCacheService } from './gemini-prompt-cache.service';
 import { ollamaBody, ollamaChatUrl, readOllama } from './ollama';
 import { RESPONSE_SCHEMAS } from './response-schemas';
+import { AiCircuitBreakerService } from '../ai-circuit-breaker.service';
 
 export interface AiCallInput {
   config: ResolvedAiConfig;
@@ -80,9 +81,13 @@ export class AiProviderService {
     private readonly prisma: PrismaService,
     private readonly promptCache: GeminiPromptCacheService,
     private readonly config: ConfigService<Env, true>,
+    private readonly circuitBreaker: AiCircuitBreakerService,
   ) {}
 
   async call(input: AiCallInput): Promise<AiCallResult> {
+    // Chặn request trước khi đến AI Provider nếu chạm ngưỡng ngân sách toàn nền tảng
+    await this.circuitBreaker.assertCircuitBreaker();
+
     const { config } = input;
     const started = Date.now();
     let lastError: unknown;

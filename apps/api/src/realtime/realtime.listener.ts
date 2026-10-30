@@ -196,4 +196,13 @@ export class RealtimeListener {
       this.gateway.toWorkspace(p.workspaceId, 'audit:logged', p.log);
     }
   }
+
+  /**
+   * Cascade Suspension (TC-ADMIN-01): Khi workspace bị đình chỉ,
+   * ngắt kết nối WebSocket của toàn bộ phòng workspace với mã 4403
+   */
+  @OnEvent('workspace.suspended')
+  onWorkspaceSuspended(p: { workspaceId: string; reason?: string }): void {
+    this.gateway.disconnectWorkspaceRoom(p.workspaceId, 4403, p.reason);
+  }
 }

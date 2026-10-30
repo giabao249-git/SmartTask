@@ -16,6 +16,7 @@ export const ERROR_CODES = {
   INVALID_CREDENTIALS: 'Email hoặc mật khẩu không đúng',
   ACCOUNT_LOCKED: 'Tài khoản đã bị khoá',
   REFRESH_TOKEN_INVALID: 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn',
+  SESSION_REVOKED: 'Phiên đăng nhập đã bị thu hồi',
   PASSWORD_MISMATCH: 'Mật khẩu hiện tại không đúng',
   // Workspace & thành viên
   WORKSPACE_SLUG_TAKEN: 'Tên rút gọn workspace đã tồn tại',

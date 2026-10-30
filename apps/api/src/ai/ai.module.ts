@@ -4,6 +4,7 @@ import { SprintsModule } from '../sprints/sprints.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { WorkloadModule } from '../workload/workload.module';
 import { AiAdminController } from './ai-admin.controller';
+import { AiCircuitBreakerService } from './ai-circuit-breaker.service';
 import { AiConfigService } from './ai-config/ai-config.service';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
@@ -36,6 +37,7 @@ import { ActionValidatorService } from './validator/action-validator.service';
   ],
   providers: [
     AiConfigService,
+    AiCircuitBreakerService,
     GeminiPromptCacheService,
     AiProviderService,
     ContextBuilderService,
@@ -48,6 +50,6 @@ import { ActionValidatorService } from './validator/action-validator.service';
     IdentityService,
     AiQueryService,
   ],
-  exports: [AiConfigService, AiProviderService],
+  exports: [AiConfigService, AiProviderService, AiCircuitBreakerService],
 })
 export class AiModule {}

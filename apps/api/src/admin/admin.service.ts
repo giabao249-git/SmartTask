@@ -1,5 +1,6 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AiLogStatus,
   Prisma,
@@ -11,14 +12,18 @@ import { AppError } from '../common/app-error';
 import type { JwtUser } from '../common/decorators/current-user.decorator';
 import type { Env } from '../config/env.schema';
 import { PrismaService } from '../prisma/prisma.service';
+import { AiCircuitBreakerService } from '../ai/ai-circuit-breaker.service';
+import { TokenRevocationService } from '../auth/token-revocation.service';
 import { AdminAuditService } from './admin-audit.service';
 import { PlatformStateService } from './platform-state.service';
 import type {
   CreateSupportSessionDto,
   QueryUsersDto,
   QueryWorkspacesDto,
+  SetAiCircuitBreakerDto,
   SetMaintenanceModeDto,
   UpdateUserPlatformRoleDto,
+  UpdateUserStatusDto,
   UpdateWorkspaceStatusDto,
 } from './dto/admin.dto';
 
@@ -31,6 +36,9 @@ export class AdminService {
     private readonly config: ConfigService<Env, true>,
     private readonly audit: AdminAuditService,
     private readonly platformState: PlatformStateService,
+    private readonly tokenRevocation: TokenRevocationService,
+    private readonly aiCircuitBreaker: AiCircuitBreakerService,
+    @Optional() private readonly eventEmitter?: EventEmitter2,
   ) {}
 
   /** Thống kê Tổng quan Nền tảng (Mission Control KPIs) */
@@ -215,6 +223,14 @@ export class AdminService {
       suspendReason: updated.suspendReason,
     };
 
+    if (dto.status === WorkspaceLifecycleStatus.SOFT_SUSPENDED) {
+      this.eventEmitter?.emit('workspace.suspended', {
+        workspaceId: id,
+        status: dto.status,
+        reason: dto.reason,
+      });
+    }
+
     await this.audit.log({
       actorId: actor.id,
       actorEmail: actor.email,
@@ -391,6 +407,8 @@ export class AdminService {
       where: { userId },
     });
 
+    await this.tokenRevocation.revokeAllForUser(userId);
+
     await this.audit.log({
       actorId: actor.id,
       actorEmail: actor.email,
@@ -404,6 +422,66 @@ export class AdminService {
 
     return {
       message: 'Đã thu hồi thành công mọi phiên đăng nhập của người dùng',
+    };
+  }
+
+  /** Khóa/Mở khóa tài khoản Người dùng Toàn cục (Global Ban) */
+  async updateUserStatus(
+    userId: string,
+    dto: UpdateUserStatusDto,
+    actor: JwtUser,
+    ip?: string,
+    ua?: string,
+  ) {
+    if (actor.id === userId && !dto.isActive) {
+      throw new AppError(
+        'VALIDATION_FAILED',
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        'Bạn không thể tự khóa tài khoản của chính mình',
+      );
+    }
+
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!targetUser) {
+      throw AppError.notFound('Người dùng không tồn tại');
+    }
+
+    const beforeState = { isActive: targetUser.isActive };
+
+    if (!dto.isActive) {
+      await this.tokenRevocation.banUser(userId, dto.reason);
+    } else {
+      await this.tokenRevocation.unbanUser(userId);
+    }
+
+    const afterState = { isActive: dto.isActive };
+
+    await this.audit.log({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: dto.isActive ? 'USER_GLOBAL_UNBAN' : 'USER_GLOBAL_BAN',
+      targetType: 'User',
+      targetId: userId,
+      ipAddress: ip,
+      userAgent: ua,
+      beforeState,
+      afterState,
+      reason:
+        dto.reason ||
+        (dto.isActive
+          ? 'Mở khóa tài khoản người dùng'
+          : 'Khóa tài khoản toàn cục (Global Ban)'),
+    });
+
+    return {
+      id: targetUser.id,
+      email: targetUser.email,
+      fullName: targetUser.fullName,
+      isActive: dto.isActive,
     };
   }
 
@@ -442,6 +520,41 @@ export class AdminService {
         costVnd: Math.round(costUsd * usdVnd),
       };
     });
+  }
+
+  /** Trạng thái Ngắt mạch Chi phí AI FinOps ($100/ngày) */
+  async getAiCircuitBreakerStatus() {
+    return this.aiCircuitBreaker.getStatus();
+  }
+
+  /** Cấu hình Ngắt mạch Chi phí AI FinOps (ngưỡng ngân sách hoặc simulation) */
+  async setAiCircuitBreaker(
+    dto: SetAiCircuitBreakerDto,
+    actor: JwtUser,
+    ip?: string,
+    ua?: string,
+  ) {
+    if (dto.dailyBudgetUsd !== undefined) {
+      await this.aiCircuitBreaker.setBudget(dto.dailyBudgetUsd, actor.email);
+    }
+    if (dto.simulateTrip !== undefined) {
+      this.aiCircuitBreaker.setSimulatedTrip(dto.simulateTrip);
+    }
+
+    const status = await this.aiCircuitBreaker.getStatus();
+
+    await this.audit.log({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: 'AI_CIRCUIT_BREAKER_CONFIGURED',
+      targetType: 'AiFinOps',
+      ipAddress: ip,
+      userAgent: ua,
+      afterState: status as any,
+      reason: `Cập nhật cấu hình ngắt mạch AI FinOps bởi ${actor.email}`,
+    });
+
+    return status;
   }
 
   /** Giám sát Sức khỏe & Telemetry Hạ tầng */

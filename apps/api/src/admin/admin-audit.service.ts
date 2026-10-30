@@ -21,6 +21,26 @@ export interface AuditLogPayload {
 const GENESIS_HASH =
   '0000000000000000000000000000000000000000000000000000000000000000';
 
+export function canonicalStringify(obj: unknown): string {
+  if (obj === null || obj === undefined) return 'null';
+  if (typeof obj !== 'object') return JSON.stringify(obj);
+  if (obj instanceof Date) return JSON.stringify(obj.toISOString());
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(canonicalStringify).join(',') + ']';
+  }
+  const record = obj as Record<string, unknown>;
+  const keys = Object.keys(record)
+    .filter((k) => record[k] !== undefined)
+    .sort();
+  return (
+    '{' +
+    keys
+      .map((k) => JSON.stringify(k) + ':' + canonicalStringify(record[k]))
+      .join(',') +
+    '}'
+  );
+}
+
 @Injectable()
 export class AdminAuditService {
   private readonly logger = new Logger(AdminAuditService.name);
@@ -56,8 +76,8 @@ export class AdminAuditService {
       record.action,
       record.targetType,
       record.targetId || '',
-      JSON.stringify(record.beforeState || null),
-      JSON.stringify(record.afterState || null),
+      canonicalStringify(record.beforeState),
+      canonicalStringify(record.afterState),
       record.reason || '',
     ].join('|');
 

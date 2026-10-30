@@ -8,8 +8,10 @@ import {
 } from '@prisma/client';
 import * as crypto from 'crypto';
 import { AppError } from '../common/app-error';
+import { AdminAuditService } from '../admin/admin-audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SkillsService } from '../skills/skills.service';
+import { WorkloadService } from '../workload/workload.service';
 import type {
   CreateWorkspaceDto,
   ListMembersQueryDto,
@@ -86,6 +88,8 @@ export class WorkspacesService {
     private readonly prisma: PrismaService,
     private readonly skills: SkillsService,
     private readonly events: EventEmitter2,
+    private readonly workload: WorkloadService,
+    private readonly audit: AdminAuditService,
   ) {}
 
   async listMine(userId: string) {
@@ -397,7 +401,7 @@ export class WorkspacesService {
     });
     if (!target) throw AppError.notFound({ userId: targetUserId });
     if (target.role === WorkspaceRole.OWNER)
-      throw new AppError('LAST_OWNER', HttpStatus.CONFLICT);
+      throw new AppError('LAST_OWNER', HttpStatus.BAD_REQUEST);
     const updated = await this.prisma.workspaceMember.update({
       where: { workspaceId_userId: { workspaceId, userId: targetUserId } },
       data: { role },
@@ -447,10 +451,42 @@ export class WorkspacesService {
     });
     if (!target) throw AppError.notFound({ userId: targetUserId });
     if (target.role === WorkspaceRole.OWNER)
-      throw new AppError('LAST_OWNER', HttpStatus.CONFLICT);
-    await this.prisma.workspaceMember.delete({
-      where: { workspaceId_userId: { workspaceId, userId: targetUserId } },
+      throw new AppError('LAST_OWNER', HttpStatus.BAD_REQUEST);
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Tìm tất cả dự án thuộc workspace
+      const projects = await tx.project.findMany({
+        where: { workspaceId },
+        select: { id: true },
+      });
+      const projectIds = projects.map((p) => p.id);
+
+      if (projectIds.length > 0) {
+        // 2. Gỡ bỏ phân công (unassign) của người này trên toàn bộ công việc thuộc workspace để tránh orphan assignment
+        await tx.taskAssignee.deleteMany({
+          where: {
+            userId: targetUserId,
+            task: { projectId: { in: projectIds } },
+          },
+        });
+        // 3. Xoá thành viên khỏi các dự án thuộc workspace
+        await tx.projectMember.deleteMany({
+          where: {
+            userId: targetUserId,
+            projectId: { in: projectIds },
+          },
+        });
+      }
+
+      // 4. Xóa thành viên khỏi workspace
+      await tx.workspaceMember.delete({
+        where: { workspaceId_userId: { workspaceId, userId: targetUserId } },
+      });
     });
+
+    // 5. Tính lại tải công việc của thành viên trong workspace
+    this.workload.scheduleRecompute(workspaceId, [targetUserId]);
+
     if (ctx?.userId) {
       await this.recordWorkspaceAudit({
         workspaceId,
@@ -494,98 +530,45 @@ export class WorkspacesService {
     userAgent?: string | null;
   }) {
     try {
-      const latest = await this.prisma.systemAuditLog.findFirst({
-        orderBy: { createdAt: 'desc' },
-        select: { currentHash: true },
-      });
-      const previousHash = latest?.currentHash || GENESIS_HASH;
-      const now = new Date();
       const scopedTargetId = `${params.workspaceId}:${params.targetId}`;
       const reason = JSON.stringify({
         workspaceId: params.workspaceId,
         category: params.category,
         targetName: params.targetName,
       });
-      const currentHash = this.computeHmac(previousHash, now.toISOString(), {
-        actorId: params.actorId,
+
+      const created = await this.audit.log({
+        actorId: params.actorId ?? null,
+        actorEmail: params.actorEmail ?? null,
         action: params.action,
         targetType: params.targetType,
         targetId: scopedTargetId,
-        beforeState: params.beforeState,
-        afterState: params.afterState,
+        ipAddress: params.ipAddress ?? '127.0.0.1',
+        userAgent: params.userAgent ?? 'SmartTask-Web/1.0',
+        beforeState: (params.beforeState ?? undefined) as Prisma.InputJsonValue,
+        afterState: (params.afterState ?? undefined) as Prisma.InputJsonValue,
         reason,
       });
 
-      const created = await this.prisma.systemAuditLog.create({
-        data: {
-          createdAt: now,
-          actorId: params.actorId ?? null,
-          actorEmail: params.actorEmail ?? null,
-          action: params.action,
-          targetType: params.targetType,
-          targetId: scopedTargetId,
-          ipAddress: params.ipAddress ?? '127.0.0.1',
-          userAgent: params.userAgent ?? 'SmartTask-Web/1.0',
-          beforeState: (params.beforeState ??
-            Prisma.JsonNull) as Prisma.InputJsonValue,
-          afterState: (params.afterState ??
-            Prisma.JsonNull) as Prisma.InputJsonValue,
-          reason,
-          previousHash,
-          currentHash,
-        },
-      });
-
-      this.events.emit('audit.logged', {
-        workspaceId: params.workspaceId,
-        log: {
-          id: created.id,
-          createdAt: now.toISOString(),
-          actorEmail: params.actorEmail,
-          action: params.action,
-          targetType: params.targetType,
-          targetName: params.targetName,
-          category: params.category,
-        },
-      });
+      if (created) {
+        this.events.emit('audit.logged', {
+          workspaceId: params.workspaceId,
+          log: {
+            id: created.id,
+            createdAt: created.createdAt.toISOString(),
+            actorEmail: params.actorEmail,
+            action: params.action,
+            targetType: params.targetType,
+            targetName: params.targetName,
+            category: params.category,
+          },
+        });
+      }
     } catch (err) {
       this.logger.warn(
         `Không ghi được WorkspaceAuditLog: ${(err as Error).message}`,
       );
     }
-  }
-
-  private computeHmac(
-    previousHash: string,
-    timestamp: string,
-    record: {
-      actorId?: string | null;
-      action: string;
-      targetType: string;
-      targetId?: string | null;
-      beforeState?: unknown;
-      afterState?: unknown;
-      reason?: string | null;
-    },
-  ): string {
-    const raw = [
-      previousHash,
-      timestamp,
-      record.actorId || 'system',
-      record.action,
-      record.targetType,
-      record.targetId || '',
-      JSON.stringify(record.beforeState || null),
-      JSON.stringify(record.afterState || null),
-      record.reason || '',
-    ].join('|');
-    return crypto
-      .createHmac(
-        'sha256',
-        process.env.JWT_ACCESS_SECRET || 'smarttask_audit_secret_key',
-      )
-      .update(raw)
-      .digest('hex');
   }
 
   /**
@@ -1121,7 +1104,7 @@ export class WorkspacesService {
     );
     let prevHash = GENESIS_HASH;
     const chained: WorkspaceAuditLogItem[] = chronological.map((item) => {
-      const hash = this.computeHmac(prevHash, item.createdAt, {
+      const hash = this.audit.computeRecordHash(prevHash, item.createdAt, {
         actorId: item.actor.id,
         action: item.action,
         targetType: item.targetType,

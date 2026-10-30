@@ -184,11 +184,11 @@ describe('Workspace & kỹ năng (e2e)', () => {
       .patch(`/api/v1/workspaces/${wsId}/members/${owner.id}`)
       .set(auth(member))
       .send({ role: 'MEMBER' })
-      .expect(409);
+      .expect(400);
     await api()
       .delete(`/api/v1/workspaces/${wsId}/members/${owner.id}`)
       .set(auth(member))
-      .expect(409);
+      .expect(400);
   });
 
   it('kỹ năng: thêm (trùng alias → 409), khai kỹ năng cá nhân, xác nhận, heatmap có bus factor', async () => {
@@ -273,6 +273,84 @@ describe('Workspace & kỹ năng (e2e)', () => {
       .set(auth(owner))
       .send({ name: 'x' })
       .expect(404);
+  });
+
+  it('TC-WS-06: Gỡ thành viên workspace dọn dẹp task assignee và project member', async () => {
+    // 1. Tạo và mời dev vào workspace
+    const dev = {
+      email: uniqueEmail('dev-ws06'),
+      password: 'MatKhau@123',
+      token: '',
+      id: '',
+    };
+    await register(dev, 'Dev WS-06');
+    const inv = await api()
+      .post(`/api/v1/workspaces/${wsId}/invitations`)
+      .set(auth(owner))
+      .send({ email: dev.email, role: 'MEMBER' })
+      .expect(201);
+    await api()
+      .post(`/api/v1/invitations/${inv.body.token}/accept`)
+      .set(auth(dev))
+      .expect(201);
+
+    // 2. Tạo dự án và giao việc cho dev
+    const proj = await api()
+      .post(`/api/v1/workspaces/${wsId}/projects`)
+      .set(auth(owner))
+      .send({ key: 'W06', name: 'Dự án WS-06', pmUserId: owner.id })
+      .expect(201);
+    const projId = proj.body.id;
+    const detail = await api()
+      .get(`/api/v1/projects/${projId}`)
+      .set(auth(owner))
+      .expect(200);
+    const colId = detail.body.columns[0].id;
+
+    await api()
+      .put(`/api/v1/projects/${projId}/members`)
+      .set(auth(owner))
+      .send({
+        members: [
+          { userId: owner.id, role: 'PM' },
+          { userId: dev.id, role: 'MEMBER' },
+        ],
+      })
+      .expect(200);
+
+    const task = await api()
+      .post(`/api/v1/projects/${projId}/tasks`)
+      .set(auth(owner))
+      .send({ title: 'Task cho dev', columnId: colId, assigneeIds: [dev.id] })
+      .expect(201);
+    expect(task.body.assignees.map((a: { id: string }) => a.id)).toContain(dev.id);
+
+    // 3. Xoá dev khỏi workspace
+    await api()
+      .delete(`/api/v1/workspaces/${wsId}/members/${dev.id}`)
+      .set(auth(owner))
+      .expect(204);
+
+    // 4. Kiểm tra dev không còn trong workspaceMember
+    const members = await api()
+      .get(`/api/v1/workspaces/${wsId}/members`)
+      .set(auth(owner))
+      .expect(200);
+    expect(members.body.map((m: { id: string }) => m.id)).not.toContain(dev.id);
+
+    // 5. Kiểm tra dev không còn trong projectMember
+    const pMembers = await api()
+      .get(`/api/v1/projects/${projId}/members`)
+      .set(auth(owner))
+      .expect(200);
+    expect(pMembers.body.map((m: { id: string }) => m.id)).not.toContain(dev.id);
+
+    // 6. Kiểm tra task của dev đã được unassigned (tránh orphan assignment)
+    const taskAfter = await api()
+      .get(`/api/v1/tasks/${task.body.id}`)
+      .set(auth(owner))
+      .expect(200);
+    expect(taskAfter.body.assignees).toEqual([]);
   });
 
   it('chuyển quyền sở hữu: chủ mới OWNER, chủ cũ ADMIN; lưu trữ chỉ OWNER', async () => {

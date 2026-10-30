@@ -17,7 +17,7 @@ describe('Auth & tài khoản (e2e)', () => {
 
   afterAll(async () => {
     await prisma.user.deleteMany({
-      where: { email: { endsWith: '@e2e.test' } },
+      where: { email },
     });
     await app.close();
   });
