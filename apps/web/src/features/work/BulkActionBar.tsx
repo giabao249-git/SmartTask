@@ -228,7 +228,7 @@ export function BulkActionBar({ project, tasks }: { project: ProjectDetail; task
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="text-xs">
-                <DropdownMenuLabel className="text-[10px] font-normal text-muted-foreground">
+                <DropdownMenuLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Đưa vào sprint
                 </DropdownMenuLabel>
                 {(sprints.data ?? [])
@@ -272,7 +272,7 @@ export function BulkActionBar({ project, tasks }: { project: ProjectDetail; task
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="text-xs">
-                <DropdownMenuLabel className="text-[10px] font-normal text-muted-foreground">
+                <DropdownMenuLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Thêm nhãn (giữ nhãn cũ)
                 </DropdownMenuLabel>
                 {project.labels.map((l) => (

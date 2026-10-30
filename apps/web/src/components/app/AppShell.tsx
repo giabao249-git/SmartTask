@@ -298,7 +298,7 @@ export function AppShell({ children }: AppShellProps) {
   const secondaryNavItems = React.useMemo(
     () => [
       {
-        title: "Danh sách Workspace & Dự án",
+        title: "Không gian làm việc",
         href: "/workspaces",
         icon: Building2,
       },
@@ -315,7 +315,7 @@ export function AppShell({ children }: AppShellProps) {
           ]
         : []),
       {
-        title: "Thông báo & Cài đặt",
+        title: "Cài đặt",
         href: "/settings",
         icon: Settings,
         badge: unreadCount > 0 ? `${unreadCount}` : undefined,
@@ -342,14 +342,14 @@ export function AppShell({ children }: AppShellProps) {
 
   const renderNavList = (expanded: boolean, onNavigate?: () => void) => (
     <TooltipProvider delayDuration={150}>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <p
           className={cn(
-            "px-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate transition-all duration-200 select-none",
-            expanded ? "opacity-100 max-h-5 mb-1.5" : "opacity-0 max-h-0 mb-0 overflow-hidden pointer-events-none"
+            "px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate transition-all duration-200 select-none",
+            expanded ? "opacity-100 max-h-5 mb-2" : "opacity-0 max-h-0 mb-0 overflow-hidden pointer-events-none"
           )}
         >
-          Dự án Agile
+          Dự án
         </p>
 
         {navItems.map((item) => {
@@ -362,7 +362,7 @@ export function AppShell({ children }: AppShellProps) {
             <Link key={item.href} href={item.href} onClick={onNavigate} className="block w-full">
               <div
                 className={cn(
-                  "flex items-center rounded-md text-xs font-medium transition-colors group cursor-pointer relative overflow-hidden h-9 w-full px-3",
+                  "flex items-center rounded-md text-xs font-medium transition-colors group cursor-pointer relative overflow-hidden h-9.5 w-full px-3 py-2",
                   isActive
                     ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -390,7 +390,7 @@ export function AppShell({ children }: AppShellProps) {
                     <Badge
                       variant={item.badgeVariant || "secondary"}
                       className={cn(
-                        "text-[10px] px-1.5 py-0 h-4 font-mono shrink-0",
+                        "text-[11px] font-medium tracking-wide px-1.5 py-0 h-4.5 font-mono shrink-0",
                         isActive && "bg-primary-foreground/20 text-primary-foreground border-transparent"
                       )}
                     >
@@ -410,7 +410,7 @@ export function AppShell({ children }: AppShellProps) {
               <TooltipContent side="right" className="flex items-center gap-1.5 text-xs font-medium">
                 <span>{item.title}</span>
                 {item.badge && (
-                  <Badge variant={item.badgeVariant || "secondary"} className="text-[9px] px-1 py-0 font-mono">
+                  <Badge variant={item.badgeVariant || "secondary"} className="text-[11px] font-medium px-1.5 py-0 font-mono">
                     {item.badge}
                   </Badge>
                 )}
@@ -420,11 +420,11 @@ export function AppShell({ children }: AppShellProps) {
         })}
       </div>
 
-      <div className={cn("space-y-1 pt-2 mt-2 border-t border-border/40")}>
+      <div className={cn("space-y-1.5 pt-3 mt-3 border-t border-border/60")}>
         <p
           className={cn(
-            "px-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate transition-all duration-200 select-none",
-            expanded ? "opacity-100 max-h-5 mb-1.5" : "opacity-0 max-h-0 mb-0 overflow-hidden pointer-events-none"
+            "px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate transition-all duration-200 select-none",
+            expanded ? "opacity-100 max-h-5 mb-2" : "opacity-0 max-h-0 mb-0 overflow-hidden pointer-events-none"
           )}
         >
           Hệ thống
@@ -439,7 +439,7 @@ export function AppShell({ children }: AppShellProps) {
             <Link key={item.href} href={item.href} onClick={onNavigate} className="block w-full">
               <div
                 className={cn(
-                  "flex items-center rounded-md text-xs font-medium transition-colors group cursor-pointer relative overflow-hidden h-9 w-full px-3",
+                  "flex items-center rounded-md text-xs font-medium transition-colors group cursor-pointer relative overflow-hidden h-9.5 w-full px-3 py-2",
                   isActive
                     ? "bg-primary text-primary-foreground font-semibold"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -461,7 +461,7 @@ export function AppShell({ children }: AppShellProps) {
                   {item.badge && (
                     <Badge
                       variant={item.badgeVariant || "secondary"}
-                      className="text-[10px] px-1.5 py-0 h-4 font-mono shrink-0"
+                      className="text-[11px] font-medium tracking-wide px-1.5 py-0 h-4.5 font-mono shrink-0"
                     >
                       {item.badge}
                     </Badge>
@@ -479,7 +479,7 @@ export function AppShell({ children }: AppShellProps) {
               <TooltipContent side="right" className="flex items-center gap-1.5 text-xs font-medium">
                 <span>{item.title}</span>
                 {item.badge && (
-                  <Badge variant={item.badgeVariant || "secondary"} className="text-[9px] px-1 py-0 font-mono">
+                  <Badge variant={item.badgeVariant || "secondary"} className="text-[11px] font-medium px-1.5 py-0 font-mono">
                     {item.badge}
                   </Badge>
                 )}
@@ -534,7 +534,7 @@ export function AppShell({ children }: AppShellProps) {
               >
                 <Plus className="mr-2 h-4 w-4" />
                 <span>Tạo công việc mới…</span>
-                <kbd className="ml-auto text-[10px] font-mono bg-background border px-1 rounded">C</kbd>
+                <kbd className="ml-auto text-[11px] font-mono bg-background border px-1.5 py-0.5 rounded">C</kbd>
               </CommandItem>
               <CommandItem
                 value="tạo công việc đầy đủ tao cong viec day du full form"
@@ -607,7 +607,7 @@ export function AppShell({ children }: AppShellProps) {
             >
               <Keyboard className="mr-2 h-4 w-4 text-primary" />
               <span>Bảng tra cứu phím tắt (?)</span>
-              <kbd className="ml-auto text-[10px] font-mono bg-background border px-1 rounded">?</kbd>
+              <kbd className="ml-auto text-[11px] font-mono bg-background border px-1.5 py-0.5 rounded">?</kbd>
             </CommandItem>
           </CommandGroup>
         </CommandList>
@@ -640,10 +640,10 @@ export function AppShell({ children }: AppShellProps) {
             )}
           >
             <div className="flex flex-col truncate flex-1 min-w-0">
-              <span className="font-semibold text-xs tracking-tight text-foreground truncate">
+              <span className="font-bold text-sm tracking-tight text-foreground truncate">
                 {workspace?.name ?? "SmartTask"}
               </span>
-              <span className="text-[10px] text-muted-foreground truncate">
+              <span className="text-xs text-muted-foreground truncate">
                 {project ? `${project.name} (${project.key})` : "Chưa chọn dự án"}
               </span>
             </div>
@@ -691,7 +691,7 @@ export function AppShell({ children }: AppShellProps) {
                     )}
                   >
                     <span className="truncate flex-1 text-left text-xs">Trợ lý AI</span>
-                    <kbd className="hidden sm:inline text-[9px] bg-background/80 border px-1 rounded font-mono ml-1">{mod}+J</kbd>
+                    <kbd className="hidden sm:inline text-[11px] bg-background/80 border px-1.5 py-0.5 rounded font-mono ml-1">{mod}+J</kbd>
                   </div>
                 </Button>
               </TooltipTrigger>
@@ -723,10 +723,10 @@ export function AppShell({ children }: AppShellProps) {
                       isExpanded ? "opacity-100 max-w-[170px]" : "opacity-0 max-w-0 pointer-events-none"
                     )}
                   >
-                    <span className="text-xs font-medium text-foreground truncate">
+                    <span className="text-xs font-semibold text-foreground truncate">
                       {currentUser?.fullName}
                     </span>
-                    <span className="text-[10px] text-muted-foreground truncate">
+                    <span className="text-xs text-muted-foreground truncate">
                       {projectCtx
                         ? `${workspace?.role ?? "MEMBER"} (WS) · ${projectCtx.myRole ?? "MEMBER"} (${projectCtx.key})`
                         : `${workspace?.role ?? ""}${workspace ? ` · ${workspace.name}` : ""}`}
@@ -737,12 +737,12 @@ export function AppShell({ children }: AppShellProps) {
               {!isExpanded && (
                 <TooltipContent side="right" className="space-y-1">
                   <div className="text-xs font-semibold">{currentUser?.fullName}</div>
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-xs text-muted-foreground">
                     Workspace: <span className="font-semibold text-foreground">{workspace?.role ?? "Thành viên"}</span>
                     {workspace ? ` (${workspace.name})` : ""}
                   </div>
                   {projectCtx && (
-                    <div className="text-[10px] text-muted-foreground">
+                    <div className="text-xs text-muted-foreground">
                       Dự án {projectCtx.key}: <span className="font-semibold text-foreground">{projectCtx.myRole ?? "Thành viên"}</span>
                     </div>
                   )}
@@ -760,10 +760,10 @@ export function AppShell({ children }: AppShellProps) {
             <div className="flex items-center gap-2 overflow-hidden">
               <BrandIcon size={32} />
               <div className="flex flex-col truncate">
-                <SheetTitle className="font-semibold text-xs tracking-tight text-foreground truncate text-left">
+                <SheetTitle className="font-bold text-sm tracking-tight text-foreground truncate text-left">
                   {workspace?.name ?? "SmartTask"}
                 </SheetTitle>
-                <SheetDescription className="text-[10px] text-muted-foreground truncate text-left">
+                <SheetDescription className="text-xs text-muted-foreground truncate text-left">
                   {project ? `${project.name} (${project.key})` : "Chưa chọn dự án"}
                 </SheetDescription>
               </div>
@@ -799,10 +799,10 @@ export function AppShell({ children }: AppShellProps) {
                 showTooltip={false}
               />
               <div className="flex flex-col truncate flex-1">
-                <span className="text-xs font-medium text-foreground truncate">
+                <span className="text-xs font-semibold text-foreground truncate">
                   {currentUser?.fullName}
                 </span>
-                <span className="text-[10px] text-muted-foreground truncate">
+                <span className="text-xs text-muted-foreground truncate">
                   {projectCtx
                     ? `${workspace?.role ?? "MEMBER"} (WS) · ${projectCtx.myRole ?? "MEMBER"} (${projectCtx.key})`
                     : `${workspace?.role ?? ""}${workspace ? ` · ${workspace.name}` : ""}`}
@@ -850,7 +850,7 @@ export function AppShell({ children }: AppShellProps) {
                   <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/60 hidden sm:inline" />
                   {/* Huy hiệu sprint dẫn tới trang Dashboard (mặc định mở sprint đang chạy) */}
                   <Link href={`${projectBase}/dashboard`} className="hidden sm:inline-flex" aria-label="Mở báo cáo Sprint trên Dashboard">
-                    <Badge variant="outline" className="text-[10px] font-mono font-medium truncate max-w-[130px] sm:max-w-none hover:bg-muted">
+                    <Badge variant="outline" className="text-[11px] font-mono font-medium truncate max-w-[130px] sm:max-w-none hover:bg-muted">
                       {projectCtx.activeSprint
                         ? `${projectCtx.activeSprint.name}`
                         : "Chưa có sprint"}
@@ -877,7 +877,7 @@ export function AppShell({ children }: AppShellProps) {
                 <Search className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Tìm kiếm...</span>
               </span>
-              <kbd className="text-[10px] font-mono bg-background border px-1 rounded">{mod}+K</kbd>
+              <kbd className="text-[11px] font-mono bg-background border px-1.5 py-0.5 rounded">{mod}+K</kbd>
             </Button>
 
             {/* Notification Bell with Popover */}
@@ -947,7 +947,7 @@ export function AppShell({ children }: AppShellProps) {
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel className="text-xs">
                     <div className="font-semibold truncate">{currentUser?.fullName}</div>
-                    <div className="text-[10px] text-muted-foreground font-normal truncate">{currentUser?.email}</div>
+                    <div className="text-xs text-muted-foreground font-normal truncate">{currentUser?.email}</div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={() => router.push("/workspaces")} className="text-xs">
@@ -1073,7 +1073,7 @@ export function WorkspaceSwitcher({ onWorkspaceChange, className }: WorkspaceSwi
           )}
         >
           <div className="flex items-center gap-1.5 truncate">
-            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-primary/10 text-primary font-bold text-[10px] border border-primary/25">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-primary/10 text-primary font-bold text-[11px] border border-primary/25">
               {currentWorkspace?.name ? currentWorkspace.name.slice(0, 2).toUpperCase() : "ST"}
             </div>
             <span className="truncate font-semibold text-foreground text-xs">
@@ -1083,7 +1083,7 @@ export function WorkspaceSwitcher({ onWorkspaceChange, className }: WorkspaceSwi
               <Badge
                 variant="outline"
                 className={cn(
-                  "text-[9px] px-1 py-0 font-medium shrink-0 hidden lg:inline-flex",
+                  "text-[11px] px-1.5 py-0 font-medium shrink-0 hidden lg:inline-flex",
                   currentWorkspace.role === "OWNER" && "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
                   currentWorkspace.role === "ADMIN" && "bg-primary/10 text-primary border-primary/30",
                   currentWorkspace.role === "MEMBER" && "text-muted-foreground"
@@ -1097,7 +1097,7 @@ export function WorkspaceSwitcher({ onWorkspaceChange, className }: WorkspaceSwi
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64 p-1 text-xs shadow-lg">
-        <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1.5">
+        <DropdownMenuLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1.5">
           Không gian làm việc ({auth.workspaces.length})
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -1114,16 +1114,16 @@ export function WorkspaceSwitcher({ onWorkspaceChange, className }: WorkspaceSwi
                 )}
               >
                 <div className="flex items-center gap-2 truncate">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted text-foreground font-semibold text-[10px] border border-border/80">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted text-foreground font-semibold text-[11px] border border-border/80">
                     {w.name.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex flex-col truncate text-left">
                     <span className="truncate text-xs font-medium">{w.name}</span>
-                    <span className="text-[10px] text-muted-foreground truncate">{w.slug}</span>
+                    <span className="text-xs text-muted-foreground truncate">{w.slug}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono">
+                  <Badge variant="outline" className="text-[11px] px-1.5 py-0 font-mono">
                     {w.role}
                   </Badge>
                   {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}

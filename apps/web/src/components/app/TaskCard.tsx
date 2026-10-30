@@ -51,7 +51,7 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
       className={cn(
         "rounded-xl border p-3 cursor-pointer transition-colors shadow-2xs hover:border-primary/50 hover:shadow-md border-border/80 bg-card select-none relative",
         pending && "opacity-70 pointer-events-none border-dashed",
-        isMyTask && "border-l-2 border-l-primary",
+        isMyTask && "border-l-4 border-l-primary",
         isFocused && "ring-2 ring-ring ring-offset-1 border-primary",
         isSelected && "border-primary bg-primary/5",
         isDragging && "opacity-30 border-dashed border-primary",
@@ -62,29 +62,24 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-1.5 min-h-[24px]">
           <div className={cn("flex items-center gap-1.5 flex-wrap min-w-0", isSelected && "pl-6")}>
-            <Badge variant="outline" className="font-mono text-xs font-semibold px-1.5 py-0 shrink-0">
-              {pending ? "…" : taskKeyOf(projectKey, task)}
+            <Badge variant="outline" className="font-mono text-xs font-semibold px-1.5 py-0 shrink-0 gap-1">
+              <span>{pending ? "…" : taskKeyOf(projectKey, task)}</span>
+              {task.source === "AI" && (
+                <span title="Được tạo bởi AI" className="inline-flex items-center">
+                  <Sparkles className="h-3 w-3 text-indigo-500 shrink-0" />
+                </span>
+              )}
             </Badge>
             {pending ? (
-              <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0 h-4 shrink-0">
+              <Badge variant="secondary" className="gap-1 text-[11px] font-medium px-1.5 py-0 h-4.5 shrink-0">
                 <Loader2 className="h-2.5 w-2.5 animate-spin" /> Đang lưu…
               </Badge>
             ) : (
               <TaskTypeBadge type={task.type} size="icon" />
             )}
-            <PriorityBadge priority={task.priority} showIcon={false} />
-            {isMyTask && (
-              <Badge variant="default" className="text-[9px] px-1 py-0 h-4 bg-primary/20 text-primary border-primary/30 hover:bg-primary/30 font-medium shrink-0">
-                Của tôi
-              </Badge>
-            )}
-            {task.source === "AI" && (
-              <Badge variant="info" className="gap-1 text-[9px] px-1 py-0 h-4 shrink-0">
-                <Sparkles className="h-2.5 w-2.5" /> AI
-              </Badge>
-            )}
+            <PriorityBadge priority={task.priority} showIcon={false} className="text-[11px] font-medium tracking-wide" />
             {task.dependsOnIds.length > 0 && (
-              <Badge variant="secondary" className="gap-0.5 text-[9px] px-1 py-0 h-4 shrink-0" title="Có phụ thuộc">
+              <Badge variant="secondary" className="gap-1 text-[11px] font-medium px-1.5 py-0 h-4.5 shrink-0" title={`Có ${task.dependsOnIds.length} phụ thuộc`}>
                 <Link2 className="h-2.5 w-2.5" /> {task.dependsOnIds.length}
               </Badge>
             )}
@@ -103,24 +98,24 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
                   e.stopPropagation();
                   onClaim(task);
                 }}
-                className="inline-flex items-center gap-1 px-1.5 h-5 rounded text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-colors border border-primary/25 cursor-pointer shadow-2xs"
+                className="inline-flex items-center gap-1 px-2 h-6 rounded-md text-xs font-medium bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground transition-colors border border-primary/25 cursor-pointer shadow-2xs"
                 title="Tự nhận công việc này"
               >
-                <Plus className="h-3 w-3" />
+                <Plus className="h-3.5 w-3.5" />
                 <span>Nhận task</span>
               </button>
             ) : (
-              <span className="text-[10px] text-muted-foreground/60 italic">chưa giao</span>
+              <span className="text-xs text-muted-foreground/70 italic">chưa giao</span>
             )}
           </div>
         </div>
 
-        <h4 className="text-sm font-medium text-foreground leading-snug line-clamp-2">{task.title}</h4>
+        <h4 className="text-sm font-semibold text-foreground leading-snug line-clamp-2 my-0.5">{task.title}</h4>
 
         {task.labels.length > 0 && (
           <div className="flex items-center gap-1 flex-wrap">
             {task.labels.slice(0, 3).map((l) => (
-              <Badge key={l.id} variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal text-muted-foreground">
+              <Badge key={l.id} variant="secondary" className="text-[11px] px-2 py-0.5 h-5 font-medium text-muted-foreground">
                 #{l.name}
               </Badge>
             ))}
@@ -128,25 +123,25 @@ export function TaskCard({ task, projectKey, onClick, onClaim, currentUserId, is
         )}
 
         <div className="flex items-center justify-between pt-1.5 border-t border-border/40 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {task.subtaskCount > 0 && (
-              <div className="flex items-center gap-1 text-[11px] tabular-nums" title="Công việc con">
+              <div className="flex items-center gap-1 text-xs tabular-nums" title="Công việc con">
                 <CheckSquare className="h-3 w-3" />
                 <span>{task.subtaskCount}</span>
               </div>
             )}
             {task.estimateHours != null && (
-              <div className="flex items-center gap-1 text-[11px] tabular-nums font-mono" title={`Còn ${task.remainingHours ?? task.estimateHours}h / ước lượng ${task.estimateHours}h`}>
+              <div className="flex items-center gap-1 text-xs tabular-nums font-mono" title={`Còn ${task.remainingHours ?? task.estimateHours}h / ước lượng ${task.estimateHours}h`}>
                 <Clock className="h-3 w-3" />
                 <span>
                   {task.remainingHours ?? task.estimateHours}/{task.estimateHours}h
                 </span>
               </div>
             )}
-            {task.progress > 0 && <span className="text-[11px] tabular-nums font-mono text-muted-foreground/80">{task.progress}%</span>}
+            {task.progress > 0 && <span className="text-xs tabular-nums font-mono text-muted-foreground/80">{task.progress}%</span>}
           </div>
           <div
-            className={cn("flex items-center gap-1 text-[11px] tabular-nums shrink-0 ml-auto", overdue ? "text-destructive font-medium bg-destructive/10 px-1.5 py-0.5 rounded-sm" : "text-muted-foreground")}
+            className={cn("flex items-center gap-1 text-xs tabular-nums shrink-0 ml-auto", overdue ? "text-destructive font-medium bg-destructive/10 px-1.5 py-0.5 rounded-sm" : "text-muted-foreground")}
             title={overdue ? "Quá hạn" : `Hạn ${fmtDay(task.dueDate)}`}
           >
             <Calendar className="h-3 w-3" />

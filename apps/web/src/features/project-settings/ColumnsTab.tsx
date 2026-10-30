@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Columns3, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Columns3, Loader2, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,7 +55,7 @@ export function ColumnsTab({ project }: { project: ProjectDetail }) {
         {doneCount !== 1 && (
           <Alert variant="destructive" className="py-2">
             <AlertTitle className="text-xs">Phải có đúng một cột hoàn thành</AlertTitle>
-            <AlertDescription className="text-[11px]">Hiện có {doneCount}.</AlertDescription>
+            <AlertDescription className="text-xs">Hiện có {doneCount}.</AlertDescription>
           </Alert>
         )}
         <Table>
@@ -108,8 +108,15 @@ export function ColumnsTab({ project }: { project: ProjectDetail }) {
         </Button>
       </CardContent>
       <CardFooter className="p-4 pt-0 justify-between">
-        <Button variant="ghost" size="sm" className="h-8 text-xs" disabled={!can} onClick={() => setRows(toRows(project.columns))}>
-          Hoàn nguyên
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5 border-border hover:bg-muted text-foreground font-medium shadow-2xs"
+          disabled={!can}
+          onClick={() => setRows(toRows(project.columns))}
+        >
+          <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
+          Hoàn nguyên thay đổi
         </Button>
         <Button size="sm" className="h-8 text-xs gap-1.5" disabled={!can || save.isPending || doneCount !== 1 || rows.some((r) => !r.name.trim() || !r.statusKey.trim())} onClick={() => save.mutate()}>
           {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Lưu cột

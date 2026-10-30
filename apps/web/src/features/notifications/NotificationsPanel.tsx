@@ -82,14 +82,14 @@ export function NotificationsPanel({ compact = false, onNavigate }: { compact?: 
             {list.data.items.map((n) => (
               <Button key={n.id} variant="ghost" onClick={() => open(n)} className={cn("w-full h-auto justify-start text-left rounded-none p-3 flex flex-col items-start gap-0.5", !n.isRead && "bg-primary/5")}>
                 <div className="flex items-center justify-between w-full gap-2">
-                  <span className={cn("text-xs font-medium truncate", !n.isRead ? "text-foreground" : "text-muted-foreground")}>{n.title}</span>
-                  <span className="text-[10px] text-muted-foreground shrink-0">{fmt(n.createdAt)}</span>
+                  <span className={cn("text-xs font-semibold truncate", !n.isRead ? "text-foreground" : "text-muted-foreground")}>{n.title}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{fmt(n.createdAt)}</span>
                 </div>
                 <div className="flex items-center gap-2 w-full">
-                  <Badge variant="outline" className="text-[9px] px-1 py-0">
+                  <Badge variant="outline" className="text-[11px] px-1.5 py-0 font-medium">
                     {TYPE_LABEL[n.type] ?? n.type}
                   </Badge>
-                  {n.body && <span className="text-[11px] text-muted-foreground truncate">{n.body}</span>}
+                  {n.body && <span className="text-xs text-muted-foreground truncate">{n.body}</span>}
                 </div>
               </Button>
             ))}

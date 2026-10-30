@@ -353,7 +353,7 @@ export function TaskListView() {
                         <span className="font-semibold text-sm text-foreground">{g.sprint ? g.sprint.name : "Backlog"}</span>
                         {g.sprint ? (
                           <>
-                            <Badge variant={g.sprint.status === "ACTIVE" ? "default" : "outline"} className="text-[10px]">
+                            <Badge variant={g.sprint.status === "ACTIVE" ? "default" : "outline"} className="text-xs font-medium">
                               {sprintStatusLabel(g.sprint.status)}
                             </Badge>
                             <span className="text-muted-foreground tabular-nums">
@@ -412,7 +412,7 @@ export function TaskListView() {
                         </Button>
                       </span>
                     </TableCell>
-                    <TableCell className="font-medium max-w-md truncate">{t.title}</TableCell>
+                    <TableCell className="font-semibold text-foreground max-w-md truncate">{t.title}</TableCell>
                     <TableCell>
                       <TaskTypeBadge type={t.type} />
                     </TableCell>
@@ -425,7 +425,7 @@ export function TaskListView() {
                           }
                         >
                           <SelectTrigger className="h-6 w-auto border-none bg-transparent hover:bg-muted/80 p-0 shadow-none focus:ring-0 gap-1 text-xs">
-                            <Badge variant={statusToVariant(col?.statusKey ?? "")} className="font-normal text-[11px] gap-1 cursor-pointer">
+                            <Badge variant={statusToVariant(col?.statusKey ?? "")} className="font-medium text-[11px] tracking-wide gap-1 cursor-pointer">
                               {col?.name ?? "—"}
                               <ChevronDown className="h-2.5 w-2.5 opacity-50" />
                             </Badge>
@@ -439,7 +439,7 @@ export function TaskListView() {
                           </SelectContent>
                         </Select>
                       ) : (
-                        <Badge variant={statusToVariant(col?.statusKey ?? "")} className="text-[10px]">
+                        <Badge variant={statusToVariant(col?.statusKey ?? "")} className="text-xs font-medium">
                           {col?.name ?? "—"}
                         </Badge>
                       )}

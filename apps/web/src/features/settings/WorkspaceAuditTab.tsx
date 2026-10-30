@@ -410,18 +410,18 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
             </span>
             <Badge
               variant="outline"
-              className="text-[10px] border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 gap-1 h-5 px-1.5"
+              className="text-[11px] border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 gap-1 h-5.5 px-2 font-medium"
             >
-              <Lock className="h-2.5 w-2.5" />
+              <Lock className="h-3 w-3" />
               Append-Only · SOC 2 Ready
             </Badge>
-            <span className="text-[11px] text-muted-foreground/80 hidden lg:inline">
+            <span className="text-xs text-muted-foreground/80 hidden lg:inline">
               (Nhật ký kiểm toán & Quản trị rủi ro bất biến)
             </span>
           </div>
 
           <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-medium select-none">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-medium select-none">
               <span className="relative flex h-1.5 w-1.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
@@ -457,23 +457,25 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
               setPage(1);
             }}
             className={cn(
-              "p-3.5 cursor-pointer h-full transition-all hover:border-primary/40 shadow-2xs select-none",
-              category === "ALL" && "ring-1 ring-primary/40 bg-primary/[0.02]",
+              "p-3.5 cursor-pointer h-full transition-all border-blue-500/20 bg-blue-500/[0.02] hover:border-blue-500/40 shadow-2xs select-none",
+              category === "ALL" && "ring-1 ring-blue-500/40 bg-blue-500/[0.05]"
             )}
           >
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground font-medium">
                 Tổng sự kiện ghi nhận
               </span>
-              <Activity className="h-4 w-4 text-primary" />
+              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                <Activity className="h-4 w-4" />
+              </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-semibold tabular-nums">
+              <span className="text-2xl font-semibold tabular-nums text-blue-600 dark:text-blue-400">
                 {data?.summary.total ?? "—"}
               </span>
-              <span className="text-[11px] text-muted-foreground">bản ghi</span>
+              <span className="text-xs text-muted-foreground">bản ghi</span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               Toàn bộ lịch sử quản trị Workspace
             </p>
           </Card>
@@ -490,24 +492,25 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
               setPage(1);
             }}
             className={cn(
-              "p-3.5 cursor-pointer h-full transition-all hover:border-indigo-500/40 shadow-2xs select-none",
-              category === "MEMBER" &&
-                "ring-1 ring-indigo-500/50 bg-indigo-500/[0.03]",
+              "p-3.5 cursor-pointer h-full transition-all border-indigo-500/20 bg-indigo-500/[0.02] hover:border-indigo-500/40 shadow-2xs select-none",
+              category === "MEMBER" && "ring-1 ring-indigo-500/50 bg-indigo-500/[0.05]"
             )}
           >
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground font-medium">
                 Phân quyền & Thành viên
               </span>
-              <Users className="h-4 w-4 text-indigo-500" />
+              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                <Users className="h-4 w-4" />
+              </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">
                 {data?.summary.memberEvents ?? "—"}
               </span>
-              <span className="text-[11px] text-muted-foreground">thay đổi</span>
+              <span className="text-xs text-muted-foreground">thay đổi</span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               Đổi vai trò, mời mới, thu hồi quyền
             </p>
           </Card>
@@ -524,24 +527,25 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
               setPage(1);
             }}
             className={cn(
-              "p-3.5 cursor-pointer h-full transition-all hover:border-violet-500/40 shadow-2xs select-none",
-              category === "AI_FINOPS" &&
-                "ring-1 ring-violet-500/50 bg-violet-500/[0.03]",
+              "p-3.5 cursor-pointer h-full transition-all border-violet-500/20 bg-violet-500/[0.02] hover:border-violet-500/40 shadow-2xs select-none",
+              category === "AI_FINOPS" && "ring-1 ring-violet-500/50 bg-violet-500/[0.05]"
             )}
           >
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground font-medium">
                 Cấu hình AI & FinOps
               </span>
-              <Bot className="h-4 w-4 text-violet-500" />
+              <div className="p-2 rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                <Bot className="h-4 w-4" />
+              </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-semibold tabular-nums text-violet-600 dark:text-violet-400">
                 {data?.summary.aiEvents ?? "—"}
               </span>
-              <span className="text-[11px] text-muted-foreground">sự kiện</span>
+              <span className="text-xs text-muted-foreground">sự kiện</span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               Model AI, System Prompt, hạn mức ngày
             </p>
           </Card>
@@ -558,26 +562,27 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
               setPage(1);
             }}
             className={cn(
-              "p-3.5 cursor-pointer h-full transition-all hover:border-sky-500/40 shadow-2xs select-none",
-              (category === "PROJECT" || category === "SETTINGS") &&
-                "ring-1 ring-sky-500/50 bg-sky-500/[0.03]",
+              "p-3.5 cursor-pointer h-full transition-all border-amber-500/20 bg-amber-500/[0.02] hover:border-amber-500/40 shadow-2xs select-none",
+              (category === "PROJECT" || category === "SETTINGS") && "ring-1 ring-amber-500/50 bg-amber-500/[0.05]"
             )}
           >
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground font-medium">
                 Dự án & Tham số hệ thống
               </span>
-              <FolderKanban className="h-4 w-4 text-sky-500" />
+              <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <FolderKanban className="h-4 w-4" />
+              </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-semibold tabular-nums text-sky-600 dark:text-sky-400">
+              <span className="text-2xl font-semibold tabular-nums text-amber-600 dark:text-amber-400">
                 {data
                   ? data.summary.projectEvents + data.summary.settingsEvents
                   : "—"}
               </span>
-              <span className="text-[11px] text-muted-foreground">cập nhật</span>
+              <span className="text-xs text-muted-foreground">cập nhật</span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               Chu kỳ Sprint, ngưỡng tải & Burnout
             </p>
           </Card>
@@ -745,21 +750,21 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
             <>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border">
+                  <thead className="bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
                     <tr>
-                      <th className="text-left px-3.5 py-2.5 font-medium whitespace-nowrap">
+                      <th className="text-left px-3.5 py-3 font-semibold whitespace-nowrap">
                         Thời gian
                       </th>
-                      <th className="text-left px-3.5 py-2.5 font-medium whitespace-nowrap">
+                      <th className="text-left px-3.5 py-3 font-semibold whitespace-nowrap">
                         Người thực hiện
                       </th>
-                      <th className="text-left px-3.5 py-2.5 font-medium whitespace-nowrap">
+                      <th className="text-left px-3.5 py-3 font-semibold whitespace-nowrap">
                         Phân nhóm & Hành động
                       </th>
-                      <th className="text-left px-3.5 py-2.5 font-medium">
+                      <th className="text-left px-3.5 py-3 font-semibold">
                         Đối tượng & Tóm tắt thay đổi
                       </th>
-                      <th className="text-right px-3.5 py-2.5 font-medium whitespace-nowrap">
+                      <th className="text-right px-3.5 py-3 font-semibold whitespace-nowrap">
                         Chữ ký & Diff
                       </th>
                     </tr>
@@ -797,9 +802,9 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                               <div className="font-mono text-xs font-semibold tabular-nums text-foreground tracking-tight">
                                 {timeParts.time}
                               </div>
-                              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5 font-mono">
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5 font-mono">
                                 <span>{timeParts.date}</span>
-                                <span className="text-[10px] text-muted-foreground/80 font-sans">
+                                <span className="text-xs text-muted-foreground/80 font-sans">
                                   · {formatRelative(item.createdAt)}
                                 </span>
                               </div>
@@ -817,19 +822,19 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                                 />
                                 <div className="min-w-0">
                                   <div
-                                    className="font-medium text-xs text-foreground truncate max-w-[160px]"
+                                    className="font-semibold text-xs text-foreground truncate max-w-[160px]"
                                     title={item.actor.fullName}
                                   >
                                     {item.actor.fullName}
                                   </div>
                                   <div
-                                    className="text-[11px] text-muted-foreground truncate max-w-[160px]"
+                                    className="text-xs text-muted-foreground truncate max-w-[160px]"
                                     title={item.actor.email}
                                   >
                                     {item.actor.email}
                                   </div>
                                   <div className="mt-1">
-                                    <span className="inline-flex items-center rounded border border-border/70 bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground tabular-nums leading-none">
+                                    <span className="inline-flex items-center rounded border border-border/70 bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground tabular-nums leading-none">
                                       {item.ipAddress.replace("::ffff:", "")}
                                     </span>
                                   </div>
@@ -842,17 +847,17 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                               <div className="flex flex-col items-start gap-1">
                                 <span
                                   className={cn(
-                                    "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium shrink-0",
+                                    "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium shrink-0 h-6",
                                     cat.badgeClass,
                                   )}
                                 >
-                                  <CatIcon className="h-2.5 w-2.5" />
+                                  <CatIcon className="h-3 w-3" />
                                   {cat.label}
                                 </span>
-                                <div className="font-medium text-xs text-foreground">
+                                <div className="font-semibold text-xs text-foreground">
                                   {formatActionLabel(item.action)}
                                 </div>
-                                <code className="text-[10px] text-muted-foreground font-mono">
+                                <code className="text-xs text-muted-foreground font-mono">
                                   {item.action}
                                 </code>
                               </div>
@@ -863,12 +868,12 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                               <div className="flex items-center gap-2 flex-wrap">
                                 <Badge
                                   variant="secondary"
-                                  className="text-[10px] px-2 py-0.5 font-mono uppercase tracking-wider shrink-0 whitespace-nowrap"
+                                  className="h-6 text-xs px-2 py-0.5 font-mono uppercase tracking-wider shrink-0 whitespace-nowrap"
                                 >
                                   {item.targetType}
                                 </Badge>
                                 <span
-                                  className="font-medium text-xs text-foreground truncate max-w-[220px]"
+                                  className="font-semibold text-xs text-foreground truncate max-w-[220px]"
                                   title={item.targetName}
                                 >
                                   {item.targetName}
@@ -880,7 +885,7 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                                   {diffPreview.slice(0, 3).map((d) => (
                                     <span
                                       key={d.key}
-                                      className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2 py-1 font-mono text-[10px] leading-tight"
+                                      className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 px-2 py-1 font-mono text-xs leading-tight"
                                     >
                                       <span className="text-muted-foreground font-semibold">
                                         {d.key}:
@@ -891,7 +896,7 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                                         </span>
                                       )}
                                       {d.from !== undefined && (
-                                        <span className="text-muted-foreground text-[9px]">→</span>
+                                        <span className="text-muted-foreground text-xs">→</span>
                                       )}
                                       <span className="text-emerald-600 dark:text-emerald-400 font-medium max-w-[140px] truncate bg-emerald-500/10 px-1 py-0.5 rounded">
                                         {d.to ?? "đã xoá"}
@@ -899,7 +904,7 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                                     </span>
                                   ))}
                                   {diffPreview.length > 3 && (
-                                    <span className="text-[10px] text-muted-foreground self-center px-1">
+                                    <span className="text-xs text-muted-foreground self-center px-1">
                                       +{diffPreview.length - 3} trường khác
                                     </span>
                                   )}
@@ -923,9 +928,9 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                                 </Button>
                                 <span
                                   title={`HMAC-SHA256: ${item.hash}`}
-                                  className="inline-flex items-center gap-1 font-mono text-[10px] text-muted-foreground/80 hover:text-foreground"
+                                  className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground/80 hover:text-foreground"
                                 >
-                                  <Hash className="h-2.5 w-2.5 text-emerald-500 shrink-0" />
+                                  <Hash className="h-3 w-3 text-emerald-500 shrink-0" />
                                   {item.hash.slice(0, 10)}…
                                 </span>
                               </div>
@@ -1167,7 +1172,7 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                     variant="outline"
                     size="sm"
                     onClick={() => handleCopyHash(selectedLog.hash)}
-                    className="h-6 px-2 text-[10px] gap-1"
+                    className="h-6 px-2.5 text-xs gap-1.5"
                   >
                     {copiedHash === selectedLog.hash ? (
                       <>
@@ -1182,7 +1187,7 @@ export function WorkspaceAuditTab({ workspaceId }: { workspaceId: string }) {
                     )}
                   </Button>
                 </div>
-                <div className="grid grid-cols-1 gap-1.5 font-mono text-[10px]">
+                <div className="grid grid-cols-1 gap-1.5 font-mono text-xs">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-1">
                     <span className="text-muted-foreground w-28 shrink-0">
                       Previous Hash:

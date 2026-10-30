@@ -513,15 +513,15 @@ export function AssistantView() {
           <div className="flex items-center gap-2">
             <Bot className="h-5 w-5 text-info" />
             <h1 className="text-lg font-semibold tracking-tight">Trợ lý AI · {project.key}</h1>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono gap-1 text-muted-foreground border-border/70">
+            <Badge variant="outline" className="text-[11px] px-1.5 py-0.5 font-mono gap-1 text-muted-foreground border-border/70">
               <Sparkles className="h-2.5 w-2.5 text-info" />
               <span>{lastModel ?? configuredModel ?? "model theo cấu hình"}</span>
             </Badge>
-            <Badge variant={quota.data && quota.data.remaining <= 3 ? "warning" : "secondary"} className="text-[10px] px-1.5 py-0 font-mono">
+            <Badge variant={quota.data && quota.data.remaining <= 3 ? "warning" : "secondary"} className="text-[11px] px-1.5 py-0.5 font-mono">
               {quota.data ? `${quota.data.used}/${quota.data.limit}` : "7/20"} lượt hôm nay
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[13px] text-foreground/80 font-normal">
             Hội thoại đa lượt · hệ thống tự giải tham chiếu và đồng bộ bản nháp bên phải · duyệt để tạo công việc thật.
           </p>
         </div>
@@ -588,7 +588,7 @@ export function AssistantView() {
               >
                 <PanelLeft className="h-4 w-4 text-info" />
                 <span className="text-xs font-medium">Lịch sử</span>
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono">
+                <Badge variant="secondary" className="text-[11px] px-1.5 py-0.5 h-4.5 font-mono">
                   {sessions.length}
                 </Badge>
               </Button>
@@ -641,7 +641,7 @@ export function AssistantView() {
 
             {/* Thông tin sprint & nút đóng/mở Bản nháp + Phím tắt */}
             <div className="flex items-center gap-1.5 shrink-0">
-              <div className="text-[10px] text-muted-foreground hidden xl:block mr-1">
+              <div className="text-xs text-muted-foreground hidden xl:block mr-1">
                 {messages.length} tin · {project.activeSprint ? `sprint ${project.activeSprint.name}` : "chưa có sprint"}
               </div>
               <Button
@@ -653,7 +653,7 @@ export function AssistantView() {
               >
                 <Keyboard className="h-3.5 w-3.5 text-info" />
                 <span className="hidden sm:inline">Phím tắt</span>
-                <kbd className="text-[9px] bg-muted border px-1 rounded font-mono">?</kbd>
+                <kbd className="text-[11px] bg-muted border px-1.5 py-0.5 rounded font-mono">?</kbd>
               </Button>
               <Button
                 variant={railOpen ? "secondary" : "outline"}
@@ -665,7 +665,7 @@ export function AssistantView() {
                 {railOpen ? <PanelRightClose className="h-3.5 w-3.5 text-info" /> : <Layers className="h-3.5 w-3.5 text-info" />}
                 <span>Bản nháp</span>
                 {openDrafts > 0 && (
-                  <Badge variant="info" className="text-[10px] px-1.5 py-0 h-4 font-mono">
+                  <Badge variant="info" className="text-[11px] px-1.5 py-0.5 h-4.5 font-mono">
                     {openDrafts}
                   </Badge>
                 )}
@@ -704,7 +704,7 @@ export function AssistantView() {
                     <Keyboard className="h-3.5 w-3.5" /> Mẹo phím:
                   </span>
                   <span>
-                    Gõ <kbd className="font-mono bg-background border px-1 py-0.5 rounded text-[10px] text-foreground font-semibold">/</kbd> để chọn lệnh AI, dùng <kbd className="font-mono bg-background border px-1 py-0.5 rounded text-[10px] text-foreground font-semibold">↑↓</kbd> để duyệt, hoặc nhấn <kbd className="font-mono bg-background border px-1 py-0.5 rounded text-[10px] text-foreground font-semibold">?</kbd> xem danh sách phím tắt.
+                    Gõ <kbd className="font-mono bg-background border px-1.5 py-0.5 rounded text-[11px] text-foreground font-semibold">/</kbd> để chọn lệnh AI, dùng <kbd className="font-mono bg-background border px-1.5 py-0.5 rounded text-[11px] text-foreground font-semibold">↑↓</kbd> để duyệt, hoặc nhấn <kbd className="font-mono bg-background border px-1.5 py-0.5 rounded text-[11px] text-foreground font-semibold">?</kbd> xem danh sách phím tắt.
                   </span>
                 </div>
 
@@ -752,7 +752,7 @@ export function AssistantView() {
                       showTooltip={false}
                     />
                     <div className="flex flex-col gap-1 items-end min-w-0">
-                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground px-1 flex-row-reverse">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-1 flex-row-reverse">
                         <span className="font-semibold text-foreground">{auth.user?.shortName ?? auth.user?.fullName ?? "Bạn"}</span>
                         <span>·</span>
                         <span>đang gửi…</span>
@@ -769,7 +769,7 @@ export function AssistantView() {
                       <Bot className="h-4 w-4 text-info" />
                     </div>
                     <div className="flex flex-col gap-1 items-start min-w-0">
-                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground px-1">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-1">
                         <span>{fmtDate(new Date().toISOString())}</span>
                       </div>
                       <div className="rounded-2xl rounded-tl-xs px-4 py-3 bg-muted/60 text-foreground border border-border/60 shadow-xs">
@@ -794,11 +794,11 @@ export function AssistantView() {
               <Alert variant="destructive" className="py-2">
                 <AlertTitle className="text-xs flex items-center gap-2">
                   AI không trả lời được{" "}
-                  <Badge variant="destructive" className="font-mono text-[10px]">
+                  <Badge variant="destructive" className="font-mono text-[11px] px-1.5 py-0.5">
                     {turnError.code}
                   </Badge>
                 </AlertTitle>
-                <AlertDescription className="text-[11px]">{turnError.message}</AlertDescription>
+                <AlertDescription className="text-xs">{turnError.message}</AlertDescription>
               </Alert>
             </div>
           )}
@@ -808,20 +808,20 @@ export function AssistantView() {
             {/* Gợi ý lệnh khi gõ / */}
             {showSlashSuggestions && filteredCommands.length > 0 && (
               <div className="p-1 mb-1 rounded-lg border border-border/70 bg-popover shadow-md space-y-0.5 animate-in fade-in-50 slide-in-from-bottom-1 text-xs">
-                <div className="flex items-center justify-between px-2 py-1 text-[10px] text-muted-foreground border-b border-border/40 mb-1">
-                  <span className="font-semibold uppercase tracking-wider text-[9px] text-foreground/80">
+                <div className="flex items-center justify-between px-2 py-1 text-xs text-muted-foreground border-b border-border/40 mb-1">
+                  <span className="font-semibold uppercase tracking-wider text-xs text-foreground/80">
                     Gợi ý lệnh AI (chọn để điền)
                   </span>
-                  <div className="flex items-center gap-1 font-mono text-[9px]">
-                    <kbd className="px-1 py-0.5 bg-background rounded border border-border/80 text-[9px] font-semibold text-foreground">↑↓</kbd>
+                  <div className="flex items-center gap-1 font-mono text-[11px]">
+                    <kbd className="px-1.5 py-0.5 bg-background rounded border border-border/80 font-semibold text-foreground">↑↓</kbd>
                     <span>chuyển</span>
                     <span className="opacity-40">·</span>
-                    <kbd className="px-1 py-0.5 bg-background rounded border border-border/80 text-[9px] font-semibold text-foreground">Tab</kbd>
+                    <kbd className="px-1.5 py-0.5 bg-background rounded border border-border/80 font-semibold text-foreground">Tab</kbd>
                     <span>hoặc</span>
-                    <kbd className="px-1 py-0.5 bg-background rounded border border-border/80 text-[9px] font-semibold text-foreground">↵</kbd>
+                    <kbd className="px-1.5 py-0.5 bg-background rounded border border-border/80 font-semibold text-foreground">↵</kbd>
                     <span>chọn</span>
                     <span className="opacity-40">·</span>
-                    <kbd className="px-1 py-0.5 bg-background rounded border border-border/80 text-[9px] font-semibold text-foreground">Esc</kbd>
+                    <kbd className="px-1.5 py-0.5 bg-background rounded border border-border/80 font-semibold text-foreground">Esc</kbd>
                     <span>đóng</span>
                   </div>
                 </div>
@@ -849,18 +849,18 @@ export function AssistantView() {
                       <div className="flex items-center gap-2">
                         <Badge
                           variant={isSelected ? "default" : "outline"}
-                          className="font-mono text-[10px] px-1 py-0"
+                          className="font-mono text-[11px] px-1.5 py-0.5"
                         >
                           {c.cmd}
                         </Badge>
                         <span className={cn("font-medium", isSelected ? "text-foreground" : "")}>{c.label}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-muted-foreground truncate max-w-[200px] sm:max-w-[260px]">
+                        <span className="text-xs text-muted-foreground truncate max-w-[200px] sm:max-w-[260px]">
                           {c.description}
                         </span>
                         {isSelected && (
-                          <kbd className="hidden sm:inline text-[9px] px-1.5 py-0.5 bg-background/80 rounded border border-border/80 font-mono text-foreground font-semibold">
+                          <kbd className="hidden sm:inline text-[11px] px-1.5 py-0.5 bg-background/80 rounded border border-border/80 font-mono text-foreground font-semibold">
                             ↵ Chọn
                           </kbd>
                         )}
@@ -930,26 +930,15 @@ export function AssistantView() {
               </Button>
             </div>
 
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground px-1 pt-0.5">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1.5 py-0.5 text-[9px] font-mono bg-muted/80 rounded border border-border/80 text-foreground font-semibold">↵</kbd>
-                  <span>gửi</span>
+            <div className="flex items-center justify-between text-xs text-muted-foreground px-1 pt-1">
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 text-[11px] font-mono bg-muted/80 rounded border border-border/80 text-foreground font-semibold">↵</kbd>
+                  <span className="text-xs">gửi</span>
                 </span>
-                <span className="opacity-30">·</span>
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1.5 py-0.5 text-[9px] font-mono bg-muted/80 rounded border border-border/80 text-foreground font-semibold">Shift+↵</kbd>
-                  <span>dòng mới</span>
-                </span>
-                <span className="opacity-30">·</span>
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1.5 py-0.5 text-[9px] font-mono bg-muted/80 rounded border border-border/80 text-foreground font-semibold">/</kbd>
-                  <span>lệnh AI</span>
-                </span>
-                <span className="opacity-30">·</span>
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1.5 py-0.5 text-[9px] font-mono bg-muted/80 rounded border border-border/80 text-foreground font-semibold">{mod}+H</kbd>
-                  <span>lịch sử</span>
+                <span className="opacity-40">·</span>
+                <span className="text-xs text-muted-foreground hidden sm:inline">
+                  gõ <span className="font-mono text-foreground font-semibold">/</span> lệnh AI
                 </span>
               </div>
 
@@ -958,14 +947,14 @@ export function AssistantView() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setShortcutsOpen(true)}
-                  className="h-5 px-1.5 text-[10px] gap-1 text-muted-foreground hover:text-foreground h-auto py-0.5 font-normal"
+                  className="h-6 px-2 text-xs gap-1.5 text-muted-foreground hover:text-foreground font-medium"
                   title="Xem toàn bộ phím tắt (hoặc bấm ?)"
                 >
-                  <Keyboard className="h-3 w-3 text-info" />
+                  <Keyboard className="h-3.5 w-3.5 text-info" />
                   <span>Phím tắt</span>
-                  <kbd className="text-[9px] bg-background border px-1 rounded font-mono">?</kbd>
+                  <kbd className="text-[11px] bg-background border px-1 rounded font-mono">?</kbd>
                 </Button>
-                <span className="font-mono hidden md:inline text-[9px] opacity-70">
+                <span className="font-mono hidden md:inline text-xs text-muted-foreground/80">
                   {project.members.length} thành viên · {sprints.length} sprint
                 </span>
               </div>
@@ -1141,7 +1130,7 @@ function MessageBubble({
       <div className={cn("flex flex-col gap-1 min-w-0 flex-1", isUser ? "items-end" : "items-start")}>
         <div
           className={cn(
-            "flex items-center gap-1.5 text-[10px] text-muted-foreground px-1 flex-wrap",
+            "flex items-center gap-1.5 text-xs text-muted-foreground px-1 flex-wrap",
             isUser ? "flex-row-reverse" : ""
           )}
         >
@@ -1149,12 +1138,12 @@ function MessageBubble({
           <span>·</span>
           <span>{fmtDate(m.createdAt)}</span>
           {action && (
-            <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono" title={action.type}>
+            <Badge variant="outline" className="text-[11px] px-1.5 py-0.5 font-mono" title={action.type}>
               {ACTION_LABEL[action.type] ?? action.type}
             </Badge>
           )}
           {m.parseFailed && (
-            <Badge variant="warning" className="text-[9px] px-1 py-0">
+            <Badge variant="warning" className="text-[11px] px-1.5 py-0.5">
               JSON lỗi
             </Badge>
           )}
@@ -1200,12 +1189,12 @@ function MessageBubble({
           )}
 
           {!isUser && revealed && (
-            <div className="flex items-center gap-2 pt-1 border-t border-border/40 text-[11px]">
+            <div className="flex items-center gap-2 pt-1 border-t border-border/40 text-xs">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleCopy}
-                className="h-6 px-2 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
+                className="h-6 px-2 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
               >
                 {copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
                 <span>{copied ? "Đã chép" : "Sao chép"}</span>
@@ -1217,14 +1206,14 @@ function MessageBubble({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 px-2 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
+                      className="h-6 px-2 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
                     >
                       <Code className="h-3 w-3" />
                       <span>Xem JSON</span>
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pt-2">
-                    <pre className="text-[10px] font-mono bg-background/90 text-foreground p-2 rounded border border-border/60 max-h-48 overflow-auto select-all leading-normal whitespace-pre-wrap">
+                    <pre className="text-xs font-mono bg-background/90 text-foreground p-2 rounded border border-border/60 max-h-48 overflow-auto select-all leading-normal whitespace-pre-wrap">
                       {JSON.stringify(m.structuredData, null, 2)}
                     </pre>
                   </CollapsibleContent>
@@ -1316,6 +1305,19 @@ function SessionSidebar(p: SessionSidebarProps) {
             <SquarePen className="h-3.5 w-3.5 text-info shrink-0" />
             <span className="truncate">Đoạn chat mới</span>
           </Button>
+          <Button
+            variant={p.showArchived ? "secondary" : "outline"}
+            size="icon"
+            onClick={p.onToggleArchived}
+            className={cn(
+              "h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground border-border/80",
+              p.showArchived && "bg-muted text-primary border-primary/40 shadow-xs"
+            )}
+            title={p.showArchived ? "Ẩn đoạn chat đã lưu trữ" : "Xem đoạn chat đã lưu trữ"}
+            aria-label="Xem đoạn chat đã lưu trữ"
+          >
+            <Archive className="h-3.5 w-3.5" />
+          </Button>
         </div>
 
         <div className="relative">
@@ -1348,7 +1350,7 @@ function SessionSidebar(p: SessionSidebarProps) {
           <div className="space-y-4">
             {groups.map((g) => (
               <div key={g.label} className="space-y-0.5">
-                <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                <div className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {g.label}
                 </div>
                 {g.items.map((s) => {
@@ -1377,12 +1379,12 @@ function SessionSidebar(p: SessionSidebarProps) {
                         {((s.openDrafts ?? 0) > 0 || s.archivedAt) && (
                           <div className="flex items-center gap-1 mt-0.5">
                             {(s.openDrafts ?? 0) > 0 && (
-                              <span className="inline-flex items-center text-[10px] text-info font-medium">
+                              <span className="inline-flex items-center text-xs text-info font-medium">
                                 {s.openDrafts} bản nháp chờ duyệt
                               </span>
                             )}
                             {s.archivedAt && (
-                              <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">
+                              <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-4 font-mono">
                                 đã lưu trữ
                               </Badge>
                             )}
@@ -1428,17 +1430,6 @@ function SessionSidebar(p: SessionSidebarProps) {
           </div>
         )}
       </ScrollArea>
-
-      <div className="p-2 border-t border-border/60 bg-muted/20 shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={p.onToggleArchived}
-          className="w-full text-xs text-muted-foreground hover:text-foreground justify-start h-7 gap-1.5"
-        >
-          <Archive className="h-3.5 w-3.5" /> {p.showArchived ? "Ẩn đoạn chat đã lưu trữ" : "Xem đoạn chat đã lưu trữ"}
-        </Button>
-      </div>
     </div>
   );
 }

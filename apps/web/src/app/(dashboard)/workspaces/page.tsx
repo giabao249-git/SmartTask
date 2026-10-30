@@ -142,7 +142,7 @@ export default function WorkspacesPage() {
                 {workspaces.map((w) => (
                   <TabsTrigger key={w.id} value={w.id} className="text-xs gap-1.5">
                     <span>{w.name}</span>
-                    <Badge variant="outline" className="text-[9px] px-1 py-0">
+                    <Badge variant="outline" className="text-[11px] px-1.5 py-0">
                       {w.role}
                     </Badge>
                   </TabsTrigger>
@@ -327,10 +327,10 @@ function ProjectCard({ project: p, onOpen }: { project: ProjectListItem; onOpen:
     <Card className={cn("border-border/80 flex flex-col", !active && "opacity-70")}>
       <CardHeader className="p-4 pb-2 space-y-2">
         <div className="flex items-center justify-between">
-          <Badge variant="outline" className="font-mono text-[10px]">
+          <Badge variant="outline" className="font-mono text-[11px] px-1.5 py-0.5">
             {p.key}
           </Badge>
-          <Badge variant={active ? "success" : "secondary"} className="text-[10px]">
+          <Badge variant={active ? "success" : "secondary"} className="text-[11px] px-1.5 py-0.5 font-medium">
             {active ? "Đang diễn ra" : "Đã lưu trữ"}
           </Badge>
         </div>

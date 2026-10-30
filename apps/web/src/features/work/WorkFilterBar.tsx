@@ -101,7 +101,7 @@ export function WorkFilterBar({
           title="Chỉ việc giao cho tôi (phím Q)"
         >
           Việc của tôi
-          <Badge variant={isMy ? "secondary" : "outline"} className="text-[10px] px-1 py-0 font-mono">
+          <Badge variant={isMy ? "secondary" : "outline"} className="text-[11px] px-1.5 py-0 font-mono">
             {counts.my}
           </Badge>
         </Button>
@@ -112,7 +112,7 @@ export function WorkFilterBar({
               <SlidersHorizontal className="h-3.5 w-3.5" />
               Bộ lọc
               {popoverCount > 0 && (
-                <Badge className="text-[10px] px-1.5 py-0 font-mono">{popoverCount}</Badge>
+                <Badge className="text-[11px] px-1.5 py-0 font-mono">{popoverCount}</Badge>
               )}
             </Button>
           </PopoverTrigger>
@@ -178,7 +178,7 @@ export function WorkFilterBar({
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          {syncing && <span className="text-[10px] text-muted-foreground hidden lg:inline">đang đồng bộ…</span>}
+          {syncing && <span className="text-xs text-muted-foreground hidden lg:inline">đang đồng bộ…</span>}
           <SavedFilters projectId={project.id} />
           {rightSlot}
         </div>
@@ -187,7 +187,7 @@ export function WorkFilterBar({
       {chips.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap">
           {chips.map((c) => (
-            <Badge key={c.key} variant="secondary" className={cn("h-6 gap-1 pl-2 pr-1 text-[11px] font-normal")}>
+            <Badge key={c.key} variant="secondary" className={cn("h-6 gap-1 pl-2 pr-1 text-xs font-normal")}>
               <span className="max-w-40 truncate">{c.label}</span>
               <button
                 type="button"
@@ -200,7 +200,7 @@ export function WorkFilterBar({
             </Badge>
           ))}
           {f.isFiltered && (
-            <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] text-muted-foreground" onClick={() => f.clear()}>
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground" onClick={() => f.clear()}>
               Xoá tất cả
             </Button>
           )}
@@ -213,7 +213,7 @@ export function WorkFilterBar({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
       {children}
     </div>
   );

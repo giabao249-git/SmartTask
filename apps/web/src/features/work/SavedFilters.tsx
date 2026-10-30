@@ -113,7 +113,7 @@ export function SavedFilters({ projectId }: { projectId: string }) {
           <Bookmark className={activeName ? "h-3.5 w-3.5 fill-current" : "h-3.5 w-3.5"} />
           {activeName ? <span className="max-w-28 truncate">{activeName}</span> : "Đã lưu"}
           {list.length > 0 && (
-            <Badge variant="outline" className="text-[10px] px-1 py-0 font-mono">
+            <Badge variant="outline" className="text-[11px] px-1.5 py-0 font-mono">
               {list.length}
             </Badge>
           )}
@@ -121,7 +121,7 @@ export function SavedFilters({ projectId }: { projectId: string }) {
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-2 space-y-1">
         {list.length === 0 && (
-          <p className="text-[11px] text-muted-foreground px-1 py-2">
+          <p className="text-xs text-muted-foreground px-1 py-2">
             Chưa lưu bộ lọc nào. Đặt bộ lọc như ý rồi đặt tên bên dưới.
           </p>
         )}
@@ -168,7 +168,7 @@ export function SavedFilters({ projectId }: { projectId: string }) {
             Lưu
           </Button>
         </form>
-        <p className="text-[10px] text-muted-foreground px-1">
+        <p className="text-xs text-muted-foreground px-1">
           Lưu trên máy này (không đồng bộ giữa các máy). Tối đa {MAX_SAVED} bộ.
         </p>
       </PopoverContent>

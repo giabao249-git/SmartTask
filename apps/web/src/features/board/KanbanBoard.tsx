@@ -18,7 +18,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, MoreHorizontal, AlertTriangle, Filter, Loader2, ChevronDown, Copy, Trash2, UserPlus, Flag, CalendarDays, Maximize2 } from "lucide-react";
+import { Plus, MoreHorizontal, AlertTriangle, Filter, Loader2, ChevronDown, Copy, Trash2, UserPlus, Flag, CalendarDays, Maximize2, Zap } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -648,15 +648,37 @@ export function KanbanBoard() {
             ))}
           </div>
           {project.canEdit && (
-            <>
-              <Button size="sm" variant="outline" onClick={() => openComposer()} className="gap-1.5" title="Tạo nhanh trong cột đầu">
-                <Plus className="h-4 w-4" /> Tạo nhanh
-                <kbd className="hidden sm:inline-block ml-1 text-[10px] font-mono px-1 py-0.2 rounded bg-muted text-muted-foreground border">C</kbd>
+            <div className="inline-flex rounded-md shadow-xs">
+              <Button
+                size="sm"
+                onClick={() => openCreateDialog()}
+                className="gap-1.5 rounded-r-none font-medium h-8 text-xs"
+              >
+                <Plus className="h-3.5 w-3.5" /> Tạo công việc
               </Button>
-              <Button size="sm" onClick={() => openCreateDialog()} className="gap-1.5 shadow-xs">
-                <Plus className="h-4 w-4" /> Tạo công việc
-              </Button>
-            </>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    className="px-2 rounded-l-none border-l border-primary-foreground/20 h-8"
+                    aria-label="Tùy chọn tạo công việc"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52 text-xs p-1">
+                  <DropdownMenuItem onClick={() => openCreateDialog()} className="gap-2 cursor-pointer text-xs py-1.5">
+                    <Plus className="h-3.5 w-3.5" />
+                    <span className="flex-1 font-medium">Tạo công việc đầy đủ</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openComposer()} className="gap-2 cursor-pointer text-xs py-1.5">
+                    <Zap className="h-3.5 w-3.5 text-amber-500" />
+                    <span className="flex-1 font-medium">Tạo nhanh trong cột</span>
+                    <kbd className="text-[11px] font-mono bg-muted border px-1.5 py-0.5 rounded">C</kbd>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
         </div>
       </div>
@@ -718,7 +740,7 @@ export function KanbanBoard() {
                       ) : (
                         <PriorityBadge priority={lane.key} />
                       )}
-                      <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0">
+                      <Badge variant="secondary" className="font-mono text-[11px] px-1.5 py-0">
                         {lane.tasks.length} việc
                       </Badge>
                       {/* Giờ còn lại của hàng — tính trên client, đủ để thấy ai đang ôm nhiều */}
@@ -877,7 +899,7 @@ export function KanbanBoard() {
             <DialogHeader>
               <DialogTitle className="text-base flex items-center justify-between">
                 <span>Tạo công việc thủ công</span>
-                <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border">
+                <kbd className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border">
                   Phím C
                 </kbd>
               </DialogTitle>
@@ -1175,12 +1197,12 @@ function ColumnComposer({
       {!many && one && (one.chips.length > 0 || one.unknown.length > 0) && (
         <div className="flex flex-wrap items-center gap-1">
           {one.chips.map((c) => (
-            <Badge key={c.token + c.kind} variant={c.kind === "priority" ? "warning" : c.kind === "due" ? "outline" : "secondary"} className="text-[10px] px-1.5 py-0 h-4 font-normal">
+            <Badge key={c.token + c.kind} variant={c.kind === "priority" ? "warning" : c.kind === "due" ? "outline" : "secondary"} className="text-[11px] px-1.5 py-0.5 h-4.5 font-medium">
               {c.text}
             </Badge>
           ))}
           {one.unknown.map((u) => (
-            <Badge key={u.token} variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal text-muted-foreground" title={`${u.token}: ${u.reason} — giữ nguyên trong tiêu đề`}>
+            <Badge key={u.token} variant="outline" className="text-[11px] px-1.5 py-0.5 h-4.5 font-medium text-muted-foreground" title={`${u.token}: ${u.reason} — giữ nguyên trong tiêu đề`}>
               {u.token} · {u.reason}
             </Badge>
           ))}
@@ -1189,9 +1211,9 @@ function ColumnComposer({
 
       {suggest && suggest.items.length > 0 && (
         <div className="flex flex-wrap items-center gap-1">
-          <span className="text-[10px] text-muted-foreground">Gợi ý:</span>
+          <span className="text-xs text-muted-foreground">Gợi ý:</span>
           {suggest.items.map((it) => (
-            <Button key={it.key} type="button" variant="outline" size="sm" className="h-5 px-1.5 text-[10px]" onClick={() => applySuggest(it.insert)}>
+            <Button key={it.key} type="button" variant="outline" size="sm" className="h-5 px-2 text-[11px] font-medium" onClick={() => applySuggest(it.insert)}>
               {it.label}
             </Button>
           ))}
@@ -1200,7 +1222,7 @@ function ColumnComposer({
 
       {progress && <Progress value={(progress.done / progress.total) * 100} className="h-1" />}
 
-      <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>
           {busy ? (
             <span className="inline-flex items-center gap-1">
@@ -1209,8 +1231,8 @@ function ColumnComposer({
             </span>
           ) : (
             <>
-              <kbd className="px-1 rounded border bg-background font-mono">Enter</kbd> tạo ·{" "}
-              <kbd className="px-1 rounded border bg-background font-mono">Esc</kbd> đóng · gõ{" "}
+              <kbd className="px-1 rounded border bg-background font-mono text-[11px]">Enter</kbd> tạo ·{" "}
+              <kbd className="px-1 rounded border bg-background font-mono text-[11px]">Esc</kbd> đóng · gõ{" "}
               <span className="font-mono text-foreground">@người #nhãn !cao 4h t6 ~react&gt;=3</span>
             </>
           )}
@@ -1218,7 +1240,7 @@ function ColumnComposer({
         <Button
           variant="link"
           size="sm"
-          className="h-5 px-0 text-[10px]"
+          className="h-5 px-0 text-xs font-medium"
           disabled={busy}
           onClick={() => onOpenFull(one?.title || lines[0] || "")}
         >
@@ -1427,7 +1449,7 @@ function Column({
                       </DropdownMenuSub>
 
                       <DropdownMenuSeparator />
-                      <DropdownMenuLabel className="text-[10px] font-normal text-muted-foreground">Chuyển sang cột</DropdownMenuLabel>
+                      <DropdownMenuLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Chuyển sang cột</DropdownMenuLabel>
                       {columns
                         .filter((c) => c.id !== task.columnId)
                         .map((c) => (

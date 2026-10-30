@@ -22,7 +22,7 @@ import {
 import { ActivityList } from "@/features/activity/ActivityList";
 import { useBoardRealtime } from "@/features/board/hooks";
 import { SprintFormDialog } from "@/features/sprints/SprintFormDialog";
-import { SprintPill, SprintReportDetail } from "@/features/sprints/SprintsView";
+import { SprintReportDetail } from "@/features/sprints/SprintsView";
 import { VelocityCard } from "@/features/sprints/VelocityCard";
 import { useInvalidateSprints } from "@/features/sprints/shared";
 import { PendingReviewsCard } from "./PendingReviewsCard";
@@ -39,8 +39,11 @@ import { UserAvatar } from "@/components/app/UserAvatar";
 import { WorkloadBadge } from "@/components/app/WorkloadBadge";
 import { describeError } from "@/lib/api";
 import { useDashboard } from "@/lib/hooks/analytics";
-import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useSprints } from "@/lib/hooks/queries";
+import { useCurrentProject } from "@/lib/hooks/use-project";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { sprintStatusLabel } from "@/lib/status";
+import { fmtDay } from "@/components/app/TaskCard";
 import type { SprintView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -72,7 +75,7 @@ export function ProjectDashboardView() {
     () =>
       [...(sprints.data ?? [])].sort(
         (a, b) =>
-          ORDER[a.status] - ORDER[b.status] ||
+          (ORDER[a.status as keyof typeof ORDER] ?? 2) - (ORDER[b.status as keyof typeof ORDER] ?? 2) ||
           (a.status === "CLOSED" ? b.startDate.localeCompare(a.startDate) : a.startDate.localeCompare(b.startDate)),
       ),
     [sprints.data],
@@ -135,19 +138,54 @@ export function ProjectDashboardView() {
         </div>
       </PageHeader>
 
-      {/* Thanh chuyển đổi phạm vi: Mặc định chọn Sprint hiện tại, hoặc chuyển sang Sprint khác / Toàn dự án */}
-      <nav aria-label="Chọn phạm vi báo cáo" className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        {sprintRows.map((s) => (
-          <SprintPill key={s.id} s={s} active={!isAllProject && s.id === selectedSprint?.id} onClick={() => selectScope(s.id)} />
-        ))}
-        <ProjectOverviewPill
-          total={d.counts.total}
-          done={d.counts.done}
-          open={d.counts.open}
-          active={isAllProject}
-          onClick={() => selectScope("__all")}
-        />
-      </nav>
+      {/* Thanh chuyển đổi phạm vi báo cáo dạng Dropdown tinh gọn */}
+      <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-border/80 bg-card/80 shadow-2xs flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap flex-1 min-w-[280px]">
+          <span className="text-xs font-semibold text-foreground flex items-center gap-1.5 shrink-0">
+            <FolderKanban className="h-4 w-4 text-primary" />
+            Phạm vi báo cáo:
+          </span>
+          <Select value={isAllProject ? "__all" : (selectedSprint?.id ?? "__all")} onValueChange={(val) => selectScope(val)}>
+            <SelectTrigger className="h-8 w-[250px] text-xs bg-background font-medium">
+              <SelectValue placeholder="Chọn sprint..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all" className="text-xs font-medium">
+                Toàn dự án ({d.counts.done}/{d.counts.total} việc xong)
+              </SelectItem>
+              {sprintRows.map((s) => (
+                <SelectItem key={s.id} value={s.id} className="text-xs">
+                  {s.name} · {sprintStatusLabel(s.status)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {selectedSprint && !isAllProject ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+              <span>{fmtDay(selectedSprint.startDate)} → {fmtDay(selectedSprint.endDate)}</span>
+              <Badge variant={selectedSprint.status === "ACTIVE" ? "default" : "outline"} className="text-[11px] font-medium tracking-wide">
+                {sprintStatusLabel(selectedSprint.status)}
+              </Badge>
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">
+              {d.counts.open} việc đang mở · {d.counts.done} đã hoàn thành
+            </div>
+          )}
+        </div>
+
+        {/* Thanh Progress mini bên cạnh */}
+        <div className="flex items-center gap-3 shrink-0 min-w-[170px]">
+          <div className="flex-1 space-y-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
+              <span>Tiến độ</span>
+              <span className="tabular-nums font-semibold text-foreground">{progressPct}%</span>
+            </div>
+            <Progress value={progressPct} className="h-1.5 w-full" />
+          </div>
+        </div>
+      </div>
 
       {project.canManage && <PendingReviewsCard projectId={project.id} />}
 
@@ -304,69 +342,41 @@ export function ProjectDashboardView() {
   );
 }
 
-function ProjectOverviewPill({
-  total,
-  done,
-  open,
-  active,
-  onClick,
+function Stat({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  tone,
 }: {
-  total: number;
-  done: number;
-  open: number;
-  active: boolean;
-  onClick: () => void;
+  icon: typeof Clock;
+  label: string;
+  value: number;
+  hint?: string;
+  tone?: "success" | "warning" | "destructive";
 }) {
-  const pct = total ? Math.round((done / total) * 100) : 0;
-  return (
-    <motion.button
-      type="button"
-      whileHover={{ y: -1, transition: { duration: 0.12 } }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onClick}
-      aria-current={active ? "true" : undefined}
-      className={cn(
-        "group shrink-0 text-left px-3.5 py-2.5 rounded-xl border transition-all min-w-[210px] max-w-[260px] space-y-1.5 cursor-pointer",
-        active
-          ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary/20"
-          : "border-border/70 bg-card hover:border-border hover:bg-muted/30",
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold text-xs text-foreground flex items-center gap-1.5 truncate">
-          <FolderKanban className="h-3.5 w-3.5 text-primary shrink-0" /> Toàn dự án
-        </span>
-        <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-          Tổng hợp
-        </Badge>
-      </div>
-      <div className="flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
-        <span>{open} đang mở</span>
-        <span>
-          {done}/{total} việc
-        </span>
-      </div>
-      <Progress value={pct} className="h-1" />
-    </motion.button>
-  );
-}
+  const toneBg =
+    tone === "success"
+      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+      : tone === "warning"
+      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+      : tone === "destructive"
+      ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+      : "bg-primary/10 text-primary border-primary/20";
 
-function Stat({ icon: Icon, label, value, hint, tone }: { icon: typeof Clock; label: string; value: number; hint?: string; tone?: "success" | "warning" | "destructive" }) {
-  const toneClass = tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : tone === "destructive" ? "text-destructive" : "text-primary";
   return (
-    <motion.div
-      whileHover={{ y: -2, transition: { duration: 0.12 } }}
-      className="h-full"
-    >
-      <Card className="border-border/80 h-full hover:border-primary/40 hover:shadow-2xs transition-all">
-        <CardContent className="p-4 flex items-center gap-3">
-          <Icon className={`h-5 w-5 ${toneClass}`} />
-          <div>
-            <div className="text-2xl font-semibold tabular-nums leading-none">
+    <motion.div whileHover={{ y: -2, transition: { duration: 0.12 } }} className="h-full">
+      <Card className="border-border shadow-xs bg-card/80 h-full hover:border-primary/40 hover:shadow-sm transition-all">
+        <CardContent className="p-4 flex items-center gap-3.5">
+          <div className={cn("p-2.5 rounded-lg shrink-0 border", toneBg)}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-2xl font-bold tabular-nums leading-none text-foreground tracking-tight">
               {value}
-              {hint && <span className="text-xs text-muted-foreground font-normal ml-1">{hint}</span>}
+              {hint && <span className="text-xs text-muted-foreground font-normal ml-1.5">({hint})</span>}
             </div>
-            <div className="text-[11px] text-muted-foreground mt-1">{label}</div>
+            <div className="text-xs font-medium text-muted-foreground mt-1.5 truncate">{label}</div>
           </div>
         </CardContent>
       </Card>

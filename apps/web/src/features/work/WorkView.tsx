@@ -3,10 +3,18 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bot, CalendarRange, Grid2X2, Kanban, ListTodo, Minimize2, Scale, Sparkles } from "lucide-react";
+import { Bot, CalendarRange, ChevronDown, Grid2X2, Kanban, ListTodo, Minimize2, Scale, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/app/PageHeader";
 import { contentVariants } from "@/lib/motion";
 import { useAuth } from "@/lib/auth";
@@ -128,48 +136,66 @@ function WorkBody() {
   );
 
   const aiActions = isLeader && router ? (
-    <div className="flex items-center gap-1.5">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => router.push(`/projects/${project.id}/ai-decompose`)}
-        className="h-8 text-xs gap-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10 px-2.5 shadow-2xs"
-        title="Phân rã yêu cầu công việc thành WBS bằng AI"
-      >
-        <Sparkles className="h-3.5 w-3.5" />
-        <span className="hidden xl:inline">Phân rã AI</span>
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => router.push(`/projects/${project.id}/people?tab=load`)}
-        className="h-8 text-xs gap-1 text-info hover:text-info border-info/30 hover:bg-info/10 px-2.5 shadow-2xs"
-        title="Cân bằng tải công việc bằng AI"
-      >
-        <Scale className="h-3.5 w-3.5" />
-        <span className="hidden xl:inline">Cân bằng tải AI</span>
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => router.push(`/projects/${project.id}/assistant`)}
-        className="h-8 text-xs gap-1 text-primary hover:text-primary border-primary/30 hover:bg-primary/10 px-2.5 shadow-2xs"
-        title="Mở Trợ lý AI dự án"
-      >
-        <Bot className="h-3.5 w-3.5" />
-        <span className="hidden xl:inline">Trợ lý AI</span>
-      </Button>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5 border-violet-500/40 bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-indigo-500/10 hover:from-violet-500/20 hover:to-indigo-500/20 text-violet-700 dark:text-violet-300 font-medium px-3 shadow-2xs"
+          title="Các công cụ thông minh tích hợp AI Agent"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+          <span>Công cụ AI ✨</span>
+          <ChevronDown className="h-3 w-3 opacity-70 ml-0.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56 p-1 text-xs shadow-md">
+        <DropdownMenuLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1.5">
+          Tác vụ AI Agent
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => router.push(`/projects/${project.id}/ai-decompose`)}
+          className="gap-2.5 cursor-pointer py-2 text-xs"
+        >
+          <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <div className="flex flex-col text-left">
+            <span className="font-semibold text-foreground">Phân rã AI (WBS)</span>
+            <span className="text-xs text-muted-foreground">Tự động bẻ nhỏ requirement</span>
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => router.push(`/projects/${project.id}/people?tab=load`)}
+          className="gap-2.5 cursor-pointer py-2 text-xs"
+        >
+          <Scale className="h-4 w-4 text-info shrink-0" />
+          <div className="flex flex-col text-left">
+            <span className="font-semibold text-foreground">Cân bằng tải AI</span>
+            <span className="text-xs text-muted-foreground">Phân bổ workload nhân sự</span>
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => router.push(`/projects/${project.id}/assistant`)}
+          className="gap-2.5 cursor-pointer py-2 text-xs"
+        >
+          <Bot className="h-4 w-4 text-primary shrink-0" />
+          <div className="flex flex-col text-left">
+            <span className="font-semibold text-foreground">Trợ lý AI SmartTask</span>
+            <span className="text-xs text-muted-foreground">Hỏi đáp & tự động hóa</span>
+          </div>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   ) : null;
 
   return (
     <div className="space-y-4">
       {focus ? (
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Công việc · {project.key}</span>
+          <span className="font-semibold text-foreground">Công việc · {project.key}</span>
           <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={off}>
             <Minimize2 className="h-3.5 w-3.5" /> Thoát tập trung
-            <kbd className="ml-1 rounded border bg-background px-1 font-mono text-[10px]">F</kbd>
+            <kbd className="ml-1 rounded border bg-background px-1.5 py-0.5 font-mono text-[11px]">F</kbd>
           </Button>
         </div>
       ) : (

@@ -27,9 +27,9 @@ export function UserAvatar({
   workloadPercent,
 }: UserAvatarProps) {
   const sizeClasses = {
-    sm: "h-6 w-6 text-[10px]",
-    default: "h-8 w-8 text-xs",
-    lg: "h-10 w-10 text-sm",
+    sm: "h-6 w-6 text-[11px] font-semibold",
+    default: "h-8 w-8 text-xs font-semibold",
+    lg: "h-10 w-10 text-sm font-semibold",
   };
 
   const computedInitials =
@@ -48,7 +48,7 @@ export function UserAvatar({
     <div className={cn("relative inline-block shrink-0", className)}>
       <Avatar className={cn(sizeClasses[size], "border border-background shadow-xs")}>
         {avatar && <AvatarImage src={avatar} alt={name} />}
-        <AvatarFallback className="font-medium bg-muted text-foreground">
+        <AvatarFallback className="font-semibold bg-muted text-foreground">
           {computedInitials}
         </AvatarFallback>
       </Avatar>
@@ -72,9 +72,9 @@ export function UserAvatar({
     <Tooltip>
       <TooltipTrigger asChild>{avatarElement}</TooltipTrigger>
       <TooltipContent side="top" className="text-xs">
-        <p className="font-semibold">{name} {role ? `(${role})` : ""}</p>
+        <p className="font-semibold text-foreground">{name} {role ? `(${role})` : ""}</p>
         {workloadPercent !== undefined && (
-          <p className="text-muted-foreground text-[10px]">Tải tuần: {workloadPercent}%</p>
+          <p className="text-muted-foreground text-xs">Tải tuần: {workloadPercent}%</p>
         )}
       </TooltipContent>
     </Tooltip>
