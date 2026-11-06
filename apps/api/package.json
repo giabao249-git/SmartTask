@@ -23,6 +23,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node --transpile-only prisma/seed.ts",
+    "prisma:seed:tasks": "ts-node --transpile-only prisma/seed-tasks-only.ts",
     "prisma:seed:history": "ts-node --transpile-only prisma/seed-history.ts",
     "prebuild": "npm --prefix ../.. run shared:build",
     "prestart:dev": "npm --prefix ../.. run shared:build"
