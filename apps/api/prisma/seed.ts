@@ -34,7 +34,7 @@ const prisma = new PrismaClient();
 const DEFAULT_COLUMNS = [
   { name: 'Cần làm', statusKey: 'TODO', position: 1, isDone: false },
   { name: 'Đang làm', statusKey: 'IN_PROGRESS', position: 2, isDone: false },
-  { name: 'Kiểm thử', statusKey: 'REVIEW', position: 3, isDone: false },
+  { name: 'Kiểm thử', statusKey: 'REVIEW', position: 3, isDone: false, wipLimit: 2 },
   { name: 'Hoàn thành', statusKey: 'DONE', position: 4, isDone: true },
 ];
 
@@ -512,9 +512,9 @@ async function main(): Promise<void> {
       name: 'SmartTask v1',
       description:
         'Nền tảng quản trị dự án Agile/Kanban cân bằng tải & AI Agent',
-      startDate: day(-14),
+      startDate: day(-28),
       endDate: day(42),
-      taskCounter: 10,
+      taskCounter: 14,
       members: {
         create: [
           { userId: userMap.Lan, role: ProjectRole.PM },
@@ -557,12 +557,12 @@ async function main(): Promise<void> {
       id: ID.sprint1,
       projectId: project.id,
       name: 'Sprint 1',
-      goal: 'Kiến trúc RBAC, Cổng Admin & Tích hợp DeepSeek V4 Flash',
-      startDate: day(-7),
-      endDate: day(7),
+      goal: 'Kiến trúc RBAC, Cổng Admin & Tích hợp Gemini AI',
+      startDate: day(0),
+      endDate: day(13),
       status: SprintStatus.ACTIVE,
-      startedAt: day(-7),
-      scopeHoursInitial: 68,
+      startedAt: day(0),
+      scopeHoursInitial: 82,
     },
   });
 
@@ -572,8 +572,8 @@ async function main(): Promise<void> {
       projectId: project.id,
       name: 'Sprint 2',
       goal: 'Cân bằng tải Workload & Trợ lý AI phân rã WBS',
-      startDate: day(8),
-      endDate: day(22),
+      startDate: day(14),
+      endDate: day(27),
       status: SprintStatus.PLANNED,
     },
   });
@@ -589,8 +589,8 @@ async function main(): Promise<void> {
       priority: Priority.HIGH,
       assignee: 'Minh',
       skill: 'Prisma',
-      start: -7,
-      due: -5,
+      start: 0,
+      due: 2,
       progress: 100,
       done: true,
     },
@@ -604,13 +604,13 @@ async function main(): Promise<void> {
       priority: Priority.URGENT,
       assignee: 'Minh',
       skill: 'NestJS',
-      start: -6,
-      due: -2,
+      start: 0,
+      due: 3,
       progress: 100,
       done: true,
     },
     {
-      title: 'Cấu hình AI Catalog & tích hợp DeepSeek V4 Flash',
+      title: 'Cấu hình AI Catalog & tích hợp Gemini 3.1 Flash-Lite',
       type: TaskType.TASK,
       col: 'REVIEW',
       sprint: sprint1.id,
@@ -619,9 +619,37 @@ async function main(): Promise<void> {
       priority: Priority.HIGH,
       assignee: 'Minh',
       skill: 'NestJS',
-      start: -4,
-      due: 1,
+      start: 1,
+      due: 6,
       progress: 90,
+    },
+    {
+      title: 'Tối ưu hoá truy vấn cơ sở dữ liệu và bộ nhớ đệm Redis',
+      type: TaskType.STORY,
+      col: 'IN_PROGRESS',
+      sprint: sprint1.id,
+      hours: 16,
+      difficulty: 4,
+      priority: Priority.HIGH,
+      assignee: 'Minh',
+      skill: 'NestJS',
+      start: 1,
+      due: 8,
+      progress: 10,
+    },
+    {
+      title: 'Xây dựng bộ kết nối thanh toán và quản lý giao dịch',
+      type: TaskType.STORY,
+      col: 'IN_PROGRESS',
+      sprint: sprint1.id,
+      hours: 21,
+      difficulty: 5,
+      priority: Priority.URGENT,
+      assignee: 'Minh',
+      skill: 'NestJS',
+      start: 2,
+      due: 9,
+      progress: 10,
     },
     {
       title: 'Top Navbar Fixed & Workspace Switcher công thái học',
@@ -633,8 +661,8 @@ async function main(): Promise<void> {
       priority: Priority.MEDIUM,
       assignee: 'Huy',
       skill: 'React',
-      start: -3,
-      due: 2,
+      start: 1,
+      due: 7,
       progress: 60,
     },
     {
@@ -647,71 +675,9 @@ async function main(): Promise<void> {
       priority: Priority.HIGH,
       assignee: 'Huy',
       skill: 'React',
-      start: -2,
-      due: 4,
+      start: 2,
+      due: 9,
       progress: 40,
-    },
-    // Các task chưa phân công (Unassigned) -> Dùng để test chức năng "+ Nhận task"
-    {
-      title: 'Nút nhận việc nhanh (+ Nhận task) cho các task chưa phân công',
-      type: TaskType.STORY,
-      col: 'TODO',
-      sprint: sprint1.id,
-      hours: 6,
-      difficulty: 2,
-      priority: Priority.MEDIUM,
-      skill: 'React',
-      start: 0,
-      due: 3,
-    },
-    {
-      title: 'Kiểm thử tự động E2E phân quyền các role với Puppeteer',
-      type: TaskType.TASK,
-      col: 'TODO',
-      sprint: sprint1.id,
-      hours: 8,
-      difficulty: 3,
-      priority: Priority.HIGH,
-      skill: 'UI Testing',
-      start: 1,
-      due: 5,
-    },
-    {
-      title: 'Cân bằng tải nhân sự theo ma trận kỹ năng phòng ban',
-      type: TaskType.STORY,
-      col: 'TODO',
-      sprint: sprint2.id,
-      hours: 16,
-      difficulty: 5,
-      priority: Priority.HIGH,
-      skill: 'NestJS',
-      start: 8,
-      due: 15,
-    },
-    {
-      title: 'Trợ lý AI phân rã WBS tự động bằng DeepSeek V4 Flash',
-      type: TaskType.STORY,
-      col: 'TODO',
-      sprint: sprint2.id,
-      hours: 12,
-      difficulty: 4,
-      priority: Priority.MEDIUM,
-      skill: 'React',
-      start: 10,
-      due: 18,
-    },
-    {
-      title: 'Xuất báo cáo tiến độ Sprint & kiểm toán mật mã HMAC',
-      type: TaskType.TASK,
-      col: 'TODO',
-      sprint: null,
-      hours: 6,
-      difficulty: 3,
-      priority: Priority.LOW,
-      assignee: 'Long',
-      skill: 'Docker',
-      start: 0,
-      due: 20,
     },
     {
       title:
@@ -724,9 +690,34 @@ async function main(): Promise<void> {
       priority: Priority.HIGH,
       assignee: 'Huy',
       skill: 'React',
-      start: -1,
-      due: 3,
+      start: 3,
+      due: 8,
       progress: 40,
+    },
+    // Các task chưa phân công (Unassigned) -> Dùng để test chức năng "+ Nhận task" hoặc giao việc
+    {
+      title: 'Nút nhận việc nhanh (+ Nhận task) cho các task chưa phân công',
+      type: TaskType.STORY,
+      col: 'TODO',
+      sprint: sprint1.id,
+      hours: 6,
+      difficulty: 2,
+      priority: Priority.MEDIUM,
+      skill: 'React',
+      start: 4,
+      due: 10,
+    },
+    {
+      title: 'Kiểm thử tự động E2E phân quyền các role với Puppeteer',
+      type: TaskType.TASK,
+      col: 'TODO',
+      sprint: sprint1.id,
+      hours: 8,
+      difficulty: 3,
+      priority: Priority.HIGH,
+      skill: 'UI Testing',
+      start: 4,
+      due: 11,
     },
     {
       title: 'Lỗi: làm mới trang ở màn Tải nhân sự mất bộ lọc tuần đang chọn',
@@ -737,8 +728,45 @@ async function main(): Promise<void> {
       difficulty: 2,
       priority: Priority.MEDIUM,
       skill: 'React',
-      start: 1,
-      due: 5,
+      start: 4,
+      due: 10,
+    },
+    {
+      title: 'Cân bằng tải nhân sự theo ma trận kỹ năng phòng ban',
+      type: TaskType.STORY,
+      col: 'TODO',
+      sprint: sprint2.id,
+      hours: 16,
+      difficulty: 5,
+      priority: Priority.HIGH,
+      skill: 'NestJS',
+      start: 14,
+      due: 21,
+    },
+    {
+      title: 'Trợ lý AI phân rã WBS tự động bằng Gemini 2.5 Flash',
+      type: TaskType.STORY,
+      col: 'TODO',
+      sprint: sprint2.id,
+      hours: 12,
+      difficulty: 4,
+      priority: Priority.MEDIUM,
+      skill: 'React',
+      start: 16,
+      due: 24,
+    },
+    {
+      title: 'Xuất báo cáo tiến độ Sprint & kiểm toán mật mã HMAC',
+      type: TaskType.TASK,
+      col: 'TODO',
+      sprint: null,
+      hours: 6,
+      difficulty: 3,
+      priority: Priority.LOW,
+      assignee: 'Long',
+      skill: 'Docker',
+      start: 4,
+      due: 20,
     },
   ];
 
@@ -774,11 +802,72 @@ async function main(): Promise<void> {
     });
   }
 
-  // Bộ đếm mã việc = số lớn nhất đã dùng (trước đây đặt cứng 10 cho 12 việc → mọi lệnh tạo task 409 CONFLICT)
+  // Bộ đếm mã việc = số lớn nhất đã dùng
   await prisma.project.update({
     where: { id: project.id },
     data: { taskCounter: taskNumber - 1 },
   });
+
+  // Bản chụp Burndown lịch sử cho Sprint 1 (từ Thứ 2 đến Thứ 5 để biểu đồ có đường dốc tự nhiên)
+  await prisma.burndownSnapshot.createMany({
+    data: [
+      {
+        sprintId: sprint1.id,
+        date: day(0),
+        scopeHours: 82,
+        remainingHours: 82,
+        completedHours: 0,
+      },
+      {
+        sprintId: sprint1.id,
+        date: day(1),
+        scopeHours: 82,
+        remainingHours: 74,
+        completedHours: 8,
+      },
+      {
+        sprintId: sprint1.id,
+        date: day(2),
+        scopeHours: 82,
+        remainingHours: 62,
+        completedHours: 20,
+      },
+      {
+        sprintId: sprint1.id,
+        date: day(3),
+        scopeHours: 82,
+        remainingHours: 58,
+        completedHours: 20,
+      },
+    ],
+  });
+
+  // Thêm bình luận mẫu có Markdown & @mention phục vụ demo
+  const task3 = await prisma.task.findFirst({
+    where: { projectId: project.id, number: 3 },
+  });
+  if (task3) {
+    await prisma.comment.create({
+      data: {
+        taskId: task3.id,
+        authorId: userMap.Minh,
+        body: '**Đã hoàn thành cấu hình Gemini API!** Nhờ @Lan (Owner/PM) kiểm tra và duyệt giúp nhé.',
+        mentions: {
+          create: [{ userId: userMap.Lan }],
+        },
+      },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: userMap.Lan,
+        type: 'MENTIONED',
+        title: 'Trần Quang Minh đã nhắc đến bạn trong một bình luận',
+        body: '**Đã hoàn thành cấu hình Gemini API!** Nhờ @Lan (Owner/PM) kiểm tra và duyệt giúp nhé.',
+        data: { taskId: task3.id, projectId: project.id },
+      },
+    });
+  }
+
   // Lịch sử cho hồ sơ kỹ năng từ bằng chứng + vận tốc sprint (docs 02/08)
   await seedHistory(prisma);
 

@@ -329,6 +329,7 @@ export async function seedHistory(
   };
   const hoursOf = (s: 'A' | 'B') =>
     TASKS.filter((t) => t.sprint === s).reduce((x, t) => x + t.hours, 0);
+  const SHIFT = 14;
   await prisma.sprint.createMany({
     data: [
       {
@@ -336,11 +337,11 @@ export async function seedHistory(
         projectId: PROJECT,
         name: 'Sprint 0A · Khởi động',
         goal: 'Khung API, CSDL, giao diện và hạ tầng chạy được',
-        startDate: day(-42),
-        endDate: day(-29),
+        startDate: day(-42 + SHIFT),
+        endDate: day(-29 + SHIFT),
         status: SprintStatus.CLOSED,
-        startedAt: day(-42),
-        closedAt: day(-29),
+        startedAt: day(-42 + SHIFT),
+        closedAt: day(-29 + SHIFT),
         scopeHoursInitial: hoursOf('A'),
       },
       {
@@ -348,11 +349,11 @@ export async function seedHistory(
         projectId: PROJECT,
         name: 'Sprint 0B · Nền móng',
         goal: 'Workspace, Kanban đọc được, CI',
-        startDate: day(-28),
-        endDate: day(-15),
+        startDate: day(-28 + SHIFT),
+        endDate: day(-15 + SHIFT),
         status: SprintStatus.CLOSED,
-        startedAt: day(-28),
-        closedAt: day(-15),
+        startedAt: day(-28 + SHIFT),
+        closedAt: day(-15 + SHIFT),
         scopeHoursInitial: hoursOf('B'),
       },
     ],
@@ -375,7 +376,10 @@ export async function seedHistory(
   const ids: Record<string, string> = {};
   for (const t of TASKS) {
     number += 1;
-    const completedAt = new Date(day(t.done).getTime() + 16 * 3600_000);
+    const startOff = t.start + SHIFT;
+    const dueOff = t.due + SHIFT;
+    const doneOff = t.done + SHIFT;
+    const completedAt = new Date(day(doneOff).getTime() + 16 * 3600_000);
     const row = await prisma.task.create({
       data: {
         projectId: PROJECT,
@@ -390,16 +394,16 @@ export async function seedHistory(
         remainingHours: 0,
         progress: 100,
         position: number * 1000,
-        startDate: day(t.start),
-        dueDate: day(t.due),
+        startDate: day(startOff),
+        dueDate: day(dueOff),
         createdById: USERS.Lan,
-        createdAt: day(t.start - 2),
-        startedAt: day(t.start),
+        createdAt: day(startOff - 2),
+        startedAt: day(startOff),
         completedAt,
         assignees: {
           create: t.who.map((w) => ({
             userId: USERS[w],
-            assignedAt: day(t.start - 1),
+            assignedAt: day(startOff - 1),
           })),
         },
         skills: {
@@ -427,7 +431,7 @@ export async function seedHistory(
               timeEntries: {
                 create: t.log.map(([off, h]) => ({
                   userId: USERS[t.who[0]],
-                  workDate: day(t.start + off),
+                  workDate: day(startOff + off),
                   hours: h,
                 })),
               },
