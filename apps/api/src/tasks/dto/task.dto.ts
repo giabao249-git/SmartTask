@@ -334,3 +334,67 @@ export class MyTasksQueryDto {
   status?: 'open' | 'done' | 'all';
   @ApiPropertyOptional() @IsOptional() @IsDateString() dueTo?: string;
 }
+
+export class ReassignMoveDto {
+  @ApiProperty()
+  @IsUUID('4')
+  taskId!: string;
+
+  @ApiProperty()
+  @IsUUID('4')
+  assigneeId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(600)
+  reason?: string;
+}
+
+export class BatchReassignDto {
+  @ApiProperty({ type: [ReassignMoveDto] })
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => ReassignMoveDto)
+  moves!: ReassignMoveDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(600)
+  reason?: string;
+}
+
+export class SubtaskItemDto {
+  @ApiProperty({ example: 'Thiết kế bảng dữ liệu' })
+  @Transform(trim)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  title!: string;
+
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(400)
+  estimateHours?: number;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUUID('4', { each: true })
+  assigneeIds?: string[];
+}
+
+export class BatchCreateSubtasksDto {
+  @ApiProperty({ type: [SubtaskItemDto] })
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => SubtaskItemDto)
+  subtasks!: SubtaskItemDto[];
+}
+

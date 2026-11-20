@@ -36,6 +36,7 @@ export const ERROR_CODES = {
   TASK_VERSION_CONFLICT: 'Công việc vừa được người khác cập nhật, hãy tải lại',
   WIP_LIMIT_EXCEEDED: 'Cột đã đạt giới hạn số việc đang làm',
   DEPENDENCY_CYCLE: 'Phụ thuộc tạo thành vòng lặp',
+  UNCOMPLETED_SUBTASKS: 'Không thể hoàn thành: còn việc con chưa xong',
   ATTACHMENT_TOO_LARGE: 'Tệp vượt quá 10 MB',
   // AI
   AI_QUOTA_EXCEEDED: 'Bạn đã dùng hết lượt gọi AI hôm nay',

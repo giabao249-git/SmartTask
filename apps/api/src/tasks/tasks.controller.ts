@@ -24,6 +24,8 @@ import {
 } from '../common/decorators/current-user.decorator';
 import {
   AssigneesDto,
+  BatchCreateSubtasksDto,
+  BatchReassignDto,
   CreateSubtaskDto,
   CreateTaskDto,
   DuplicateTaskDto,
@@ -36,6 +38,7 @@ import {
   TaskSkillsDto,
   UpdateTaskDto,
 } from './dto/task.dto';
+
 import { TasksService } from './tasks.service';
 
 @ApiTags('Công việc')
@@ -215,6 +218,31 @@ export class TasksController {
     return this.tasks.createSubtask(user.id, id, dto);
   }
 
+  @Post('projects/:projectId/tasks/reassign-batch')
+  @ApiOperation({
+    summary:
+      'Điều chuyển người thực hiện cho nhiều task cùng lúc (Cân bằng tải AI / PM)',
+  })
+  reassignBatch(
+    @CurrentUser() user: JwtUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: BatchReassignDto,
+  ) {
+    return this.tasks.reassignBatch(user.id, projectId, dto);
+  }
+
+  @Post('tasks/:id/subtasks/batch')
+  @ApiOperation({
+    summary: 'Tạo nhiều subtask cùng lúc (AI bẻ việc con / batch)',
+  })
+  createSubtasksBatch(
+    @CurrentUser() user: JwtUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: BatchCreateSubtasksDto,
+  ) {
+    return this.tasks.createSubtasksBatch(user.id, id, dto);
+  }
+
   @Post('tasks/:id/duplicate')
   @ApiOperation({ summary: 'Sao chép task (tuỳ chọn kèm subtask) về cột đầu' })
   duplicate(
@@ -225,3 +253,4 @@ export class TasksController {
     return this.tasks.duplicate(user.id, id, dto);
   }
 }
+

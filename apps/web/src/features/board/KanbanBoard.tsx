@@ -18,7 +18,8 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, MoreHorizontal, AlertTriangle, Filter, Loader2, ChevronDown, Copy, Trash2, UserPlus, Flag, CalendarDays, Maximize2, Zap } from "lucide-react";
+import { Plus, MoreHorizontal, AlertTriangle, Filter, Loader2, ChevronDown, Copy, Trash2, UserPlus, Flag, CalendarDays, Maximize2, Zap, Sparkles, RefreshCw } from "lucide-react";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SideDetailPanel } from "@/components/app/SideDetailPanel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,11 +46,12 @@ import {
 import { TaskCard, taskKeyOf } from "@/components/app/TaskCard";
 import { AssigneePicker, LabelPicker, SkillPicker } from "@/components/app/TaskFieldPickers";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { TaskDetailModal } from "@/components/app/TaskDetailModal";
+import { useWorkDetail } from "@/features/work/work-detail-context";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
-import { describeError, isApiError } from "@/lib/api";
+import { api, describeError, isApiError } from "@/lib/api";
+
 import { useAuth } from "@/lib/auth";
 import { useCurrentProject } from "@/lib/hooks/use-project";
 import { useWorkFilters } from "@/features/work/filters";
@@ -170,18 +172,7 @@ export function KanbanBoard() {
     if (tasksQuery.data) setLocal(tasksQuery.data);
   }, [tasksQuery.data]);
   const [activeTask, setActiveTask] = React.useState<TaskListItem | null>(null);
-  const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
-  const [detailOpen, setDetailOpen] = React.useState(!!params.get("task"));
-  /**
-   * `?task=` phải mở modal chi tiết cả khi điều hướng trong trang (bảng lệnh, thông báo, link đã chia sẻ),
-   * không chỉ lúc tải lần đầu — trước đây state chỉ đọc param một lần khi mount.
-   */
-  const urlTaskId = params.get("task");
-  React.useEffect(() => {
-    if (!urlTaskId) return;
-    setSelectedId(urlTaskId);
-    setDetailOpen(true);
-  }, [urlTaskId]);
+  const { openTask } = useWorkDetail();
   const [createOpen, setCreateOpen] = React.useState(false);
   const [selectedColumnId, setSelectedColumnId] = React.useState<string>("");
   /** Cột nào đang mở ô tạo nhanh (mỗi lúc chỉ một). */
@@ -190,6 +181,19 @@ export function KanbanBoard() {
   const [focusedId, setFocusedId] = React.useState<string | null>(null);
   const [menuTaskId, setMenuTaskId] = React.useState<string | null>(null);
   const [draftTitle, setDraftTitle] = React.useState("");
+  const [draftDesc, setDraftDesc] = React.useState("");
+  const [wbsTasks, setWbsTasks] = React.useState<
+    Array<{
+      draftKey: string;
+      title: string;
+      estimateHours?: number;
+      priority?: string;
+      selected: boolean;
+    }>
+  >([]);
+  const [decomposeLoading, setDecomposeLoading] = React.useState(false);
+  const [isBatchCreating, setIsBatchCreating] = React.useState(false);
+
   /** Các ô chọn nâng cao trong hộp thoại tạo — Popover nên FormData không đọc được, phải giữ state. */
   const [newAssignees, setNewAssignees] = React.useState<string[]>([]);
   const [newLabels, setNewLabels] = React.useState<string[]>([]);
@@ -201,7 +205,82 @@ export function KanbanBoard() {
     setNewSkills([]);
     setMoreOpen(false);
     setDraftTitle("");
+    setDraftDesc("");
+    setWbsTasks([]);
+    setDecomposeLoading(false);
+    setIsBatchCreating(false);
   }, []);
+
+  const handleDecompose = async () => {
+    const text = `${draftTitle}\n${draftDesc}`.trim();
+    if (!text) {
+      toast.error("Vui lòng nhập tiêu đề hoặc mô tả công việc cần phân rã");
+      return;
+    }
+    setDecomposeLoading(true);
+    try {
+      const res = await api.post<{
+        proposalId: string | null;
+        action: {
+          type: string;
+          tasks?: Array<{
+            draftKey: string;
+            title: string;
+            estimateHours?: number;
+            priority?: string;
+          }>;
+        };
+      }>(`/projects/${project.id}/ai/decompose`, {
+        requirement: text,
+        sprintId: createSprintId || undefined,
+      });
+
+      if (res.action?.tasks && res.action.tasks.length > 0) {
+        setWbsTasks(
+          res.action.tasks.map((t) => ({
+            draftKey: t.draftKey,
+            title: t.title,
+            estimateHours: t.estimateHours,
+            priority: t.priority,
+            selected: true,
+          }))
+        );
+        toast.success(`AI đã phân rã thành ${res.action.tasks.length} công việc kỹ thuật!`);
+      } else {
+        toast.info("AI chưa tìm thấy phương án phân rã phù hợp cho yêu cầu này.");
+      }
+    } catch (err) {
+      toast.error(describeError(err).message);
+    } finally {
+      setDecomposeLoading(false);
+    }
+  };
+
+  const createWbsBatch = async () => {
+    const selected = wbsTasks.filter((t) => t.selected);
+    if (selected.length === 0) return;
+    setIsBatchCreating(true);
+    try {
+      const col = selectedColumnId && selectedColumnId !== "__first" ? selectedColumnId : undefined;
+      for (const item of selected) {
+        await mut.create.mutateAsync({
+          title: item.title,
+          columnId: col,
+          sprintId: createSprintId,
+          estimateHours: item.estimateHours,
+          priority: item.priority || "MEDIUM",
+        });
+      }
+      toast.success(`Đã tạo thành công ${selected.length} công việc WBS!`);
+      setCreateOpen(false);
+      resetCreateForm();
+    } catch {
+      toast.error("Có lỗi khi tạo một số công việc WBS");
+    } finally {
+      setIsBatchCreating(false);
+    }
+  };
+
 
   const columns = React.useMemo(
     () => project.columns.slice().sort((a, b) => a.position - b.position),
@@ -462,10 +541,12 @@ export function KanbanBoard() {
   const emptyByFilter = visibleCount === 0 && f.isFiltered;
   const emptyProject = visibleCount === 0 && !f.isFiltered;
 
-  const openTask = React.useCallback((t: TaskListItem) => {
-    setSelectedId(t.id);
-    setDetailOpen(true);
-  }, []);
+  const handleOpenTask = React.useCallback(
+    (t: TaskListItem) => {
+      openTask(t.id);
+    },
+    [openTask],
+  );
 
   /**
    * Phím tắt trên bảng, kiểu Jira/Linear (docs 02/05 §C1). Bỏ qua khi con trỏ đang ở ô nhập,
@@ -525,7 +606,7 @@ export function KanbanBoard() {
         case "O":
           if (!focused) return;
           take();
-          openTask(focused);
+          handleOpenTask(focused);
           return;
         case "i":
         case "I": {
@@ -560,7 +641,7 @@ export function KanbanBoard() {
     // pha bubble thì đúng phím Escape đóng modal sẽ lọt qua guard và xoá luôn ô trỏ thẻ.
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [focusedId, local, f, project.canEdit, openComposer, moveFocus, auth.user?.id, quickAssign, openTask, sel, grid]);
+  }, [focusedId, local, f, project.canEdit, openComposer, moveFocus, auth.user?.id, quickAssign, handleOpenTask, sel, grid]);
 
   const failMove = (e: unknown, task: TaskListItem) => {
     const { code, message } = describeError(e);
@@ -568,6 +649,11 @@ export function KanbanBoard() {
     else if (code === "WIP_LIMIT_EXCEEDED") {
       const d = isApiError(e) ? e.detail<{ limit?: number; count?: number }>() : undefined;
       toast.warning("Cột đã đạt giới hạn WIP — đã hoàn tác", { description: d?.limit ? `Giới hạn ${d.limit}` : message });
+    } else if (code === "UNCOMPLETED_SUBTASKS") {
+      const d = isApiError(e) ? e.detail<{ uncompletedCount?: number }>() : undefined;
+      toast.error(`Không thể hoàn thành ${taskKeyOf(project.key, task)}: còn ${d?.uncompletedCount ? `${d.uncompletedCount} ` : ""}việc con chưa xong! — đã hoàn tác`, {
+        description: "Hãy đánh dấu hoàn thành tất cả việc con trước khi chuyển việc chính sang cột Hoàn thành.",
+      });
     } else toast.error("Không kéo được thẻ", { description: `${code}: ${message}` });
     void tasksQuery.refetch();
   };
@@ -664,14 +750,14 @@ export function KanbanBoard() {
                 onClick={() => openCreateDialog()}
                 className="gap-1.5 rounded-r-none font-medium h-8 text-xs"
               >
-                <Plus className="h-3.5 w-3.5" /> Tạo công việc
+                <Plus className="h-3.5 w-3.5" /> Tạo việc
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     size="sm"
                     className="px-2 rounded-l-none border-l border-primary-foreground/20 h-8"
-                    aria-label="Tùy chọn tạo công việc"
+                    aria-label="Tùy chọn tạo việc"
                   >
                     <ChevronDown className="h-3.5 w-3.5" />
                   </Button>
@@ -679,7 +765,7 @@ export function KanbanBoard() {
                 <DropdownMenuContent align="end" className="w-52 text-xs p-1">
                   <DropdownMenuItem onClick={() => openCreateDialog()} className="gap-2 cursor-pointer text-xs py-1.5">
                     <Plus className="h-3.5 w-3.5" />
-                    <span className="flex-1 font-medium">Tạo công việc đầy đủ</span>
+                    <span className="flex-1 font-medium">Tạo việc đầy đủ</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => openComposer()} className="gap-2 cursor-pointer text-xs py-1.5">
                     <Zap className="h-3.5 w-3.5 text-amber-500" />
@@ -710,9 +796,9 @@ export function KanbanBoard() {
       ) : emptyProject ? (
         <EmptyState
           title="Chưa có công việc nào"
-          description="Dự án chưa có công việc. Tạo thủ công hoặc để Trợ lý AI phân rã yêu cầu thành WBS."
-          actionLabel="Phân rã bằng Trợ lý AI"
-          onAction={() => router.push(`/projects/${project.id}/assistant`)}
+          description="Dự án chưa có công việc. Bấm tạo việc mới hoặc dùng nút Phân rã AI ngay trong hộp thoại tạo việc."
+          actionLabel="Tạo việc / Phân rã bằng AI"
+          onAction={() => openCreateDialog()}
         />
       ) : (
         <DndContext id="kanban-board" sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
@@ -775,7 +861,7 @@ export function KanbanBoard() {
                         projectId={project.id}
                         projectKey={project.key}
                         columns={columns}
-                        onOpen={openTask}
+                        onOpen={handleOpenTask}
                         onMove={(t, colId) => doMove(t, colId)}
                         onClaim={handleClaimTask}
                         members={project.members}
@@ -820,19 +906,6 @@ export function KanbanBoard() {
         </DndContext>
       )}
 
-      <TaskDetailModal
-        taskId={selectedId}
-        project={project}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        onOpenFullPage={() => {
-          const t = (tasksQuery.data ?? []).find((x) => x.id === selectedId);
-          if (!t) return;
-          setDetailOpen(false);
-          router.push(`/projects/${project.id}/tasks/${taskKeyOf(project.key, t)}`);
-        }}
-      />
-
       {/* Xoá là hành động không hoàn tác được (chưa có endpoint khôi phục) → AlertDialog theo docs 10 §4. */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
@@ -864,14 +937,15 @@ export function KanbanBoard() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog
+      <SideDetailPanel
         open={createOpen}
-        onOpenChange={(o) => {
-          setCreateOpen(o);
-          if (!o) resetCreateForm();
+        onClose={() => {
+          setCreateOpen(false);
+          resetCreateForm();
         }}
+        ariaLabel="Tạo việc"
+        contentClassName="p-5 sm:p-6"
       >
-        <DialogContent className="sm:max-w-lg" key={draftTitle}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -906,32 +980,149 @@ export function KanbanBoard() {
             }}
             className="space-y-4"
           >
-            <DialogHeader>
-              <DialogTitle className="text-base flex items-center justify-between">
-                <span>Tạo công việc thủ công</span>
+            <div className="space-y-1 pr-8">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-foreground">Tạo việc</h2>
                 <kbd className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border">
                   Phím C
                 </kbd>
-              </DialogTitle>
-              <DialogDescription className="text-xs">
-                Tạo công việc mới vào {createSprintLabel}.
-              </DialogDescription>
-            </DialogHeader>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Tạo việc mới vào {createSprintLabel}.
+              </p>
+            </div>
 
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-medium text-foreground mb-1 block">
                   Tiêu đề công việc <span className="text-destructive">*</span>
                 </label>
-                <Input name="title" defaultValue={draftTitle} placeholder="Ví dụ: Thiết kế giao diện chi tiết task..." className="text-xs h-9" required minLength={1} maxLength={200} autoFocus />
+                <Input
+                  name="title"
+                  value={draftTitle}
+                  onChange={(e) => setDraftTitle(e.target.value)}
+                  placeholder="Ví dụ: Xây dựng cổng thanh toán VNPay và Momo..."
+                  className="text-xs h-9"
+                  required={wbsTasks.length === 0}
+                  minLength={1}
+                  maxLength={200}
+                  autoFocus
+                />
               </div>
 
               <div>
                 <label className="text-xs font-medium text-foreground mb-1 block">
                   Mô tả chi tiết (tuỳ chọn)
                 </label>
-                <Textarea name="description" placeholder="Ghi chú thêm yêu cầu, checklist hoặc tiêu chí nghiệm thu..." className="text-xs min-h-[65px] resize-none" maxLength={2000} />
+                <Textarea
+                  name="description"
+                  value={draftDesc}
+                  onChange={(e) => setDraftDesc(e.target.value)}
+                  placeholder="Ghi chú thêm yêu cầu, checklist hoặc tiêu chí nghiệm thu..."
+                  className="text-xs min-h-[65px] resize-none"
+                  maxLength={2000}
+                />
               </div>
+
+              {/* Khối AI Phân rã WBS */}
+              <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span className="text-[11px]">Công việc lớn cần bẻ nhỏ thành nhiều việc kỹ thuật?</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={decomposeLoading || !draftTitle.trim()}
+                  onClick={handleDecompose}
+                  className="h-7 text-xs gap-1.5 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 shadow-sm shrink-0"
+                >
+                  {decomposeLoading ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  <span>Phân rã</span>
+                </Button>
+              </div>
+
+              {/* Danh sách công việc phân rã được xem trước (WBS Preview) */}
+              {wbsTasks.length > 0 && (
+                <div className="p-3 rounded-lg border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-950 dark:text-indigo-200">
+                      <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span>Đề xuất phân rã ({wbsTasks.filter((t) => t.selected).length}/{wbsTasks.length} việc con):</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[11px] text-muted-foreground hover:text-foreground"
+                      onClick={() => setWbsTasks([])}
+                    >
+                      Bỏ phân rã
+                    </Button>
+                  </div>
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                    {wbsTasks.map((item, idx) => (
+                      <div
+                        key={item.draftKey || idx}
+                        className={cn(
+                          "flex items-center gap-2 p-2 rounded border text-xs transition-colors",
+                          item.selected
+                            ? "bg-background/90 border-indigo-200/80 dark:border-indigo-900/60 shadow-xs"
+                            : "bg-muted/30 border-border/40 opacity-60"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={item.selected}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setWbsTasks((prev) =>
+                              prev.map((t, i) => (i === idx ? { ...t, selected: checked } : t))
+                            );
+                          }}
+                          className="rounded border-border text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                        />
+                        <input
+                          type="text"
+                          value={item.title}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setWbsTasks((prev) =>
+                              prev.map((t, i) => (i === idx ? { ...t, title: val } : t))
+                            );
+                          }}
+                          className="flex-1 bg-transparent border-0 p-0 text-xs font-medium focus:outline-none focus:ring-0 text-foreground"
+                        />
+                        <div className="flex items-center gap-1 shrink-0">
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            value={item.estimateHours ?? ""}
+                            placeholder="0"
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setWbsTasks((prev) =>
+                                prev.map((t, i) =>
+                                  i === idx ? { ...t, estimateHours: isNaN(val) ? undefined : val } : t
+                                )
+                              );
+                            }}
+                            className="w-12 text-right bg-muted/60 rounded px-1 py-0.5 text-xs font-mono border border-border/40 focus:outline-none"
+                          />
+                          <span className="text-[11px] text-muted-foreground">h</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
@@ -1049,17 +1240,49 @@ export function KanbanBoard() {
               </Collapsible>
             </div>
 
-            <DialogFooter className="pt-2 border-t border-border/40">
-              <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>
+            <div className="pt-3 border-t border-border/40 flex items-center justify-between w-full">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setCreateOpen(false);
+                  resetCreateForm();
+                }}
+              >
                 Hủy
               </Button>
-              <Button type="submit" size="sm" disabled={mut.create.isPending} className="gap-1.5">
-                <Plus className="h-4 w-4" /> Tạo công việc
-              </Button>
-            </DialogFooter>
+              <div className="flex items-center gap-2">
+                {wbsTasks.length > 0 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={isBatchCreating || wbsTasks.filter((t) => t.selected).length === 0}
+                    onClick={createWbsBatch}
+                    className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-sm"
+                  >
+                    {isBatchCreating ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Zap className="h-3.5 w-3.5" />
+                    )}
+                    Tạo {wbsTasks.filter((t) => t.selected).length} việc
+                  </Button>
+                )}
+                <Button
+                  type="submit"
+                  variant={wbsTasks.length > 0 ? "outline" : "default"}
+                  size="sm"
+                  disabled={mut.create.isPending || (!draftTitle.trim() && wbsTasks.length === 0)}
+                  className="gap-1.5"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>{wbsTasks.length > 0 ? "Chỉ tạo 1 việc" : "Tạo việc"}</span>
+                </Button>
+              </div>
+            </div>
           </form>
-        </DialogContent>
-      </Dialog>
+      </SideDetailPanel>
     </div>
   );
 }
@@ -1328,6 +1551,7 @@ function Column({
   canEdit: boolean;
 }) {
   const sel = useWorkSelection();
+  const { selectedTaskId } = useWorkDetail();
   const isOverWip = showWip && col.wipLimit != null && tasks.length > col.wipLimit;
   const isAtLimit = showWip && col.wipLimit != null && tasks.length === col.wipLimit;
   return (
@@ -1378,7 +1602,7 @@ function Column({
                 onClaim={onClaim}
                 currentUserId={currentUserId}
                 isFocused={focusedId === task.id}
-                isSelected={sel.isSelected(task.id)}
+                isSelected={sel.isSelected(task.id) || selectedTaskId === task.id}
                 disabled={!canEdit}
               />
               {canEdit && (
@@ -1542,7 +1766,7 @@ function Column({
                       onClick={() => onAddTask?.(col.id)}
                       className="w-full justify-start text-xs text-muted-foreground hover:text-foreground hover:bg-background/80 border border-dashed border-border/50 hover:border-border h-8 gap-1.5 rounded-lg transition-colors"
                     >
-                      <Plus className="h-3.5 w-3.5" /> Thêm công việc
+                      <Plus className="h-3.5 w-3.5" /> Thêm việc
                     </Button>
                   </motion.div>
                 )}

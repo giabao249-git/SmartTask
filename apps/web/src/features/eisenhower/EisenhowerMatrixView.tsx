@@ -10,7 +10,7 @@ import { ErrorState } from "@/components/app/ErrorState";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
 import { TaskTypeBadge } from "@/components/app/TaskTypeBadge";
 import { UserAvatar } from "@/components/app/UserAvatar";
-import { TaskDetailModal } from "@/components/app/TaskDetailModal";
+import { useWorkDetail } from "@/features/work/work-detail-context";
 import { fmtDay, taskKeyOf } from "@/components/app/TaskCard";
 import { describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
@@ -43,10 +43,12 @@ function EisenhowerCompactCard({
   task,
   projectKey,
   onClick,
+  isSelected,
 }: {
   task: TaskListItem;
   projectKey: string;
   onClick: () => void;
+  isSelected?: boolean;
 }) {
   const overdue = !!task.dueDate && !task.completedAt && task.dueDate.slice(0, 10) < new Date().toISOString().slice(0, 10);
 
@@ -56,7 +58,12 @@ function EisenhowerCompactCard({
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => e.key === "Enter" && onClick()}
-      className="group flex flex-col gap-1.5 p-2.5 rounded-lg border border-border/80 bg-card hover:bg-accent/40 hover:border-primary/40 transition-colors shadow-2xs cursor-pointer select-none"
+      className={cn(
+        "group flex flex-col gap-1.5 p-2.5 rounded-lg border transition-colors shadow-2xs cursor-pointer select-none",
+        isSelected
+          ? "border-primary bg-primary/10 shadow-xs ring-1 ring-primary/40"
+          : "border-border/80 bg-card hover:bg-accent/40 hover:border-primary/40",
+      )}
     >
       <div className="flex items-center justify-between gap-1.5 text-xs">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -106,7 +113,7 @@ export function EisenhowerMatrixView() {
   const auth = useAuth();
   const f = useWorkFilters();
   const tasksQuery = useTasks(project.id, f.query);
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const { selectedTaskId, openTask } = useWorkDetail();
   const today = Math.floor(Date.now() / DAY);
   const open = React.useMemo(
     () => f.applyQuick(tasksQuery.data ?? [], auth.user?.id).filter((t) => !t.completedAt),
@@ -176,7 +183,8 @@ export function EisenhowerMatrixView() {
                         key={t.id}
                         task={t}
                         projectKey={project.key}
-                        onClick={() => setSelectedId(t.id)}
+                        onClick={() => openTask(t.id)}
+                        isSelected={selectedTaskId === t.id}
                       />
                     ))
                   )}
@@ -185,7 +193,6 @@ export function EisenhowerMatrixView() {
             ))}
           </div>
         )}
-        <TaskDetailModal taskId={selectedId} project={project} open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)} />
       </div>
     </TooltipProvider>
   );

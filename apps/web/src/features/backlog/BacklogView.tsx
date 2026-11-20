@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   DndContext,
@@ -25,7 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
-import { TaskDetailModal } from "@/components/app/TaskDetailModal";
+import { useWorkDetail } from "@/features/work/work-detail-context";
 import { TaskTypeBadge } from "@/components/app/TaskTypeBadge";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { fmtDay, taskKeyOf } from "@/components/app/TaskCard";
@@ -57,8 +56,9 @@ function Row({
   canEdit: boolean;
 }) {
   const sel = useWorkSelection();
+  const { selectedTaskId } = useWorkDetail();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
-  const selected = sel.isSelected(task.id);
+  const selected = sel.isSelected(task.id) || selectedTaskId === task.id;
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }} data-task-id={task.id}>
       <Card
@@ -135,8 +135,6 @@ function Row({
 export function BacklogView() {
   const project = useCurrentProject();
   const auth = useAuth();
-  const router = useRouter();
-  const params = useSearchParams();
   const f = useWorkFilters();
   const tasksQuery = useTasks(project.id, f.query);
   const move = useMoveTask(project.id);
@@ -147,14 +145,7 @@ export function BacklogView() {
     if (tasksQuery.data) setLocal(tasksQuery.data);
   }, [tasksQuery.data]);
   const [activeTask, setActiveTask] = React.useState<TaskListItem | null>(null);
-  const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
-  const [detailOpen, setDetailOpen] = React.useState(!!params.get("task"));
-  const urlTaskId = params.get("task");
-  React.useEffect(() => {
-    if (!urlTaskId) return;
-    setSelectedId(urlTaskId);
-    setDetailOpen(true);
-  }, [urlTaskId]);
+  const { openTask } = useWorkDetail();
 
   const rows = React.useMemo(
     () => f.applyQuick(local, auth.user?.id).slice().sort((a, b) => a.position - b.position),
@@ -232,10 +223,7 @@ export function BacklogView() {
                   projectKey={project.key}
                   orderedIds={orderedIds}
                   canEdit={project.canEdit}
-                  onOpen={(x) => {
-                    setSelectedId(x.id);
-                    setDetailOpen(true);
-                  }}
+                  onOpen={(x) => openTask(x.id)}
                 />
               ))}
             </div>
@@ -252,19 +240,6 @@ export function BacklogView() {
           </DragOverlay>
         </DndContext>
       )}
-
-      <TaskDetailModal
-        taskId={selectedId}
-        project={project}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        onOpenFullPage={() => {
-          const t = rows.find((x) => x.id === selectedId);
-          if (!t) return;
-          setDetailOpen(false);
-          router.push(`/projects/${project.id}/tasks/${taskKeyOf(project.key, t)}`);
-        }}
-      />
     </div>
   );
 }

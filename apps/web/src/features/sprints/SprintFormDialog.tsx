@@ -4,7 +4,7 @@ import * as React from "react";
 import { useMutation } from "@tanstack/react-query";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SideDetailPanel } from "@/components/app/SideDetailPanel";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
@@ -94,8 +94,12 @@ export function SprintFormDialog({
   const badRange = form.startDate > form.endDate;
 
   return (
-    <Dialog open={editing !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
+    <SideDetailPanel
+      open={editing !== null}
+      onClose={onClose}
+      ariaLabel={target ? `Sửa ${target.name}` : "Tạo sprint"}
+      contentClassName="p-5 sm:p-6"
+    >
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -103,10 +107,10 @@ export function SprintFormDialog({
           }}
           className="space-y-4"
         >
-          <DialogHeader>
-            <DialogTitle>{target ? `Sửa ${target.name}` : "Tạo sprint"}</DialogTitle>
-            <DialogDescription>Mục tiêu sprint hiện ở trang Sprint, Dashboard và trong hộp thoại bắt đầu — một câu nói sprint này xong thì được gì.</DialogDescription>
-          </DialogHeader>
+          <div className="space-y-1.5 pr-8">
+            <h2 className="text-base font-semibold text-foreground">{target ? `Sửa ${target.name}` : "Tạo sprint"}</h2>
+            <p className="text-xs text-muted-foreground">Mục tiêu sprint hiện ở trang Sprint, Dashboard và trong hộp thoại bắt đầu — một câu nói sprint này xong thì được gì.</p>
+          </div>
           <div className="space-y-1.5">
             <label htmlFor="sprint-name" className="text-sm font-medium">
               Tên
@@ -147,16 +151,15 @@ export function SprintFormDialog({
               Trùng ngày với {clash.name} ({clash.startDate.slice(5, 10)} → {clash.endDate.slice(5, 10)}). Vẫn lưu được, nhưng burn-down hai sprint sẽ chồng nhau.
             </p>
           )}
-          <DialogFooter>
+          <div className="pt-3 border-t border-border/40 flex items-center justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
               Huỷ
             </Button>
             <Button type="submit" disabled={save.isPending || badRange || !form.name.trim()}>
               {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />} {editing === "new" ? "Tạo sprint" : "Lưu"}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
-      </DialogContent>
-    </Dialog>
+    </SideDetailPanel>
   );
 }

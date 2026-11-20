@@ -6,14 +6,7 @@ import { Check, Loader2, Search, UserCheck, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { SideDetailPanel } from "@/components/app/SideDetailPanel";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -122,17 +115,21 @@ export function AddProjectMemberModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col p-5 gap-4">
-        <DialogHeader className="pb-1">
-          <DialogTitle className="text-base font-semibold flex items-center gap-2">
+    <SideDetailPanel
+      open={open}
+      onClose={() => onOpenChange(false)}
+      ariaLabel="Thêm thành viên vào dự án"
+      contentClassName="p-5 sm:p-6 flex flex-col gap-4"
+    >
+        <div className="space-y-1.5 pr-8">
+          <h2 className="text-base font-semibold flex items-center gap-2 text-foreground">
             <UserPlus className="h-4 w-4 text-primary" />
             <span>Thêm thành viên vào dự án</span>
-          </DialogTitle>
-          <DialogDescription className="text-xs">
+          </h2>
+          <p className="text-xs text-muted-foreground">
             Chọn các nhân sự từ danh bạ Workspace để bổ nhiệm vào đội ngũ dự án.
-          </DialogDescription>
-        </DialogHeader>
+          </p>
+        </div>
 
         {/* Thanh tìm kiếm & chọn vai trò */}
         <div className="flex items-center gap-2">
@@ -255,7 +252,7 @@ export function AddProjectMemberModal({
           )}
         </div>
 
-        <DialogFooter className="flex items-center justify-between gap-2 pt-2 border-t border-border/40 sm:justify-between">
+        <div className="flex items-center justify-between gap-2 pt-3 border-t border-border/40">
           <span className="text-[11px] text-muted-foreground">
             {selectedIds.size > 0 ? `Đã chọn ${selectedIds.size} người` : "Chưa chọn nhân sự nào"}
           </span>
@@ -284,8 +281,7 @@ export function AddProjectMemberModal({
               <span>Thêm vào dự án</span>
             </Button>
           </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </SideDetailPanel>
   );
 }

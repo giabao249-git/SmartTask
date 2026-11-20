@@ -18,7 +18,7 @@ import { TaskTypeBadge } from "@/components/app/TaskTypeBadge";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
-import { TaskDetailModal } from "@/components/app/TaskDetailModal";
+import { useWorkDetail } from "@/features/work/work-detail-context";
 import { fmtDay, taskKeyOf } from "@/components/app/TaskCard";
 import { describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
@@ -94,24 +94,15 @@ export function TaskListView() {
   const fail = (e: unknown, what: string, key: string) => {
     const { code, message } = describeError(e);
     if (code === "TASK_VERSION_CONFLICT") toast.error(`${key} vừa được người khác sửa — đã tải lại`, { description: code });
-    else toast.error(`${what} thất bại`, { description: `${code}: ${message}` });
+    else if (code === "UNCOMPLETED_SUBTASKS") {
+      toast.error(`Không thể hoàn thành ${key}: còn việc con chưa xong!`, { description: "Hãy đánh dấu hoàn thành tất cả việc con trước." });
+    } else toast.error(`${what} thất bại`, { description: `${code}: ${message}` });
     void tasksQuery.refetch();
   };
   const editable = project.canEdit;
   const patchRow = (t: TaskListItem, patch: Record<string, unknown>, what: string) =>
     mut.update.mutate({ id: t.id, version: t.version, patch }, { onError: (e) => fail(e, what, taskKeyOf(project.key, t)) });
-  const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
-  const [detailOpen, setDetailOpen] = React.useState(!!params.get("task"));
-  /**
-   * `?task=` phải mở modal chi tiết cả khi điều hướng trong trang (bảng lệnh, thông báo, link đã chia sẻ),
-   * không chỉ lúc tải lần đầu — trước đây state chỉ đọc param một lần khi mount.
-   */
-  const urlTaskId = params.get("task");
-  React.useEffect(() => {
-    if (!urlTaskId) return;
-    setSelectedId(urlTaskId);
-    setDetailOpen(true);
-  }, [urlTaskId]);
+  const { selectedTaskId, openTask } = useWorkDetail();
 
   const sprints = useSprints(project.id);
 
@@ -375,12 +366,12 @@ export function TaskListView() {
                 return (
                   <TableRow
                     key={t.id}
-                    data-state={sel.isSelected(t.id) ? "selected" : undefined}
-                    className="cursor-pointer text-xs"
-                    onClick={() => {
-                      setSelectedId(t.id);
-                      setDetailOpen(true);
-                    }}
+                    data-state={sel.isSelected(t.id) || selectedTaskId === t.id ? "selected" : undefined}
+                    className={cn(
+                      "cursor-pointer text-xs transition-colors",
+                      selectedTaskId === t.id && "bg-primary/10 border-l-2 border-l-primary font-medium",
+                    )}
+                    onClick={() => openTask(t.id)}
                   >
                     {editable && (
                       <TableCell onClick={stop} className="w-8">
@@ -420,9 +411,17 @@ export function TaskListView() {
                       {editable ? (
                         <Select
                           value={t.columnId}
-                          onValueChange={(columnId) =>
-                            mut.move.mutate({ id: t.id, version: t.version, columnId }, { onError: (e) => fail(e, "Chuyển cột", taskKeyOf(project.key, t)) })
-                          }
+                          onValueChange={(columnId) => {
+                            const targetCol = project.columns.find((c) => c.id === columnId);
+                            if (targetCol?.isDone && t.subtaskCount > 0 && t.progress < 100) {
+                              toast.error(
+                                `Không thể hoàn thành ${taskKeyOf(project.key, t)}: còn việc con chưa xong!`,
+                                { description: "Hãy đánh dấu hoàn thành tất cả việc con trước." },
+                              );
+                              return;
+                            }
+                            mut.move.mutate({ id: t.id, version: t.version, columnId }, { onError: (e) => fail(e, "Chuyển cột", taskKeyOf(project.key, t)) });
+                          }}
                         >
                           <SelectTrigger className="h-6 w-auto border-none bg-transparent hover:bg-muted/80 p-0 shadow-none focus:ring-0 gap-1 text-xs">
                             <Badge variant={statusToVariant(col?.statusKey ?? "")} className="font-medium text-[11px] tracking-wide gap-1 cursor-pointer">
@@ -431,11 +430,21 @@ export function TaskListView() {
                             </Badge>
                           </SelectTrigger>
                           <SelectContent>
-                            {project.columns.map((c) => (
-                              <SelectItem key={c.id} value={c.id} className="text-xs">
-                                {c.name}
-                              </SelectItem>
-                            ))}
+                            {project.columns.map((c) => {
+                              const isBlocked = c.isDone && t.subtaskCount > 0 && t.progress < 100;
+                              return (
+                                <SelectItem key={c.id} value={c.id} disabled={isBlocked} className="text-xs">
+                                  <div className="flex items-center justify-between w-full gap-2">
+                                    <span>{c.name}</span>
+                                    {isBlocked && (
+                                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-normal">
+                                        (còn việc con)
+                                      </span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                       ) : (
@@ -504,19 +513,6 @@ export function TaskListView() {
           </Table>
         </div>
       )}
-
-      <TaskDetailModal
-        taskId={selectedId}
-        project={project}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        onOpenFullPage={() => {
-          const t = (tasksQuery.data ?? []).find((x) => x.id === selectedId);
-          if (!t) return;
-          setDetailOpen(false);
-          router.push(`/projects/${project.id}/tasks/${taskKeyOf(project.key, t)}`);
-        }}
-      />
     </div>
   );
 }

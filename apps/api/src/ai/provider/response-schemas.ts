@@ -76,7 +76,7 @@ export const RESPONSE_SCHEMAS: Record<AiPurpose, JsonSchema> = {
       question: str('khi ASK_CLARIFICATION'),
       options: arr(obj({ code: str(), label: str() }, ['code', 'label'])),
     },
-    ['type', 'reply'],
+    ['type', 'reply', 'tasks'],
   ),
   EXPLAIN: obj(
     {

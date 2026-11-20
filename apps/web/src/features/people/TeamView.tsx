@@ -4,10 +4,10 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, Eye, PencilLine, Users2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
+import { SideDetailPanel } from "@/components/app/SideDetailPanel";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { WorkloadBadge } from "@/components/app/WorkloadBadge";
 import { describeError } from "@/lib/api";
@@ -59,20 +59,19 @@ export function TeamView() {
         ))}
       </div>
 
-      <Sheet open={!!opened} onOpenChange={(o) => !o && setOpen(null)}>
-        <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
-          {opened && (
-            <>
-              <SheetHeader className="sr-only">
-                <SheetTitle>Hồ sơ {opened.fullName}</SheetTitle>
-                <SheetDescription>Kỹ năng theo việc đã làm và hiệu suất</SheetDescription>
-              </SheetHeader>
-              <MemberProfile projectId={project.id} member={opened} />
-              {opened.id === me && <DeclaredSection workspaceId={project.workspaceId} projectId={project.id} />}
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
+      <SideDetailPanel
+        open={!!opened}
+        onClose={() => setOpen(null)}
+        ariaLabel={opened ? `Hồ sơ ${opened.fullName}` : "Hồ sơ thành viên"}
+        contentClassName="p-5 sm:p-6"
+      >
+        {opened && (
+          <>
+            <MemberProfile projectId={project.id} member={opened} />
+            {opened.id === me && <DeclaredSection workspaceId={project.workspaceId} projectId={project.id} />}
+          </>
+        )}
+      </SideDetailPanel>
     </div>
   );
 }

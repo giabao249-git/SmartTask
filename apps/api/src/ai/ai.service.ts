@@ -10,6 +10,8 @@ import { ProjectAccessService } from '../common/access/project-access.service';
 import { AppError } from '../common/app-error';
 import { ForecastService } from '../forecast/forecast.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorkloadService } from '../workload/workload.service';
+
 import {
   AiConfigService,
   type ResolvedAiConfig,
@@ -95,7 +97,9 @@ export class AiService {
     private readonly executor: ExecutorService,
     private readonly quota: QuotaService,
     private readonly forecast: ForecastService,
+    private readonly workload: WorkloadService,
   ) {}
+
 
   // ── UC-28: phân rã yêu cầu ─────────────────────────────────
 
@@ -208,7 +212,415 @@ export class AiService {
     );
   }
 
+  /** Phân tích và bẻ nhỏ 1 task thành danh sách subtasks bằng AI */
+  async decomposeSubtasks(userId: string, taskId: string) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId, deletedAt: null },
+      select: {
+        id: true,
+        projectId: true,
+        title: true,
+        description: true,
+        type: true,
+        difficulty: true,
+        estimateHours: true,
+        project: { select: { workspaceId: true } },
+      },
+    });
+    if (!task) throw AppError.notFound({ taskId });
+    await this.access.assertEdit(userId, task.projectId);
+
+    const endpoint = 'POST /tasks/:id/ai/decompose-subtasks';
+    await this.quota.assert(
+      userId,
+      task.project.workspaceId,
+      AiPurpose.DECOMPOSE,
+      endpoint,
+    );
+
+    const config = await this.aiConfig.resolve(
+      task.project.workspaceId,
+      AiPurpose.DECOMPOSE,
+    );
+
+    const system = `Bạn là trợ lý kỹ thuật thông minh của SmartTask.
+Nhiệm vụ: Phân tích một công việc và đề xuất bẻ nhỏ thành danh sách 3 đến 6 việc con (subtasks) cụ thể, thực tế, làm được và kiểm thử được.
+Quy định BẮT BUỘC:
+- Trả về DUY NHẤT một chuỗi JSON hợp lệ theo định dạng:
+{"subtasks":[{"title":"Tiêu đề việc con ngắn gọn","estimateHours":2}]}
+- Không bao bọc trong code block markdown (\`\`\`json). Không trả lời thêm bất kỳ câu chào hỏi hay giải thích nào ngoài chuỗi JSON.
+- Mỗi việc con:
+  + title: Tiêu đề rõ ràng, bắt đầu bằng động từ hành động (VD: "Thiết kế giao diện modal", "Tạo migration database", "Viết unit test cho API").
+  + estimateHours: Số giờ ước lượng thực tế từ 1 đến 8.`;
+
+    const userText = `Hãy bẻ nhỏ công việc sau thành các việc con:
+- Tiêu đề: ${task.title}
+- Mô tả: ${task.description || 'Không có mô tả chi tiết'}
+- Loại công việc: ${task.type}
+- Độ khó: ${task.difficulty}/5
+- Ước lượng tổng: ${task.estimateHours ? task.estimateHours + ' giờ' : 'Chưa xác định'}`;
+
+    try {
+      const call = await this.provider.call({
+        config,
+        purpose: AiPurpose.DECOMPOSE,
+        system,
+        userText,
+        staticHash: hashPrompt(system),
+        endpoint,
+        workspaceId: task.project.workspaceId,
+        userId,
+        userMessage: `Bẻ việc con cho task: ${task.title}`,
+      });
+
+      let raw = call.text.trim();
+      if (raw.startsWith('```')) {
+        raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+      }
+
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.subtasks) && parsed.subtasks.length > 0) {
+        return {
+          subtasks: parsed.subtasks
+            .map((s: { title?: string; estimateHours?: number }) => ({
+              title: String(s.title || '').trim().slice(0, 200),
+              estimateHours:
+                typeof s.estimateHours === 'number' && s.estimateHours > 0
+                  ? s.estimateHours
+                  : 2,
+            }))
+            .filter((s: { title: string }) => s.title.length > 0),
+        };
+      }
+    } catch (e) {
+      this.logger.warn(`Lỗi phân rã subtasks AI: ${e}`);
+    }
+
+    // Fallback nếu LLM bận hoặc đầu ra chưa chuẩn
+    return {
+      subtasks: [
+        {
+          title: `Chuẩn bị tài liệu & thiết kế cho "${task.title.slice(0, 50)}"`,
+          estimateHours: 2,
+        },
+        {
+          title: `Hiện thực hoá chức năng chính của "${task.title.slice(0, 50)}"`,
+          estimateHours: 4,
+        },
+        {
+          title: `Kiểm thử đơn vị & rà soát lỗi`,
+          estimateHours: 2,
+        },
+      ],
+    };
+  }
+
+  /** Đề xuất cân bằng tải thông minh */
+  async getRebalanceRecommendations(
+    userId: string,
+    projectId: string,
+    sprintId?: string,
+    requestedWeekIndex?: number,
+  ) {
+    const access = await this.access.assertManage(userId, projectId);
+    const members = await this.prisma.projectMember.findMany({
+      where: { projectId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    const memberUserIds = members.map((m) => m.userId);
+    if (memberUserIds.length < 2) {
+      return {
+        summary: 'Dự án cần ít nhất 2 thành viên để thực hiện cân bằng tải.',
+        weekIndex: 0,
+        weekStart: null,
+        weeksSummary: [],
+        overloadedCount: 0,
+        moves: [],
+      };
+    }
+
+    const today = new Date();
+    const wl = await this.workload.computeUsers(
+      access.workspaceId,
+      memberUserIds,
+      today,
+      4,
+      { projectId },
+    );
+
+    const thresholds = wl.settings.workload.thresholds;
+    const totalWeeks = wl.users[0]?.weeks.length ?? 0;
+
+    // Tổng hợp số người quá tải theo từng tuần
+    const weeksSummary = (wl.users[0]?.weeks ?? []).map((w, idx) => {
+      const count = wl.users.filter(
+        (u) =>
+          (u.weeks[idx]?.utilization ?? 0) >= thresholds.overload ||
+          (u.weeks[idx]?.utilization ?? 0) > 1.0,
+      ).length;
+      return {
+        weekIndex: idx,
+        weekStart: w.weekStart,
+        overloadedCount: count,
+      };
+    });
+
+    // Xác định tuần cần phân tích:
+    // Nếu có requestedWeekIndex hợp lệ thì dùng; nếu không, tự động chọn tuần có tải quá nặng nhất
+    let targetWeekIndex = 0;
+    if (
+      requestedWeekIndex !== undefined &&
+      requestedWeekIndex >= 0 &&
+      requestedWeekIndex < totalWeeks
+    ) {
+      targetWeekIndex = requestedWeekIndex;
+    } else {
+      let maxOverloadScore = -1;
+      for (let i = 0; i < totalWeeks; i++) {
+        let score = 0;
+        for (const u of wl.users) {
+          const w = u.weeks[i];
+          if (w && (w.utilization >= thresholds.overload || w.utilization > 1.0)) {
+            score += 100 + (w.utilization - 1.0) * 100;
+          }
+        }
+        if (score > maxOverloadScore) {
+          maxOverloadScore = score;
+          targetWeekIndex = i;
+        }
+      }
+    }
+
+    const targetWeek = wl.users[0]?.weeks[targetWeekIndex];
+    const targetWeekUsers = wl.users.map((u) => {
+      const w = u.weeks[targetWeekIndex];
+      return {
+        userId: u.userId,
+        fullName: u.fullName,
+        avatarUrl: u.avatarUrl,
+        effLoad: w?.effLoadHours ?? 0,
+        effCap: w?.effCapacityHours ?? 0,
+        utilization: w?.utilization ?? 0,
+        level: w?.level ?? 'NORMAL',
+        tasks: (w?.tasks ?? []).filter((t) => t.projectId === projectId),
+      };
+    });
+
+    const overloaded = targetWeekUsers.filter(
+      (u) => u.utilization >= thresholds.overload || u.utilization > 1.0,
+    );
+    const available = targetWeekUsers.filter((u) => u.utilization < thresholds.high);
+
+    if (overloaded.length === 0) {
+      return {
+        summary:
+          'Tất cả thành viên đang làm việc ở mức tải cân bằng, không có ai bị quá tải trong tuần này.',
+        weekIndex: targetWeekIndex,
+        weekStart: targetWeek?.weekStart ?? null,
+        weeksSummary,
+        overloadedCount: 0,
+        moves: [],
+      };
+    }
+
+    if (available.length === 0) {
+      return {
+        summary: `Có ${overloaded.length} thành viên bị quá tải nhưng toàn bộ nhóm đều đang bận rộn trong tuần này. Cân nhắc bổ sung nhân sự hoặc lùi hạn một số công việc.`,
+        weekIndex: targetWeekIndex,
+        weekStart: targetWeek?.weekStart ?? null,
+        weeksSummary,
+        overloadedCount: overloaded.length,
+        moves: [],
+      };
+    }
+
+    const candidateTaskIds = overloaded.flatMap((u) =>
+      u.tasks.map((t) => t.taskId),
+    );
+    const detailedTasks = await this.prisma.task.findMany({
+      where: { id: { in: candidateTaskIds }, deletedAt: null },
+      select: {
+        id: true,
+        number: true,
+        title: true,
+        priority: true,
+        estimateHours: true,
+        skills: {
+          select: {
+            skill: { select: { name: true } },
+          },
+        },
+        project: { select: { key: true } },
+      },
+    });
+    const taskDetailsMap = new Map(detailedTasks.map((t) => [t.id, t]));
+
+    // Lấy trước kỹ năng của các thành viên tiềm năng nhận việc
+    const availableUserIds = available.map((u) => u.userId);
+    const userSkillsMap = new Map<string, string[]>();
+    const skillsList = await this.prisma.userSkill.findMany({
+      where: { userId: { in: availableUserIds } },
+      include: { skill: true },
+    });
+    for (const us of skillsList) {
+      const list = userSkillsMap.get(us.userId) ?? [];
+      list.push(us.skill.name);
+      userSkillsMap.set(us.userId, list);
+    }
+
+    // Sắp xếp người nhận tiềm năng: người có tải thấp nhất lên đầu
+    available.sort((a, b) => a.utilization - b.utilization);
+
+    const moves: Array<{
+      taskId: string;
+      taskKey: string;
+      taskTitle: string;
+      estimateHours: number;
+      priority: string;
+      fromUserId: string;
+      fromUserName: string;
+      fromUserAvatar: string | null;
+      fromCurrentLoad: number;
+      fromNewLoad: number;
+      toUserId: string;
+      toUserName: string;
+      toUserAvatar: string | null;
+      toCurrentLoad: number;
+      toNewLoad: number;
+      reason: string;
+      matchingSkills: string[];
+    }> = [];
+
+    const simLoad = new Map(
+      targetWeekUsers.map((u) => [u.userId, { load: u.effLoad, cap: u.effCap }]),
+    );
+
+    for (const ov of overloaded) {
+      const transferableTasks = ov.tasks
+        .map((t) => ({ ...t, details: taskDetailsMap.get(t.taskId) }))
+        .filter((t) => !!t.details);
+
+      transferableTasks.sort(
+        (a, b) => (b.remainingHours || 0) - (a.remainingHours || 0),
+      );
+
+      for (const t of transferableTasks) {
+        const fromState = simLoad.get(ov.userId)!;
+        const currentFromUtil =
+          fromState.cap > 0 ? fromState.load / fromState.cap : 1;
+        if (currentFromUtil <= 1.05 && moves.length > 0) {
+          break;
+        }
+
+        let bestTarget = null;
+        let bestScore = -999;
+        const taskSkillNames = t.details!.skills.map((s) => s.skill.name.toLowerCase());
+
+        for (const target of available) {
+          const toState = simLoad.get(target.userId)!;
+          const newToLoad = toState.load + t.hoursEff;
+          const newToUtil = toState.cap > 0 ? newToLoad / toState.cap : 1;
+
+          if (newToUtil > thresholds.full + 0.1) {
+            continue;
+          }
+
+          let score = (1.0 - newToUtil) * 50;
+          const targetSkills = userSkillsMap.get(target.userId) ?? [];
+          const hasMatchingSkill = taskSkillNames.some((sk) =>
+            targetSkills.some((ts) => ts.toLowerCase() === sk),
+          );
+
+          if (hasMatchingSkill) {
+            score += 30;
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestTarget = target;
+          }
+        }
+
+        if (bestTarget) {
+          const toState = simLoad.get(bestTarget.userId)!;
+          const fromCurrentLoad =
+            fromState.cap > 0 ? fromState.load / fromState.cap : 1;
+          const toCurrentLoad =
+            toState.cap > 0 ? toState.load / toState.cap : 0;
+
+          fromState.load = Math.max(0, fromState.load - t.hoursEff);
+          toState.load = toState.load + t.hoursEff;
+
+          const fromNewLoad =
+            fromState.cap > 0 ? fromState.load / fromState.cap : 0;
+          const toNewLoad = toState.cap > 0 ? toState.load / toState.cap : 0;
+
+          const targetSkills = userSkillsMap.get(bestTarget.userId) ?? [];
+          const matchedSkills = t.details!.skills
+            .map((s) => s.skill.name)
+            .filter((sk) => targetSkills.some((ts) => ts.toLowerCase() === sk.toLowerCase()));
+
+          const skillText =
+            matchedSkills.length > 0
+              ? `phù hợp kỹ năng (${matchedSkills.join(', ')})`
+              : 'có thời gian trống';
+
+          moves.push({
+            taskId: t.taskId,
+            taskKey: `${t.details!.project.key}-${t.details!.number}`,
+            taskTitle: t.details!.title,
+            estimateHours: Number(
+              t.details!.estimateHours || t.remainingHours || 0,
+            ),
+            priority: t.details!.priority,
+            fromUserId: ov.userId,
+            fromUserName: ov.fullName,
+            fromUserAvatar: ov.avatarUrl,
+            fromCurrentLoad: Math.round(fromCurrentLoad * 100) / 100,
+            fromNewLoad: Math.round(fromNewLoad * 100) / 100,
+            toUserId: bestTarget.userId,
+            toUserName: bestTarget.fullName,
+            toUserAvatar: bestTarget.avatarUrl,
+            toCurrentLoad: Math.round(toCurrentLoad * 100) / 100,
+            toNewLoad: Math.round(toNewLoad * 100) / 100,
+            reason: `${bestTarget.fullName} ${skillText}, tải hiện tại ${Math.round(toCurrentLoad * 100)}%; giúp giải toả ${Math.round((fromCurrentLoad - fromNewLoad) * 100)}% tải cho ${ov.fullName}.`,
+            matchingSkills: matchedSkills.length > 0 ? matchedSkills : t.details!.skills.map((s) => s.skill.name),
+          });
+
+          if (moves.length >= 6) break;
+        }
+      }
+
+      if (moves.length >= 6) break;
+    }
+
+    const summary =
+      moves.length > 0
+        ? `Đề xuất điều chuyển ${moves.length} công việc từ ${overloaded.length} nhân sự quá tải sang các thành viên còn quỹ giờ trống.`
+        : `Không tìm được phương án điều chuyển an toàn để không làm quá tải các thành viên khác.`;
+
+    return {
+      summary,
+      weekIndex: targetWeekIndex,
+      weekStart: targetWeek?.weekStart ?? null,
+      weeksSummary,
+      overloadedCount: overloaded.length,
+      moves,
+    };
+  }
+
+
   async getProposal(userId: string, id: string) {
+
     return this.proposals.view(await this.proposals.get(userId, id));
   }
 

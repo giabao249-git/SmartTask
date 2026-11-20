@@ -3,18 +3,10 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bot, CalendarRange, ChevronDown, Grid2X2, Kanban, ListTodo, Minimize2, Scale, Sparkles } from "lucide-react";
+import { CalendarRange, Grid2X2, Kanban, ListTodo, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/app/PageHeader";
 import { contentVariants } from "@/lib/motion";
 import { useAuth } from "@/lib/auth";
@@ -30,6 +22,8 @@ import { useWorkFilters, WORK_VIEWS, WorkFiltersProvider, type WorkView as ViewK
 import { WorkSelectionProvider } from "./selection";
 import { WorkFocusProvider, useWorkFocus } from "./focus";
 import { BulkActionBar } from "./BulkActionBar";
+import { WorkDetailProvider, useWorkDetail } from "./work-detail-context";
+import { TaskDetailPanel } from "./TaskDetailPanel";
 
 const ICON: Record<ViewKey, typeof Kanban> = {
   board: Kanban,
@@ -45,7 +39,9 @@ export function WorkView() {
     <WorkFiltersProvider defaultSprintId={project.activeSprint?.id}>
       <WorkSelectionProvider>
         <WorkFocusProvider>
-          <WorkBody />
+          <WorkDetailProvider>
+            <WorkBody />
+          </WorkDetailProvider>
         </WorkFocusProvider>
       </WorkSelectionProvider>
     </WorkFiltersProvider>
@@ -56,6 +52,7 @@ function WorkBody() {
   const project = useCurrentProject();
   const auth = useAuth();
   const f = useWorkFilters();
+  const { selectedTaskId, closeTask } = useWorkDetail();
 
   // Kích hoạt đồng bộ thời gian thực Socket.IO cho cả 4 chế độ xem (Bảng, Danh sách, Timeline, Eisenhower)
   useBoardRealtime(project.id, {
@@ -96,6 +93,8 @@ function WorkBody() {
   const router = useRouter();
   const isLeader =
     auth.user?.isSuperAdmin ||
+    project.canManage ||
+    project.myRole === "PM" ||
     auth.workspaces.some(
       (w) => w.id === project.workspaceId && (w.role === "OWNER" || w.role === "ADMIN"),
     );
@@ -135,58 +134,9 @@ function WorkBody() {
     </div>
   );
 
-  const aiActions = isLeader && router ? (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs gap-1.5 border-violet-500/40 bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-indigo-500/10 hover:from-violet-500/20 hover:to-indigo-500/20 text-violet-700 dark:text-violet-300 font-medium px-3 shadow-2xs"
-          title="Các công cụ thông minh tích hợp AI Agent"
-        >
-          <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
-          <span>Công cụ AI ✨</span>
-          <ChevronDown className="h-3 w-3 opacity-70 ml-0.5" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56 p-1 text-xs shadow-md">
-        <DropdownMenuLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1.5">
-          Tác vụ AI Agent
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => router.push(`/projects/${project.id}/ai-decompose`)}
-          className="gap-2.5 cursor-pointer py-2 text-xs"
-        >
-          <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <div className="flex flex-col text-left">
-            <span className="font-semibold text-foreground">Phân rã AI (WBS)</span>
-            <span className="text-xs text-muted-foreground">Tự động bẻ nhỏ requirement</span>
-          </div>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => router.push(`/projects/${project.id}/people?tab=load`)}
-          className="gap-2.5 cursor-pointer py-2 text-xs"
-        >
-          <Scale className="h-4 w-4 text-info shrink-0" />
-          <div className="flex flex-col text-left">
-            <span className="font-semibold text-foreground">Cân bằng tải AI</span>
-            <span className="text-xs text-muted-foreground">Phân bổ workload nhân sự</span>
-          </div>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => router.push(`/projects/${project.id}/assistant`)}
-          className="gap-2.5 cursor-pointer py-2 text-xs"
-        >
-          <Bot className="h-4 w-4 text-primary shrink-0" />
-          <div className="flex flex-col text-left">
-            <span className="font-semibold text-foreground">Trợ lý AI SmartTask</span>
-            <span className="text-xs text-muted-foreground">Hỏi đáp & tự động hóa</span>
-          </div>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  ) : null;
+  // Giữ chỗ isLeader để mở rộng quyền thao tác cấp PM/Admin nếu cần; nút Phân rã đã gộp vào "+ Tạo việc".
+  void isLeader;
+  void router;
 
   return (
     <div className="space-y-4">
@@ -209,8 +159,8 @@ function WorkBody() {
       />
       )}
 
-      {/* Toolbar thống nhất: Tabs chuyển view + bộ lọc + nút tác vụ AI nằm chung một dòng */}
-      <WorkFilterBar counts={counts} syncing={tasks.isFetching} leftSlot={viewSwitcher} rightSlot={aiActions} />
+      {/* Toolbar thống nhất: Tabs chuyển view + bộ lọc */}
+      <WorkFilterBar counts={counts} syncing={tasks.isFetching} leftSlot={viewSwitcher} />
 
       <AnimatePresence mode="wait">
         <motion.div
@@ -230,6 +180,9 @@ function WorkBody() {
 
       {/* Chọn nhiều dùng chung cho Bảng và Danh sách nên thanh hành động đặt ở đây */}
       {(f.view === "board" || f.view === "list") && <BulkActionBar project={project} tasks={tasks.data ?? []} />}
+
+      {/* Chi tiết công việc dạng Side Drawer đè lên cạnh phải (Jira Style) */}
+      <TaskDetailPanel taskId={selectedTaskId} project={project} onClose={closeTask} />
     </div>
   );
 }

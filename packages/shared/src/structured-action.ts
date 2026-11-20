@@ -290,3 +290,33 @@ export interface ValidationResult {
 /** Trạng thái từng item trong `ai_proposals.item_status` (docs 12 §2). */
 export const DRAFT_ITEM_STATUSES = ['DRAFT', 'APPLIED', 'DISCARDED'] as const;
 export type DraftItemStatus = (typeof DRAFT_ITEM_STATUSES)[number];
+
+export const subtaskDraftItemSchema = z.object({
+  title: z.string().min(1).max(200),
+  estimateHours: z.number().min(0).max(400).optional(),
+});
+export type SubtaskDraftItem = z.infer<typeof subtaskDraftItemSchema>;
+
+export const decomposeSubtasksResponseSchema = z.object({
+  subtasks: z.array(subtaskDraftItemSchema).min(1).max(20),
+});
+export type DecomposeSubtasksResponse = z.infer<typeof decomposeSubtasksResponseSchema>;
+
+export const batchSubtasksDtoSchema = z.object({
+  subtasks: z.array(subtaskDraftItemSchema).min(1).max(20),
+});
+export type BatchSubtasksInput = z.infer<typeof batchSubtasksDtoSchema>;
+
+export const reassignMoveSchema = z.object({
+  taskId: z.string().uuid(),
+  assigneeId: z.string().uuid(),
+  reason: z.string().max(600).optional(),
+});
+export type ReassignMove = z.infer<typeof reassignMoveSchema>;
+
+export const reassignBatchSchema = z.object({
+  moves: z.array(reassignMoveSchema).min(1).max(100),
+  reason: z.string().max(600).optional(),
+});
+export type ReassignBatchInput = z.infer<typeof reassignBatchSchema>;
+

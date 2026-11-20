@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AtSign,
-  Calendar,
   ChevronDown,
   Clock,
   Download,
@@ -17,9 +17,12 @@ import {
   MessageSquare,
   Paperclip,
   Plus,
+  RefreshCw,
   Sparkles,
   Trash2,
   Upload,
+  X,
+  Zap,
 } from "lucide-react";
 import { ActivityList } from "@/features/activity/ActivityList";
 import { useTasks } from "@/features/board/hooks";
@@ -37,9 +40,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ErrorState } from "@/components/app/ErrorState";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { PriorityBadge } from "@/components/app/PriorityBadge";
-import { describeError } from "@/lib/api";
-import type { ProjectDetail, TaskDetail, TaskListItem, TaskPriority, TaskType } from "@/lib/types";
-import { TASK_TYPES, sprintStatusLabel, typeToHint, typeToLabel } from "@/lib/status";
+import { api, describeError, isApiError } from "@/lib/api";
+
+import type { ProjectDetail, TaskDetail, TaskListItem, TaskPriority } from "@/lib/types";
+import { sprintStatusLabel } from "@/lib/status";
 import { useSprints } from "@/lib/hooks/queries";
 import { TaskTypeBadge } from "./TaskTypeBadge";
 import { DerivedBugs, OriginPicker, ReviewCard, WorklogPanel } from "./TaskWorklog";
@@ -110,12 +114,12 @@ export function TaskDetailModal({ taskId, project, open, onOpenChange, onOpenFul
   );
 }
 
-type Variant = "modal" | "page";
+type Variant = "modal" | "page" | "panel";
 const HeaderWrap = ({ variant, children }: { variant: Variant; children: React.ReactNode }) =>
   variant === "modal" ? (
     <DialogHeader className="px-4 sm:px-6 pt-3.5 pb-3 border-b border-border/60 bg-muted/15 space-y-2 shrink-0 text-left">{children}</DialogHeader>
   ) : (
-    <div className="px-4 sm:px-6 pt-4 pb-3.5 border-b border-border/60 bg-muted/15 space-y-2 shrink-0 text-left">{children}</div>
+    <div className="px-4 sm:px-6 pt-3.5 pb-3 border-b border-border/60 bg-muted/15 space-y-2 shrink-0 text-left">{children}</div>
   );
 const TitleWrap = ({ variant, children }: { variant: Variant; children: React.ReactNode }) =>
   variant === "modal" ? <DialogTitle className="text-left">{children}</DialogTitle> : <h1 className="text-left">{children}</h1>;
@@ -129,10 +133,9 @@ const DescWrap = ({ variant, children }: { variant: Variant; children: React.Rea
   );
 
 /**
- * Thân màn chi tiết — dùng chung cho CẢ modal (bấm thẻ trên bảng) và trang riêng
- * /projects/:id/tasks/ST-n. Một nguồn sự thật, hai khung chứa: `variant` chỉ đổi phần
- * tiêu đề, vì DialogTitle/DialogDescription của Radix cần context Dialog nên không dùng
- * được ngoài modal (docs 02/05 §D2).
+ * Thân màn chi tiết — dùng chung cho CẢ modal (bấm thẻ trên bảng), side panel đè cạnh phải
+ * và trang riêng /projects/:id/tasks/ST-n. Một nguồn sự thật, ba khung chứa: `variant` đổi phần
+ * tiêu đề và responsive layout.
  */
 export function TaskDetailBody({
   task,
@@ -140,23 +143,83 @@ export function TaskDetailBody({
   onRefresh,
   variant = "modal",
   onOpenFullPage,
+  onClose,
 }: {
   task: TaskDetail;
   project: ProjectDetail;
   onRefresh: () => void;
-  variant?: "modal" | "page";
+  variant?: Variant;
   onOpenFullPage?: () => void;
+  onClose?: () => void;
 }) {
+  const qc = useQueryClient();
   const m = useTaskMutations(project.id);
   const sprints = useSprints(project.id);
   const [title, setTitle] = React.useState(task.title);
   const [description, setDescription] = React.useState(task.description ?? "");
-  const [progressDraft, setProgressDraft] = React.useState(task.progress);
+  const [estimateDraft, setEstimateDraft] = React.useState(task.estimateHours == null ? "" : String(task.estimateHours));
+  const [aiSubtasks, setAiSubtasks] = React.useState<
+    Array<{ title: string; estimateHours?: number; selected: boolean }>
+  >([]);
+  const [decomposingSubtasks, setDecomposingSubtasks] = React.useState(false);
+  const [applyingSubtasks, setApplyingSubtasks] = React.useState(false);
+
   React.useEffect(() => {
     setTitle(task.title);
     setDescription(task.description ?? "");
-    setProgressDraft(task.progress);
-  }, [task.id, task.version, task.title, task.description, task.progress]);
+    setEstimateDraft(task.estimateHours == null ? "" : String(task.estimateHours));
+    setAiSubtasks([]);
+  }, [task.id, task.version, task.title, task.description, task.estimateHours]);
+
+  const handleDecomposeSubtasks = async () => {
+    setDecomposingSubtasks(true);
+    try {
+      const res = await api.post<{
+        subtasks: Array<{ title: string; estimateHours?: number }>;
+      }>(`/tasks/${task.id}/ai/decompose-subtasks`);
+
+      if (res?.subtasks && res.subtasks.length > 0) {
+        setAiSubtasks(
+          res.subtasks.map((s) => ({
+            title: s.title,
+            estimateHours: s.estimateHours,
+            selected: true,
+          }))
+        );
+        toast.success(`AI đã gợi ý ${res.subtasks.length} việc con!`);
+      } else {
+        toast.info("Không có việc con nào được đề xuất.");
+      }
+    } catch (err) {
+      toast.error(describeError(err).message);
+    } finally {
+      setDecomposingSubtasks(false);
+    }
+  };
+
+  const handleApplyAiSubtasks = async () => {
+    const selected = aiSubtasks.filter((s) => s.selected);
+    if (selected.length === 0) return;
+    setApplyingSubtasks(true);
+    try {
+      await api.post(`/tasks/${task.id}/subtasks/batch`, {
+        subtasks: selected.map((s) => ({
+          title: s.title,
+          estimateHours: s.estimateHours,
+        })),
+      });
+      toast.success(`Đã thêm thành công ${selected.length} việc con!`);
+      setAiSubtasks([]);
+      void qc.invalidateQueries({ queryKey: ["tasks", task.id] });
+      void qc.invalidateQueries({ queryKey: ["projects", project.id] });
+      onRefresh();
+    } catch (err) {
+      toast.error(describeError(err).message);
+    } finally {
+      setApplyingSubtasks(false);
+    }
+  };
+
 
   const fail = (e: unknown, what: string) => {
     const { code, message } = describeError(e);
@@ -167,6 +230,15 @@ export function TaskDetailBody({
     }
     if (code === "DEPENDENCY_CYCLE") {
       toast.error("Phụ thuộc tạo thành vòng — bỏ chọn task đang chờ task này", { description: "422 DEPENDENCY_CYCLE" });
+      return;
+    }
+    if (code === "UNCOMPLETED_SUBTASKS") {
+      const details = isApiError(e) ? e.detail<{ uncompletedCount?: number }>() : undefined;
+      const count = details?.uncompletedCount;
+      toast.error(
+        `Không thể hoàn thành: còn ${count ? `${count} ` : ""}việc con chưa xong!`,
+        { description: "Hãy hoàn thành tất cả việc con trước khi chuyển công việc chính sang hoàn thành." },
+      );
       return;
     }
     toast.error(`${what} thất bại`, { description: `${code}: ${message}` });
@@ -242,7 +314,7 @@ export function TaskDetailBody({
             <span className="text-[10px] text-muted-foreground font-mono bg-muted/60 px-1.5 py-0.5 rounded">
               v{task.version}
             </span>
-            {variant === "modal" && onOpenFullPage && (
+            {(variant === "modal" || variant === "panel") && onOpenFullPage && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -264,13 +336,33 @@ export function TaskDetailBody({
                 title="Xoá công việc"
                 onClick={() =>
                   m.remove.mutate(task.id, {
-                    onSuccess: () => toast.success(`Đã xoá ${taskKeyOf(project.key, task)}`),
+                    onSuccess: () => {
+                      toast.success(`Đã xoá ${taskKeyOf(project.key, task)}`);
+                      onClose?.();
+                    },
                     onError: (e) => fail(e, "Xoá"),
                   })
                 }
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Xoá công việc</span>
+              </Button>
+            )}
+            {variant === "panel" && onClose && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted ml-0.5"
+                aria-label="Đóng panel (Esc)"
+                title="Đóng panel (Esc)"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClose();
+                }}
+              >
+                <X className="h-4 w-4" />
               </Button>
             )}
           </div>
@@ -300,184 +392,73 @@ export function TaskDetailBody({
         </DescWrap>
       </HeaderWrap>
 
-      {/* Thân 2 cột: từ màn md (768px) trở lên chia 2 cột cuộn độc lập; trên mobile xếp dọc gọn gàng */}
-      <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden flex flex-col md:grid md:grid-cols-[minmax(0,1fr)_19.5rem] lg:grid-cols-[minmax(0,1fr)_21.5rem] text-xs">
-        {/* Cột trái: nội dung — mô tả, đánh giá, việc con, bình luận, đính kèm, giờ làm, hoạt động */}
-        <div className="min-w-0 md:overflow-y-auto p-4 sm:p-6 space-y-5">
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                Mô tả công việc
-                {isSaving("description") && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-              </label>
-            </div>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              onBlur={() => description !== (task.description ?? "") && patch({ description: description || null }, "Sửa mô tả")}
-              disabled={!project.canEdit || isSaving("description")}
-              className="text-xs sm:text-[13px] leading-relaxed min-h-[96px] sm:min-h-[112px] bg-muted/20 hover:bg-muted/30 focus-visible:bg-background rounded-lg p-3 resize-y transition-colors"
-              placeholder="Mô tả (markdown nhẹ)…"
-            />
-          </div>
-
-          <ReviewCard task={task} project={project} />
-          <DerivedBugs task={task} projectId={project.id} />
-
-          <Tabs defaultValue="subtasks" className="space-y-3">
-            <div className="overflow-x-auto -mx-1 px-1">
-              <TabsList className="w-full sm:w-auto inline-flex h-9 p-1 bg-muted/60 rounded-lg gap-0.5 justify-start">
-                <TabsTrigger value="subtasks" className="text-xs h-7 px-2.5 gap-1.5 shrink-0">
-                  <ListChecks className="h-3.5 w-3.5" />
-                  <span>Việc con</span>
-                  <Badge variant="secondary" className="text-[10px] px-1 py-0 font-mono h-4">
-                    {task.subtasks.length}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="comments" className="text-xs h-7 px-2.5 gap-1.5 shrink-0">
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  <span>Bình luận</span>
-                  <Badge variant="secondary" className="text-[10px] px-1 py-0 font-mono h-4">
-                    {task.commentCount}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="files" className="text-xs h-7 px-2.5 gap-1.5 shrink-0">
-                  <Paperclip className="h-3.5 w-3.5" />
-                  <span>Đính kèm</span>
-                  <Badge variant="secondary" className="text-[10px] px-1 py-0 font-mono h-4">
-                    {task.attachmentCount}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="worklog" className="text-xs h-7 px-2.5 gap-1.5 shrink-0">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Giờ làm</span>
-                </TabsTrigger>
-                <TabsTrigger value="activity" className="text-xs h-7 px-2.5 gap-1.5 shrink-0">
-                  <History className="h-3.5 w-3.5" />
-                  <span>Hoạt động</span>
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            <TabsContent value="subtasks" className="space-y-2.5 mt-0">
-              {task.subtasks.length > 0 && (
-                <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
-                  <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full bg-success transition-all rounded-full"
-                      style={{ width: `${Math.round((doneSubtasks / task.subtasks.length) * 100)}%` }}
-                    />
-                  </div>
-                  <span className="font-mono shrink-0">
-                    {doneSubtasks}/{task.subtasks.length} xong
-                  </span>
-                </div>
-              )}
-              {task.subtasks.length === 0 && !project.canEdit && (
-                <p className="text-[11px] text-muted-foreground py-2">Chưa có việc con nào.</p>
-              )}
-              <div className="space-y-1.5">
-                {task.subtasks.map((s) => (
-                  <div
-                    key={s.id}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border/60 bg-card hover:border-border transition-colors"
-                  >
-                    <Checkbox
-                      checked={!!s.completedAt}
-                      disabled={!project.canEdit || !doneColumn || m.move.isPending}
-                      onCheckedChange={(checked) =>
-                        m.move.mutate(
-                          { id: s.id, version: s.version, columnId: checked ? doneColumn!.id : project.columns[0].id },
-                          { onError: (e) => fail(e, "Đổi trạng thái việc con") },
-                        )
-                      }
-                    />
-                    <span className="font-mono text-[11px] text-muted-foreground shrink-0">{taskKeyOf(project.key, s)}</span>
-                    <span className={cn("flex-1 text-xs min-w-0 truncate", s.completedAt && "line-through text-muted-foreground")}>
-                      {s.title}
-                    </span>
-                    {s.estimateHours != null && (
-                      <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 shrink-0">
-                        {s.estimateHours}h
-                      </Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {project.canEdit && (
-                <form
-                  className="flex items-center gap-2 pt-1"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const f = new FormData(e.currentTarget);
-                    const t = String(f.get("title") ?? "").trim();
-                    if (!t) return;
-                    const form = e.currentTarget;
-                    m.subtask.mutate(
-                      { parentId: task.id, title: t, estimateHours: Number(f.get("hours")) || undefined },
-                      { onSuccess: () => form.reset(), onError: (err) => fail(err, "Thêm việc con") },
-                    );
-                  }}
-                >
-                  <Input name="title" placeholder="Thêm việc con…" className="h-8 text-xs flex-1" required />
-                  <Input name="hours" type="number" step="0.5" min={0} placeholder="giờ" className="h-8 text-xs w-20" />
-                  <Button type="submit" size="sm" className="h-8 text-xs gap-1 shrink-0" disabled={m.subtask.isPending}>
-                    <Plus className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Thêm</span>
-                  </Button>
-                </form>
-              )}
-            </TabsContent>
-
-            <TabsContent value="worklog" className="mt-0">
-              <WorklogPanel task={task} project={project} />
-            </TabsContent>
-            <TabsContent value="comments" className="mt-0">
-              <CommentsPanel taskId={task.id} project={project} />
-            </TabsContent>
-            <TabsContent value="files" className="mt-0">
-              <AttachmentsPanel taskId={task.id} canEdit={project.canEdit} />
-            </TabsContent>
-            <TabsContent value="activity" className="mt-0">
-              <ActivityList projectId={project.id} taskId={task.id} compact />
-            </TabsContent>
-          </Tabs>
-        </div>
-
-        {/* Cột phải: thuộc tính, chia thành 3 thẻ thông tin gọn gàng & dễ quét mắt */}
-        <aside className="w-full md:overflow-y-auto border-t md:border-t-0 md:border-l border-border/60 bg-muted/20 p-4 sm:p-5 space-y-3.5 shrink-0">
-          {/* Nhóm 1: Phân công & Trạng thái */}
-          <PropGroup title="Phân công & Trạng thái">
+      {/* Thân cuộn dọc đơn luồng chuẩn Jira/Linear: Thoáng đãng, không co cụm, tối ưu cho Panel lẫn Modal */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs">
+        {/* KHỐI 1: Thuộc tính công việc gọn gàng (Quick Properties) */}
+        <div className="rounded-xl border border-border/70 bg-card/70 p-3 sm:p-4 shadow-2xs space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            {/* Trạng thái */}
             <PropRow label="Trạng thái" saving={isSaving("column")}>
               <Select
                 value={task.columnId}
                 disabled={!project.canEdit || isSaving("column")}
-                onValueChange={(columnId) => enqueue("column", "Chuyển cột", (version) => m.move.mutateAsync({ id: task.id, version, columnId }))}
+                onValueChange={(columnId) => {
+                  const targetCol = project.columns.find((c) => c.id === columnId);
+                  const uncompletedCount = task.subtasks.filter((s) => !s.completedAt).length;
+                  if (targetCol?.isDone && uncompletedCount > 0) {
+                    toast.error(
+                      `Không thể hoàn thành: còn ${uncompletedCount} việc con chưa xong!`,
+                      { description: "Hãy đánh dấu hoàn thành tất cả việc con trước khi hoàn thành công việc chính." },
+                    );
+                    return;
+                  }
+                  enqueue("column", "Chuyển cột", (version) => m.move.mutateAsync({ id: task.id, version, columnId }));
+                }}
               >
                 <SelectTrigger className="h-8 text-xs bg-background/80">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {project.columns.map((c) => (
-                    <SelectItem key={c.id} value={c.id} className="text-xs">
-                      {c.name}
-                      {c.wipLimit ? ` (WIP ${c.wipLimit})` : ""}
-                    </SelectItem>
-                  ))}
+                  {project.columns.map((c) => {
+                    const uncompletedCount = task.subtasks.filter((s) => !s.completedAt).length;
+                    const isBlocked = c.isDone && uncompletedCount > 0;
+                    return (
+                      <SelectItem
+                        key={c.id}
+                        value={c.id}
+                        disabled={isBlocked}
+                        className="text-xs"
+                      >
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <span>{c.name} {c.wipLimit ? ` (WIP ${c.wipLimit})` : ""}</span>
+                          {isBlocked && (
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-normal">
+                              (còn {uncompletedCount} việc con)
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </PropRow>
 
+            {/* Người làm */}
             <PropRow label="Người làm" saving={isSaving("assignees")}>
               <AssigneePicker
                 value={task.assignees.map((a) => a.id)}
                 members={project.members}
                 disabled={!project.canEdit || isSaving("assignees")}
-                onChange={(userIds) => enqueue("assignees", "Đổi người thực hiện", (version) => m.assignees.mutateAsync({ id: task.id, version, userIds }))}
+                onChange={(userIds) =>
+                  enqueue("assignees", "Đổi người thực hiện", (version) =>
+                    m.assignees.mutateAsync({ id: task.id, version, userIds })
+                  )
+                }
               />
             </PropRow>
 
+            {/* Sprint */}
             <PropRow label="Sprint" saving={isSaving("sprintId")}>
               <Select
                 value={task.sprintId ?? "__backlog"}
@@ -498,15 +479,17 @@ export function TaskDetailBody({
                         {s.name} · {sprintStatusLabel(s.status)}
                       </SelectItem>
                     ))}
-                  {task.sprint && !(sprints.data ?? []).some((s) => s.id === task.sprint?.id && s.status !== "CLOSED") && (
-                    <SelectItem value={task.sprint.id} className="text-xs">
-                      {task.sprint.name}
-                    </SelectItem>
-                  )}
+                  {task.sprint &&
+                    !(sprints.data ?? []).some((s) => s.id === task.sprint?.id && s.status !== "CLOSED") && (
+                      <SelectItem value={task.sprint.id} className="text-xs">
+                        {task.sprint.name}
+                      </SelectItem>
+                    )}
                 </SelectContent>
               </Select>
             </PropRow>
 
+            {/* Ưu tiên & Gấp */}
             <PropRow label="Ưu tiên" saving={isSaving("priority") || isSaving("isUrgent")}>
               <div className="flex items-center gap-1.5">
                 <Select
@@ -542,166 +525,23 @@ export function TaskDetailBody({
                 </button>
               </div>
             </PropRow>
-          </PropGroup>
 
-          {/* Nhóm 2: Thời gian & Tiến độ */}
-          <PropGroup title="Thời gian & Công sức" icon={Calendar}>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-medium text-muted-foreground inline-flex items-center gap-1">
-                  Tiến độ
-                  {isSaving("progress") && <Loader2 className="h-3 w-3 animate-spin" />}
-                </span>
-                <span className="font-mono font-semibold text-foreground">{progressDraft}%</span>
-              </div>
+            {/* Hạn chót */}
+            <PropRow label="Hạn chót" saving={isSaving("dueDate")}>
               <Input
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={progressDraft}
-                disabled={!project.canEdit || isSaving("progress")}
-                onChange={(e) => setProgressDraft(Number(e.target.value))}
-                onMouseUp={() => {
-                  if (progressDraft !== task.progress) {
-                    enqueue("progress", "Cập nhật tiến độ", (version) =>
-                      m.progress.mutateAsync({ id: task.id, version, progress: progressDraft }),
-                    );
-                  }
-                }}
-                onTouchEnd={() => {
-                  if (progressDraft !== task.progress) {
-                    enqueue("progress", "Cập nhật tiến độ", (version) =>
-                      m.progress.mutateAsync({ id: task.id, version, progress: progressDraft }),
-                    );
-                  }
-                }}
-                className="h-5 px-0 border-0 shadow-none accent-primary cursor-pointer"
-              />
-              {project.canEdit && (
-                <div className="grid grid-cols-5 gap-1">
-                  {[0, 25, 50, 75, 100].map((pct) => (
-                    <button
-                      key={pct}
-                      type="button"
-                      disabled={isSaving("progress")}
-                      onClick={() => {
-                        setProgressDraft(pct);
-                        if (pct !== task.progress) {
-                          enqueue("progress", "Cập nhật tiến độ", (version) =>
-                            m.progress.mutateAsync({ id: task.id, version, progress: pct }),
-                          );
-                        }
-                      }}
-                      className={cn(
-                        "h-6 rounded text-[10px] font-mono border transition-colors",
-                        task.progress === pct
-                          ? "bg-primary text-primary-foreground border-primary font-semibold"
-                          : "bg-background/70 border-border/60 text-muted-foreground hover:text-foreground hover:bg-background",
-                      )}
-                    >
-                      {pct}%
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
-              <NumberField
-                label="Ước lượng (giờ)"
-                value={task.estimateHours}
-                disabled={!project.canEdit || isSaving("estimateHours")}
-                onCommit={(v) => patch({ estimateHours: v }, "Đổi ước lượng")}
-              />
-              <NumberField
-                label="Giờ còn lại"
-                value={task.remainingHours}
-                disabled={!project.canEdit || isSaving("remaining")}
-                onCommit={(v) =>
-                  enqueue("remaining", "Cập nhật giờ còn lại", (version) =>
-                    m.progress.mutateAsync({ id: task.id, version, remainingHours: v ?? undefined }),
-                  )
-                }
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              <DateField
-                label="Bắt đầu"
-                value={task.startDate}
-                disabled={!project.canEdit || isSaving("startDate")}
-                onCommit={(v) => patch({ startDate: v }, "Đổi ngày bắt đầu")}
-              />
-              <DateField
-                label="Hạn chót"
-                value={task.dueDate}
-                overdue={isOverdue}
+                type="date"
+                value={task.dueDate ? task.dueDate.slice(0, 10) : ""}
                 disabled={!project.canEdit || isSaving("dueDate")}
-                onCommit={(v) => patch({ dueDate: v }, "Đổi hạn")}
+                onChange={(e) => {
+                  const next = e.target.value || null;
+                  if (next !== (task.dueDate ? task.dueDate.slice(0, 10) : null)) patch({ dueDate: next }, "Đổi hạn chót");
+                }}
+                className={cn("h-8 text-xs bg-background/80 px-2", isOverdue && "border-destructive/60 text-destructive font-medium")}
               />
-            </div>
-          </PropGroup>
+            </PropRow>
 
-          {/* Nhóm 3: Phân loại & Liên kết */}
-          <PropGroup
-            title="Phân loại & Liên kết"
-            icon={Layers}
-            collapsible
-            defaultOpen
-            count={[task.labels.length, task.requiredSkills.length, task.dependsOnIds.length, task.origin ? 1 : 0].filter(Boolean).length}
-          >
-            <div className="grid grid-cols-2 gap-2.5">
-              <Field label="Loại việc" saving={isSaving("type")}>
-                <Select
-                  value={task.type}
-                  disabled={!project.canEdit || isSaving("type")}
-                  onValueChange={(v) => patch({ type: v as TaskType }, "Đổi loại")}
-                >
-                  <SelectTrigger className="h-8 text-xs bg-background/80">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TASK_TYPES.map((t) => (
-                      <SelectItem key={t} value={t} className="text-xs" title={typeToHint(t)}>
-                        {typeToLabel(t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Độ khó (1–5)" saving={isSaving("difficulty")}>
-                <Select
-                  value={String(task.difficulty)}
-                  disabled={!project.canEdit || isSaving("difficulty")}
-                  onValueChange={(v) => patch({ difficulty: Number(v) }, "Đổi độ khó")}
-                >
-                  <SelectTrigger className="h-8 text-xs bg-background/80">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5].map((d) => (
-                      <SelectItem key={d} value={String(d)} className="text-xs">
-                        Mức {d}/5
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-
-            {task.type === "BUG" && (
-              <Field label="Sinh ra từ việc" saving={isSaving("originTaskId")}>
-                <OriginPicker
-                  task={task}
-                  project={project}
-                  disabled={!project.canEdit || isSaving("originTaskId")}
-                  onChange={(id) => patch({ originTaskId: id }, "Gắn việc gốc")}
-                />
-              </Field>
-            )}
-
-            <Field label="Nhãn" saving={isSaving("labels")}>
+            {/* Nhãn */}
+            <PropRow label="Nhãn" saving={isSaving("labels")}>
               <LabelPicker
                 value={task.labels.map((l) => l.id)}
                 labels={project.labels}
@@ -710,91 +550,411 @@ export function TaskDetailBody({
                   enqueue("labels", "Đổi nhãn", (version) => m.labels.mutateAsync({ id: task.id, version, labelIds }))
                 }
               />
-            </Field>
+            </PropRow>
+          </div>
 
-            <Field label="Kỹ năng yêu cầu" saving={isSaving("skills")}>
-              <SkillPicker
-                value={task.requiredSkills.map((s) => ({ skillId: s.id, minLevel: s.minLevel }))}
-                workspaceId={project.workspaceId}
-                disabled={!project.canEdit || isSaving("skills")}
-                onChange={(skills) =>
-                  enqueue("skills", "Đổi kỹ năng", (version) => m.skills.mutateAsync({ id: task.id, version, skills }))
-                }
-              />
-            </Field>
+          {/* Dòng bổ trợ: Ngày bắt đầu & Giờ ước lượng */}
+          {(task.startDate || task.estimateHours != null || project.canEdit) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/40">
+              <PropRow label="Bắt đầu" saving={isSaving("startDate")}>
+                <Input
+                  type="date"
+                  value={task.startDate ? task.startDate.slice(0, 10) : ""}
+                  disabled={!project.canEdit || isSaving("startDate")}
+                  onChange={(e) => {
+                    const next = e.target.value || null;
+                    if (next !== (task.startDate ? task.startDate.slice(0, 10) : null)) patch({ startDate: next }, "Đổi ngày bắt đầu");
+                  }}
+                  className="h-8 text-xs bg-background/80 px-2"
+                />
+              </PropRow>
 
-            <Field label="Phụ thuộc (xong trước)" saving={isSaving("dependencies")}>
-              <DependencyPicker
-                taskId={task.id}
-                value={task.dependsOnIds}
-                projectId={project.id}
-                projectKey={project.key}
-                disabled={!project.canEdit || isSaving("dependencies")}
-                onChange={(dependsOnIds) =>
-                  enqueue("dependencies", "Đổi phụ thuộc", (version) =>
-                    m.dependencies.mutateAsync({ id: task.id, version, dependsOnIds }),
-                  )
-                }
-              />
-            </Field>
-          </PropGroup>
-        </aside>
-      </div>
-    </>
-  );
-}
+              <PropRow label="Ước lượng" saving={isSaving("estimateHours")}>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="0.5"
+                    min={0}
+                    placeholder="—"
+                    value={estimateDraft}
+                    disabled={!project.canEdit || isSaving("estimateHours")}
+                    onChange={(e) => setEstimateDraft(e.target.value)}
+                    onBlur={() => {
+                      const n = estimateDraft === "" ? null : Number(estimateDraft);
+                      if (n !== task.estimateHours) patch({ estimateHours: n }, "Đổi ước lượng");
+                    }}
+                    className="h-8 text-xs font-mono pr-6 bg-background/80"
+                  />
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-mono">
+                    h
+                  </span>
+                </div>
+              </PropRow>
+            </div>
+          )}
 
-/** Thẻ nhóm thuộc tính ở cột phải. */
-function PropGroup({
-  title,
-  icon: Icon,
-  children,
-  collapsible = false,
-  defaultOpen = false,
-  count = 0,
-}: {
-  title: string;
-  icon?: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-  collapsible?: boolean;
-  defaultOpen?: boolean;
-  count?: number;
-}) {
-  const [open, setOpen] = React.useState(collapsible ? defaultOpen : true);
-  return (
-    <div className="rounded-lg border border-border/60 bg-card/85 p-3.5 shadow-2xs">
-      {collapsible ? (
-        <Collapsible open={open} onOpenChange={setOpen}>
-          <CollapsibleTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-full justify-between px-0 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-transparent hover:text-foreground"
-            >
-              <span className="inline-flex items-center gap-1.5">
-                {Icon && <Icon className="h-3.5 w-3.5" />}
-                {title}
-                {count > 0 && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono normal-case">
-                    {count}
+          {/* Nếu là Bug sinh từ task khác */}
+          {task.type === "BUG" && (
+            <div className="pt-2 border-t border-border/40">
+              <PropRow label="Sinh từ việc" saving={isSaving("originTaskId")}>
+                <OriginPicker
+                  task={task}
+                  project={project}
+                  disabled={!project.canEdit || isSaving("originTaskId")}
+                  onChange={(id) => patch({ originTaskId: id }, "Gắn việc gốc")}
+                />
+              </PropRow>
+            </div>
+          )}
+
+          {/* Kỹ năng & Phụ thuộc dạng Collapsible tinh gọn */}
+          <Collapsible>
+            <div className="flex items-center justify-between pt-1 border-t border-border/40">
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground gap-1 -ml-1"
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  <span>Kỹ năng & Phụ thuộc</span>
+                  {(task.requiredSkills.length > 0 || task.dependsOnIds.length > 0) && (
+                    <Badge variant="secondary" className="text-[10px] px-1 py-0 font-mono h-4 ml-1">
+                      {task.requiredSkills.length + task.dependsOnIds.length}
+                    </Badge>
+                  )}
+                  <ChevronDown className="h-3 w-3 ml-0.5" />
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent className="space-y-2.5 pt-2">
+              <PropRow label="Kỹ năng" saving={isSaving("skills")}>
+                <SkillPicker
+                  value={task.requiredSkills.map((s) => ({ skillId: s.id, minLevel: s.minLevel }))}
+                  workspaceId={project.workspaceId}
+                  disabled={!project.canEdit || isSaving("skills")}
+                  onChange={(skills) =>
+                    enqueue("skills", "Đổi kỹ năng", (version) => m.skills.mutateAsync({ id: task.id, version, skills }))
+                  }
+                />
+              </PropRow>
+              <PropRow label="Phụ thuộc" saving={isSaving("dependencies")}>
+                <DependencyPicker
+                  taskId={task.id}
+                  value={task.dependsOnIds}
+                  projectId={project.id}
+                  projectKey={project.key}
+                  disabled={!project.canEdit || isSaving("dependencies")}
+                  onChange={(dependsOnIds) =>
+                    enqueue("dependencies", "Đổi phụ thuộc", (version) =>
+                      m.dependencies.mutateAsync({ id: task.id, version, dependsOnIds }),
+                    )
+                  }
+                />
+              </PropRow>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+
+        {/* KHỐI 2: Mô tả công việc (Rộng rãi, dễ đọc/viết) */}
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+              Mô tả công việc
+              {isSaving("description") && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+            </label>
+          </div>
+          <Textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            onBlur={() => description !== (task.description ?? "") && patch({ description: description || null }, "Sửa mô tả")}
+            disabled={!project.canEdit || isSaving("description")}
+            className="text-xs sm:text-[13px] leading-relaxed min-h-[96px] sm:min-h-[110px] bg-muted/20 hover:bg-muted/30 focus-visible:bg-background rounded-lg p-3 resize-y transition-colors w-full"
+            placeholder="Mô tả chi tiết công việc (hỗ trợ markdown nhẹ)…"
+          />
+        </div>
+
+        <ReviewCard task={task} project={project} />
+        <DerivedBugs task={task} projectId={project.id} />
+
+        {/* KHỐI 3: Danh sách việc con (Subtasks) với thanh tiến độ thực tế */}
+        <div className="space-y-3 pt-3 border-t border-border/60">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-primary" />
+              <span className="text-xs font-semibold text-foreground">Danh sách việc con</span>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono h-4">
+                {task.subtasks.length}
+              </Badge>
+            </div>
+            {project.canEdit && !task.parentId && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={decomposingSubtasks}
+                onClick={handleDecomposeSubtasks}
+                className="h-7 text-xs gap-1.5 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 shadow-xs"
+              >
+                {decomposingSubtasks ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                )}
+                <span>AI Bẻ việc con</span>
+              </Button>
+            )}
+          </div>
+
+          {/* Khối gợi ý xem trước của AI */}
+          {aiSubtasks.length > 0 && (
+            <div className="p-3 rounded-lg border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-950 dark:text-indigo-200">
+                  <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span>Gợi ý ({aiSubtasks.filter((s) => s.selected).length}/{aiSubtasks.length} việc con):</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[11px] text-muted-foreground hover:text-foreground"
+                  onClick={() => setAiSubtasks([])}
+                >
+                  Hủy bỏ
+                </Button>
+              </div>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                {aiSubtasks.map((s, idx) => (
+                  <div
+                    key={idx}
+                    className={cn(
+                      "flex items-center gap-2 p-2 rounded border text-xs transition-colors",
+                      s.selected
+                        ? "bg-background/90 border-indigo-200/80 dark:border-indigo-900/60 shadow-xs"
+                        : "bg-muted/30 border-border/40 opacity-60",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={s.selected}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setAiSubtasks((prev) =>
+                          prev.map((item, i) => (i === idx ? { ...item, selected: checked } : item)),
+                        );
+                      }}
+                      className="rounded border-border text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                    />
+                    <input
+                      type="text"
+                      value={s.title}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAiSubtasks((prev) =>
+                          prev.map((item, i) => (i === idx ? { ...item, title: val } : item)),
+                        );
+                      }}
+                      className="flex-1 bg-transparent border-0 p-0 text-xs font-medium focus:outline-none focus:ring-0 text-foreground"
+                    />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        value={s.estimateHours ?? ""}
+                        placeholder="0"
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setAiSubtasks((prev) =>
+                            prev.map((item, i) =>
+                              i === idx ? { ...item, estimateHours: isNaN(val) ? undefined : val } : item,
+                            ),
+                          );
+                        }}
+                        className="w-12 text-right bg-muted/60 rounded px-1 py-0.5 text-xs font-mono border border-border/40 focus:outline-none"
+                      />
+                      <span className="text-[11px] text-muted-foreground">h</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={applyingSubtasks || aiSubtasks.filter((s) => s.selected).length === 0}
+                  onClick={handleApplyAiSubtasks}
+                  className="h-7 text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-sm"
+                >
+                  {applyingSubtasks ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Zap className="h-3.5 w-3.5" />
+                  )}
+                  Thêm {aiSubtasks.filter((s) => s.selected).length} việc con này
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Thanh tiến độ thực tế dựa trên tỷ lệ việc con hoàn thành */}
+          {task.subtasks.length > 0 && (
+            <div className="p-2.5 rounded-lg border border-border/60 bg-muted/30 space-y-1.5">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground font-medium">Tiến độ thực tế</span>
+                <span className="font-mono font-semibold text-foreground">
+                  {doneSubtasks}/{task.subtasks.length} việc con ({Math.round((doneSubtasks / task.subtasks.length) * 100)}%)
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 transition-all rounded-full"
+                  style={{ width: `${Math.round((doneSubtasks / task.subtasks.length) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {task.subtasks.length === 0 && !project.canEdit && (
+            <p className="text-[11px] text-muted-foreground py-1">Chưa có việc con nào.</p>
+          )}
+
+          <div className="space-y-1.5">
+            {task.subtasks.map((s) => (
+              <div
+                key={s.id}
+                className="group flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border/60 bg-card hover:border-border transition-colors"
+              >
+                <Checkbox
+                  checked={!!s.completedAt}
+                  disabled={!project.canEdit || !doneColumn || m.move.isPending}
+                  onCheckedChange={(checked) =>
+                    m.move.mutate(
+                      { id: s.id, version: s.version, columnId: checked ? doneColumn!.id : project.columns[0].id },
+                      {
+                        onSuccess: () => {
+                          onRefresh();
+                          void qc.invalidateQueries({ queryKey: ["projects", project.id] });
+                        },
+                        onError: (e) => fail(e, "Đổi trạng thái việc con"),
+                      },
+                    )
+                  }
+                />
+                <span className="font-mono text-[11px] text-muted-foreground shrink-0">{taskKeyOf(project.key, s)}</span>
+                <span className={cn("flex-1 text-xs min-w-0 truncate font-medium", s.completedAt && "line-through text-muted-foreground font-normal")}>
+                  {s.title}
+                </span>
+                {s.estimateHours != null && (
+                  <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 shrink-0">
+                    {s.estimateHours}h
                   </Badge>
                 )}
-              </span>
-              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-2.5 pt-3">{children}</CollapsibleContent>
-        </Collapsible>
-      ) : (
-        <div className="space-y-2.5">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
-            {Icon && <Icon className="h-3.5 w-3.5" />}
-            {title}
+                {project.canEdit && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                    title="Xóa việc con này"
+                    onClick={() =>
+                      m.remove.mutate(s.id, {
+                        onSuccess: () => {
+                          toast.success(`Đã xoá ${taskKeyOf(project.key, s)}`);
+                          onRefresh();
+                          void qc.invalidateQueries({ queryKey: ["projects", project.id] });
+                        },
+                        onError: (e) => fail(e, "Xoá việc con"),
+                      })
+                    }
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            ))}
           </div>
-          <div className="space-y-2.5">{children}</div>
+
+          {project.canEdit && (
+            <form
+              className="flex items-center gap-2 pt-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const f = new FormData(e.currentTarget);
+                const t = String(f.get("title") ?? "").trim();
+                if (!t) return;
+                const form = e.currentTarget;
+                m.subtask.mutate(
+                  { parentId: task.id, title: t, estimateHours: Number(f.get("hours")) || undefined },
+                  {
+                    onSuccess: () => {
+                      form.reset();
+                      onRefresh();
+                      void qc.invalidateQueries({ queryKey: ["projects", project.id] });
+                    },
+                    onError: (err) => fail(err, "Thêm việc con"),
+                  },
+                );
+              }}
+            >
+              <Input name="title" placeholder="Thêm việc con nhanh…" className="h-8 text-xs flex-1" required />
+              <Input name="hours" type="number" step="0.5" min={0} placeholder="giờ" className="h-8 text-xs w-16" />
+              <Button type="submit" size="sm" className="h-8 text-xs gap-1 shrink-0" disabled={m.subtask.isPending}>
+                <Plus className="h-3.5 w-3.5" />
+                <span>Thêm</span>
+              </Button>
+            </form>
+          )}
         </div>
-      )}
-    </div>
+
+        {/* KHỐI 4: Bình luận & Thảo luận (Hiển thị trực tiếp, không giấu lắt léo) */}
+        <div className="space-y-3 pt-3 border-t border-border/60">
+          <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+            <MessageSquare className="h-4 w-4 text-primary" />
+            <span>Bình luận & Thảo luận</span>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono h-4">
+              {task.commentCount}
+            </Badge>
+          </div>
+          <CommentsPanel taskId={task.id} project={project} />
+        </div>
+
+        {/* KHỐI 5: Tệp đính kèm, Giờ làm & Hoạt động (Tabs phụ cuối trang) */}
+        <div className="pt-3 border-t border-border/60">
+          <Tabs defaultValue="files" className="space-y-3">
+            <TabsList className="h-8 p-1 bg-muted/60 rounded-lg gap-0.5 justify-start">
+              <TabsTrigger value="files" className="text-xs h-6 px-2.5 gap-1.5">
+                <Paperclip className="h-3.5 w-3.5" />
+                <span>Đính kèm</span>
+                <Badge variant="secondary" className="text-[10px] px-1 py-0 font-mono h-3.5">
+                  {task.attachmentCount}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger value="worklog" className="text-xs h-6 px-2.5 gap-1.5">
+                <Clock className="h-3.5 w-3.5" />
+                <span>Giờ làm</span>
+              </TabsTrigger>
+              <TabsTrigger value="activity" className="text-xs h-6 px-2.5 gap-1.5">
+                <History className="h-3.5 w-3.5" />
+                <span>Hoạt động</span>
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="files" className="mt-0">
+              <AttachmentsPanel taskId={task.id} canEdit={project.canEdit} />
+            </TabsContent>
+            <TabsContent value="worklog" className="mt-0">
+              <WorklogPanel task={task} project={project} />
+            </TabsContent>
+            <TabsContent value="activity" className="mt-0">
+              <ActivityList projectId={project.id} taskId={task.id} compact />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -808,86 +968,6 @@ function PropRow({ label, saving, children }: { label: string; saving?: boolean;
       </label>
       <div className="min-w-0">{children}</div>
     </div>
-  );
-}
-
-function Field({ label, children, saving }: { label: string; children: React.ReactNode; saving?: boolean }) {
-  return (
-    <div className="space-y-1">
-      <label className="text-[11px] font-medium text-muted-foreground inline-flex items-center gap-1">
-        {label}
-        {saving && <Loader2 className="h-3 w-3 animate-spin" />}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function NumberField({
-  label,
-  value,
-  disabled,
-  onCommit,
-}: {
-  label: string;
-  value: number | null;
-  disabled: boolean;
-  onCommit: (v: number | null) => void;
-}) {
-  const [v, setV] = React.useState(value == null ? "" : String(value));
-  React.useEffect(() => setV(value == null ? "" : String(value)), [value]);
-  return (
-    <Field label={label}>
-      <div className="relative">
-        <Input
-          type="number"
-          step="0.5"
-          min={0}
-          value={v}
-          disabled={disabled}
-          placeholder="—"
-          onChange={(e) => setV(e.target.value)}
-          onBlur={() => {
-            const n = v === "" ? null : Number(v);
-            if (n !== value) onCommit(n);
-          }}
-          className="h-8 text-xs font-mono pr-6 bg-background/80"
-        />
-        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-mono">
-          h
-        </span>
-      </div>
-    </Field>
-  );
-}
-
-function DateField({
-  label,
-  value,
-  overdue,
-  disabled,
-  onCommit,
-}: {
-  label: string;
-  value: string | null;
-  overdue?: boolean;
-  disabled: boolean;
-  onCommit: (v: string | null) => void;
-}) {
-  const cur = value ? value.slice(0, 10) : "";
-  return (
-    <Field label={label}>
-      <Input
-        type="date"
-        value={cur}
-        disabled={disabled}
-        onChange={(e) => {
-          const next = e.target.value || null;
-          if (next !== (value ? value.slice(0, 10) : null)) onCommit(next);
-        }}
-        className={cn("h-8 text-xs bg-background/80 px-2", overdue && "border-destructive/60 text-destructive font-medium")}
-      />
-    </Field>
   );
 }
 

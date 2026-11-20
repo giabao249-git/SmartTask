@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
 import { CalendarRange, ZoomIn, ZoomOut, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
 import { UserAvatar } from "@/components/app/UserAvatar";
-import { TaskDetailModal } from "@/components/app/TaskDetailModal";
+import { useWorkDetail } from "@/features/work/work-detail-context";
 import { taskKeyOf } from "@/components/app/TaskCard";
 import { describeError } from "@/lib/api";
 import { useCurrentProject } from "@/lib/hooks/use-project";
@@ -156,7 +155,6 @@ const SIDEBAR_WIDTH = 390;
 /** Gantt tương tác cao (UC-13): lấp đầy viewport, xem trước hover, thanh theo ngày bắt đầu–hạn, nhóm sprint, đường hôm nay, quá hạn, kéo thả điều chỉnh */
 export function TimelineGanttView() {
   const project = useCurrentProject();
-  const params = useSearchParams();
   const f = useWorkFilters();
   const auth = useAuth();
   const sprints = useSprints(project.id);
@@ -167,7 +165,7 @@ export function TimelineGanttView() {
   pxRef.current = px;
   /** Điểm neo khi đổi zoom: ngày đang nằm dưới con trỏ (hoặc giữa khung) phải đứng yên sau khi co giãn. */
   const anchorRef = React.useRef<{ day: number; offset: number } | null>(null);
-  const [selectedId, setSelectedId] = React.useState<string | null>(params.get("task"));
+  const { selectedTaskId, openTask } = useWorkDetail();
   const tasksQuery = useTasks(project.id, f.query);
   const today = Math.floor(Date.now() / DAY);
   const m = useTaskMutations(project.id);
@@ -205,7 +203,7 @@ export function TimelineGanttView() {
     setDrag(null);
     if (!d || d.id !== t.id) return;
     if (d.delta === 0) {
-      setSelectedId(t.id);
+      openTask(t.id);
       return;
     }
     const iso = (day: number) => new Date(day * DAY).toISOString().slice(0, 10);
@@ -424,8 +422,11 @@ export function TimelineGanttView() {
                               <TooltipTrigger asChild>
                                 <Button
                                   variant="ghost"
-                                  onClick={() => setSelectedId(t.id)}
-                                  className="h-[38px] w-full justify-between px-3 text-xs rounded-none border-b border-border/30 gap-2 hover:bg-muted/60 text-left font-normal cursor-pointer"
+                                  onClick={() => openTask(t.id)}
+                                  className={cn(
+                                    "h-[38px] w-full justify-between px-3 text-xs rounded-none border-b border-border/30 gap-2 text-left font-normal cursor-pointer transition-colors",
+                                    selectedTaskId === t.id ? "bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/60",
+                                  )}
                                 >
                                   <div className="flex items-center gap-2 truncate min-w-0">
                                     <span className="font-mono text-[11px] font-semibold text-foreground/70 shrink-0">
@@ -536,7 +537,7 @@ export function TimelineGanttView() {
                                 onPointerDown={(e) => onPointerDown(e, t, "move")}
                                 onPointerMove={onPointerMove}
                                 onPointerUp={() => onPointerUp(t)}
-                                onKeyDown={(e) => e.key === "Enter" && setSelectedId(t.id)}
+                                onKeyDown={(e) => e.key === "Enter" && openTask(t.id)}
                                 className={cn(
                                   "absolute h-7 px-2 flex items-center text-xs rounded-md border shadow-2xs select-none transition-shadow text-foreground",
                                   project.canEdit && !t.completedAt
@@ -680,13 +681,6 @@ export function TimelineGanttView() {
             </CardFooter>
           </Card>
         )}
-
-        <TaskDetailModal
-          taskId={selectedId}
-          project={project}
-          open={!!selectedId}
-          onOpenChange={(o) => !o && setSelectedId(null)}
-        />
       </div>
     </TooltipProvider>
   );

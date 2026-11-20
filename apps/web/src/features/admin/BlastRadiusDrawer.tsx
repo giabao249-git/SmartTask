@@ -1,14 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { SideDetailPanel } from "@/components/app/SideDetailPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -73,20 +66,24 @@ export function BlastRadiusDrawer({
     targetStatus === "PURGED";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
+    <SideDetailPanel
+      open={open}
+      onClose={() => onOpenChange(false)}
+      ariaLabel="Điều Phối Vòng Đời Tổ Chức"
+      contentClassName="p-5 sm:p-6 space-y-4"
+    >
+        <div className="space-y-1.5 pr-8">
           <div className="flex items-center gap-2">
-            <DialogTitle>Điều Phối Vòng Đời Tổ Chức (Tenant State)</DialogTitle>
+            <h2 className="text-base font-semibold text-foreground">Điều Phối Vòng Đời Tổ Chức (Tenant State)</h2>
             <Badge variant="outline" className="font-mono text-xs">
               {workspace.slug}
             </Badge>
           </div>
-          <DialogDescription>
+          <p className="text-xs text-muted-foreground">
             Tổ chức: <strong className="text-foreground">{workspace.name}</strong> (Chủ sở hữu:{" "}
             {workspace.owner?.fullName || workspace.owner?.email})
-          </DialogDescription>
-        </DialogHeader>
+          </p>
+        </div>
 
         {/* Real-time Blast Radius Assessment */}
         <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
@@ -158,7 +155,7 @@ export function BlastRadiusDrawer({
           </div>
         </div>
 
-        <DialogFooter className="flex items-center justify-between sm:justify-between gap-3">
+        <div className="pt-3 border-t border-border/40 flex items-center justify-between gap-3">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             Hủy bỏ
           </Button>
@@ -180,8 +177,7 @@ export function BlastRadiusDrawer({
               Khôi phục hoạt động
             </Button>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </SideDetailPanel>
   );
 }

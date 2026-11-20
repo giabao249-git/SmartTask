@@ -1,17 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Info, RefreshCw, Scale, Users2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
+import { SideDetailPanel } from "@/components/app/SideDetailPanel";
 import { UserAvatar } from "@/components/app/UserAvatar";
 import { WorkloadBadge } from "@/components/app/WorkloadBadge";
 import { api, describeError } from "@/lib/api";
@@ -25,6 +25,8 @@ import { dm, hrs, pct, vn } from "@/features/people/format";
 import type { CapacityTableView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { RebalanceSidePanel } from "./RebalanceSidePanel";
+
 
 const fmtWeek = (iso: string) => {
   const d = new Date(iso);
@@ -37,10 +39,27 @@ const fmtWeek = (iso: string) => {
  */
 export function WorkloadView() {
   const project = useCurrentProject();
-  const router = useRouter();
+  const searchParams = useSearchParams();
+  const rebalanceParam = searchParams.get("rebalance") === "1";
+  const [rebalanceOpen, setRebalanceOpen] = React.useState(rebalanceParam);
+
+  React.useEffect(() => {
+    if (rebalanceParam) {
+      setRebalanceOpen(true);
+    }
+  }, [rebalanceParam]);
+
   const qc = useQueryClient();
   const wl = useProjectWorkload(project.id, 4);
   const [detail, setDetail] = React.useState<{ userId: string; week: string } | null>(null);
+
+  const overloadedCount = React.useMemo(() => {
+    if (!wl.data?.users) return 0;
+    const threshold = wl.data.thresholds.overload || 1.0;
+    return wl.data.users.filter((u) =>
+      u.weeks.some((w) => (w?.utilization ?? 0) >= threshold)
+    ).length;
+  }, [wl.data]);
 
   // Lắng nghe cập nhật tải và phân bổ thời gian thực từ Socket.IO
   useBoardRealtime(project.id, {
@@ -68,10 +87,25 @@ export function WorkloadView() {
           {project.canManage && (
             <Button
               size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => router.push(`/projects/${project.id}/assistant?prompt=${encodeURIComponent("Ai đang quá tải tuần này? Đề xuất cân bằng lại tải cho nhóm.")}`)}
+              variant={rebalanceOpen ? "default" : "outline"}
+              className={cn(
+                "gap-1.5 text-xs transition-all",
+                rebalanceOpen
+                  ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+                  : "border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+              )}
+              onClick={() => setRebalanceOpen((v) => !v)}
             >
-              <Scale className="h-3.5 w-3.5" /> Nhờ Trợ lý AI đề xuất cân bằng
+              <Scale className="h-3.5 w-3.5" />
+              <span>Cân bằng tải AI</span>
+              {overloadedCount > 0 && (
+                <Badge
+                  variant="destructive"
+                  className="ml-1 px-1.5 py-0 text-[10px] h-4 min-w-4 flex items-center justify-center font-bold"
+                >
+                  {overloadedCount}
+                </Badge>
+              )}
             </Button>
           )}
         </div>
@@ -84,70 +118,97 @@ export function WorkloadView() {
       ) : wl.data.users.length === 0 ? (
         <EmptyState icon={Users2} title="Chưa có thành viên" description="Thêm thành viên vào dự án để tính tải." />
       ) : (
-        <Card className="border-border/80">
-          <CardHeader className="p-4 pb-2 flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle className="text-sm">Mức sử dụng 4 tuần tới</CardTitle>
-              <CardDescription className="text-xs">
-                Ngưỡng: cao {pct(wl.data.thresholds.high)} · đầy {pct(wl.data.thresholds.full)} · quá tải {pct(wl.data.thresholds.overload)} · chênh lệch tải trong nhóm {pct(wl.data.spread)}
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0 sm:p-4 sm:pt-0 overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="sticky left-0 z-10 bg-card text-xs">Thành viên</TableHead>
-                  {wl.data.users[0].weeks.map((w) => (
-                    <TableHead key={w.weekStart} className="min-w-28 text-xs text-center whitespace-nowrap">
-                      Tuần {fmtWeek(w.weekStart)}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {wl.data.users.map((u) => (
-                  <TableRow key={u.userId}>
-                    <TableCell className="sticky left-0 z-10 bg-card text-xs">
-                      <div className="flex items-center gap-2">
-                        <UserAvatar name={u.fullName} avatar={u.avatarUrl ?? undefined} size="sm" />
-                        <span className="font-medium whitespace-nowrap">
-                          <span className="sm:hidden">{u.shortName?.replace(/\s*\(.*\)$/, "") ?? u.fullName}</span>
-                          <span className="hidden sm:inline">{u.fullName}</span>
-                        </span>
-                      </div>
-                    </TableCell>
-                    {u.weeks.map((w) => (
-                      <TableCell key={w.weekStart} className="p-1.5">
-                        <Button
-                          variant="ghost"
-                          onClick={() => setDetail({ userId: u.userId, week: w.weekStart })}
-                          className={cn("w-full h-auto flex flex-col items-center gap-0.5 py-1.5 rounded-md border font-normal", levelBg(w.level))}
-                          aria-label={`${u.fullName} tuần ${fmtWeek(w.weekStart)}: ${pct(w.utilization)}, ${workloadLevelLabel(w.level)}`}
-                        >
-                          <span className="text-sm font-semibold tabular-nums text-foreground">{pct(w.utilization)}</span>
-                          <span className="text-[11px] tabular-nums text-muted-foreground">
-                            {vn(w.effLoadHours)} / {hrs(w.effCapacityHours)}
-                          </span>
-                          {w.level !== "NORMAL" && <WorkloadBadge level={w.level} className="text-[10px] px-1.5 py-0" />}
-                        </Button>
-                      </TableCell>
+        <div className={cn("grid gap-6 items-start", rebalanceOpen ? "grid-cols-1 lg:grid-cols-12" : "grid-cols-1")}>
+          <div className={cn("space-y-6", rebalanceOpen && "lg:col-span-7")}>
+            <Card className="border-border/80">
+              <CardHeader className="p-4 pb-2 flex-row items-center justify-between space-y-0">
+                <div>
+                  <CardTitle className="text-sm">Mức sử dụng 4 tuần tới</CardTitle>
+                  <CardDescription className="text-xs">
+                    Ngưỡng: cao {pct(wl.data.thresholds.high)} · đầy {pct(wl.data.thresholds.full)} · quá tải {pct(wl.data.thresholds.overload)} · chênh lệch tải trong nhóm {pct(wl.data.spread)}
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0 sm:p-4 sm:pt-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="sticky left-0 z-10 bg-card text-xs">Thành viên</TableHead>
+                      {wl.data.users[0].weeks.map((w) => (
+                        <TableHead key={w.weekStart} className="min-w-28 text-xs text-center whitespace-nowrap">
+                          Tuần {fmtWeek(w.weekStart)}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {wl.data.users.map((u) => (
+                      <TableRow key={u.userId}>
+                        <TableCell className="sticky left-0 z-10 bg-card text-xs">
+                          <div className="flex items-center gap-2">
+                            <UserAvatar name={u.fullName} avatar={u.avatarUrl ?? undefined} size="sm" />
+                            <span className="font-medium whitespace-nowrap">
+                              <span className="sm:hidden">{u.shortName?.replace(/\s*\(.*\)$/, "") ?? u.fullName}</span>
+                              <span className="hidden sm:inline">{u.fullName}</span>
+                            </span>
+                          </div>
+                        </TableCell>
+                        {u.weeks.map((w) => (
+                          <TableCell key={w.weekStart} className="p-1.5">
+                            <Button
+                              variant="ghost"
+                              onClick={() => setDetail({ userId: u.userId, week: w.weekStart })}
+                              className={cn("w-full h-auto flex flex-col items-center gap-0.5 py-1.5 rounded-md border font-normal", levelBg(w.level))}
+                              aria-label={`${u.fullName} tuần ${fmtWeek(w.weekStart)}: ${pct(w.utilization)}, ${workloadLevelLabel(w.level)}`}
+                            >
+                              <span className="text-sm font-semibold tabular-nums text-foreground">{pct(w.utilization)}</span>
+                              <span className="text-[11px] tabular-nums text-muted-foreground">
+                                {vn(w.effLoadHours)} / {hrs(w.effCapacityHours)}
+                              </span>
+                              {w.level !== "NORMAL" && <WorkloadBadge level={w.level} className="text-[10px] px-1.5 py-0" />}
+                            </Button>
+                          </TableCell>
+                        ))}
+                      </TableRow>
                     ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <CapacityTable projectId={project.id} sprintId={project.activeSprint?.id} canView={project.canManage} />
+          </div>
+
+          {rebalanceOpen && (
+            <div className="lg:col-span-5">
+              <RebalanceSidePanel
+                projectId={project.id}
+                onClose={() => setRebalanceOpen(false)}
+                onApplySuccess={() => {
+                  void wl.refetch();
+                  void qc.invalidateQueries({ queryKey: ["projects", project.id] });
+                }}
+              />
+            </div>
+          )}
+        </div>
       )}
 
-      <CapacityTable projectId={project.id} sprintId={project.activeSprint?.id} canView={project.canManage} />
 
-      <Sheet open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-          {detail && <WeekDetail userId={detail.userId} week={detail.week} name={wl.data?.users.find((u) => u.userId === detail.userId)?.fullName ?? ""} />}
-        </SheetContent>
-      </Sheet>
+      <SideDetailPanel
+        open={!!detail}
+        onClose={() => setDetail(null)}
+        ariaLabel="Chi tiết tải tuần"
+        contentClassName="p-5 sm:p-6"
+      >
+        {detail && (
+          <WeekDetail
+            userId={detail.userId}
+            week={detail.week}
+            name={wl.data?.users.find((u) => u.userId === detail.userId)?.fullName ?? ""}
+          />
+        )}
+      </SideDetailPanel>
     </div>
   );
 }
@@ -168,12 +229,14 @@ function WeekDetail({ userId, week, name }: { userId: string; week: string; name
   const q = useWorkloadDetails(userId, week);
   return (
     <>
-      <SheetHeader>
-        <SheetTitle className="text-base">
+      <div className="space-y-1.5 pr-8">
+        <h2 className="text-base font-semibold text-foreground">
           {name} · tuần {fmtWeek(week)}
-        </SheetTitle>
-        <SheetDescription className="text-xs">Mỗi việc: giờ còn lại rơi vào tuần này, nhân hệ số (tốc độ thực tế so với ước lượng, độ khó, thiếu kỹ năng) thành giờ hiệu dụng.</SheetDescription>
-      </SheetHeader>
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Mỗi việc: giờ còn lại rơi vào tuần này, nhân hệ số (tốc độ thực tế so với ước lượng, độ khó, thiếu kỹ năng) thành giờ hiệu dụng.
+        </p>
+      </div>
       {q.isPending ? (
         <Skeleton className="h-40 mt-4" />
       ) : q.isError ? (
@@ -297,7 +360,7 @@ export function CapacityTable({ projectId, sprintId, canView }: { projectId: str
           </Select>
         </div>
         <CardDescription className="text-xs">
-          {q.data ? `Tính từ ${dm(q.data.window.from)}, ${q.data.window.days} ngày · ${q.data.tasks.length} việc chưa giao · ` : ""}Số liệu để bạn và Trợ lý AI cân nhắc, không có cột &quot;điểm phù
+          {q.data ? `Tính từ ${dm(q.data.window.from)}, ${q.data.window.days} ngày · ${q.data.tasks.length} việc chưa giao · ` : ""}Số liệu để bạn và AI cân nhắc, không có cột &quot;điểm phù
           hợp&quot;. Người chỉ xem không nằm trong bảng.
         </CardDescription>
       </CardHeader>

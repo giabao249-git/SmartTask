@@ -57,6 +57,44 @@ export class AiController {
     return this.ai.decompose(user.id, projectId, dto);
   }
 
+  @Post('tasks/:id/ai/decompose-subtasks')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Bẻ nhỏ một công việc thành danh sách việc con (subtasks) bằng AI',
+  })
+  decomposeSubtasks(
+    @CurrentUser() user: JwtUser,
+    @Param('id', ParseUUIDPipe) taskId: string,
+  ) {
+    return this.ai.decomposeSubtasks(user.id, taskId);
+  }
+
+  @Post('projects/:id/ai/rebalance')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Đề xuất cân bằng tải thông minh cho dự án',
+  })
+  rebalance(
+    @CurrentUser() user: JwtUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Query('sprintId') sprintId?: string,
+    @Query('weekIndex') weekIndex?: string,
+  ) {
+    const parsedWeekIndex =
+      weekIndex !== undefined && weekIndex !== ''
+        ? parseInt(weekIndex, 10)
+        : undefined;
+    return this.ai.getRebalanceRecommendations(
+      user.id,
+      projectId,
+      sprintId,
+      parsedWeekIndex,
+    );
+  }
+
+
   @Get('ai/proposals/:id')
   @ApiOperation({ summary: 'Xem đề xuất (payload, validation, trạng thái)' })
   proposal(

@@ -17,6 +17,8 @@ import {
 } from './domain/position';
 import type {
   AssigneesDto,
+  BatchCreateSubtasksDto,
+  BatchReassignDto,
   CreateSubtaskDto,
   CreateTaskDto,
   DuplicateTaskDto,
@@ -29,6 +31,7 @@ import type {
   TaskSkillsDto,
   UpdateTaskDto,
 } from './dto/task.dto';
+
 
 type Tx = Prisma.TransactionClient;
 
@@ -399,6 +402,78 @@ export class TasksService {
     return this.toDetailView(task);
   }
 
+  /** Tạo nhiều subtask cùng lúc (cho AI bẻ việc con). */
+  async createSubtasksBatch(
+    userId: string,
+    parentId: string,
+    dto: BatchCreateSubtasksDto,
+  ) {
+    const projectId = await this.access.projectOfTask(parentId);
+    await this.access.assertEdit(userId, projectId);
+    const parent = await this.prisma.task.findUniqueOrThrow({
+      where: { id: parentId },
+      select: {
+        parentId: true,
+        sprintId: true,
+        columnId: true,
+        projectId: true,
+      },
+    });
+    if (parent.parentId)
+      throw AppError.unprocessable('VALIDATION_FAILED', {
+        fields: ['chỉ một cấp subtask'],
+      });
+
+    const allAssigneeIds = [
+      ...new Set(dto.subtasks.flatMap((s) => s.assigneeIds ?? [])),
+    ];
+    await this.assertAssignees(projectId, allAssigneeIds);
+
+    const createdTasks = await this.prisma.$transaction(async (tx) => {
+      const list = [];
+      let currentPos = await this.lastPosition(tx, parent.columnId, parentId);
+      for (const sub of dto.subtasks) {
+        const number = await this.nextNumber(tx, projectId);
+        const created = await tx.task.create({
+          data: {
+            projectId,
+            parentId,
+            sprintId: parent.sprintId,
+            columnId: parent.columnId,
+            number,
+            title: sub.title,
+            estimateHours: sub.estimateHours ?? null,
+            remainingHours: sub.estimateHours ?? null,
+            position: currentPos,
+            createdById: userId,
+            assignees: {
+              create: (sub.assigneeIds ?? []).map((id) => ({ userId: id })),
+            },
+          },
+          select: TASK_DETAIL_SELECT,
+        });
+        currentPos += POSITION_STEP;
+        list.push(created);
+      }
+      return list;
+    });
+
+    await this.recomputeParentProgress(parentId, userId);
+    for (const created of createdTasks) {
+      this.emit(TASK_EVENTS.created, {
+        projectId,
+        taskId: created.id,
+        actorId: userId,
+        affectedUserIds: created.assignees.map((a) => a.user.id),
+        version: created.version,
+        source: 'MANUAL',
+        at: new Date(),
+      });
+    }
+
+    return createdTasks.map((t) => this.toDetailView(t));
+  }
+
   async update(userId: string, taskId: string, dto: UpdateTaskDto) {
     const { projectId, current } = await this.loadForEdit(userId, taskId);
     const { version, ...patch } = dto;
@@ -572,6 +647,21 @@ export class TasksService {
           inColumn,
         });
     }
+    if (column.isDone) {
+      const uncompletedSubtasks = await this.prisma.task.count({
+        where: {
+          parentId: taskId,
+          deletedAt: null,
+          OR: [{ completedAt: null }, { column: { isDone: false } }],
+        },
+      });
+      if (uncompletedSubtasks > 0) {
+        throw AppError.unprocessable('UNCOMPLETED_SUBTASKS', {
+          uncompletedCount: uncompletedSubtasks,
+          message: `Không thể hoàn thành: còn ${uncompletedSubtasks} việc con chưa xong`,
+        });
+      }
+    }
     const position =
       dto.position ?? (await this.lastPosition(this.prisma, column.id));
     const enteringDone = column.isDone && !current.completedAt;
@@ -722,6 +812,89 @@ export class TasksService {
       at: new Date(),
     });
     return this.toDetailView(updated);
+  }
+
+  /** Điều chuyển hàng loạt người thực hiện (Cân bằng tải AI hoặc PM phân bổ). */
+  async reassignBatch(
+    userId: string,
+    projectId: string,
+    dto: BatchReassignDto,
+    source: TaskSource = TaskSource.AI,
+  ) {
+    await this.access.assertEdit(userId, projectId);
+    if (!dto.moves || dto.moves.length === 0) return [];
+
+    const taskIds = dto.moves.map((m) => m.taskId);
+    const targetUserIds = [...new Set(dto.moves.map((m) => m.assigneeId))];
+
+    await this.assertAssignees(projectId, targetUserIds);
+
+    const existingTasks = await this.prisma.task.findMany({
+      where: { id: { in: taskIds }, projectId, deletedAt: null },
+      select: {
+        id: true,
+        number: true,
+        title: true,
+        version: true,
+        assignees: { select: { userId: true } },
+      },
+    });
+
+    if (existingTasks.length !== new Set(taskIds).size) {
+      throw AppError.notFound({
+        reason: 'Một hoặc nhiều task không tồn tại hoặc không thuộc dự án này',
+      });
+    }
+
+    const existingMap = new Map(existingTasks.map((t) => [t.id, t]));
+
+    const updatedTasks = await this.prisma.$transaction(async (tx) => {
+      const results = [];
+      for (const move of dto.moves) {
+        const cur = existingMap.get(move.taskId)!;
+        await tx.taskAssignee.deleteMany({
+          where: { taskId: move.taskId },
+        });
+        await tx.taskAssignee.create({
+          data: { taskId: move.taskId, userId: move.assigneeId },
+        });
+        const updated = await tx.task.update({
+          where: { id: move.taskId },
+          data: { version: { increment: 1 } },
+          select: TASK_DETAIL_SELECT,
+        });
+        results.push({
+          updated,
+          beforeAssignees: cur.assignees.map((a) => a.userId),
+        });
+      }
+      return results;
+    });
+
+    for (const { updated, beforeAssignees } of updatedTasks) {
+      this.emit(TASK_EVENTS.assigned, {
+        projectId,
+        taskId: updated.id,
+        actorId: userId,
+        affectedUserIds: [
+          ...new Set([
+            ...beforeAssignees,
+            ...updated.assignees.map((a) => a.user.id),
+          ]),
+        ],
+        diff: {
+          assignees: {
+            from: beforeAssignees,
+            to: updated.assignees.map((a) => a.user.id),
+          },
+        },
+        version: updated.version,
+        source,
+        at: new Date(),
+      });
+    }
+
+    return updatedTasks.map((r) => this.toDetailView(r.updated));
   }
 
   async setSkills(userId: string, taskId: string, dto: TaskSkillsDto) {
@@ -1092,9 +1265,20 @@ export class TasksService {
       subs.reduce((s, x) => s + (x.completedAt ? 100 : x.progress), 0) /
         subs.length,
     );
+    const hasUncompleted = subs.some((x) => !x.completedAt);
+    const parentTask = await this.prisma.task.findUnique({
+      where: { id: parentId },
+      select: { completedAt: true },
+    });
+    const shouldUncomplete = hasUncompleted && !!parentTask?.completedAt;
+
     const parent = await this.prisma.task.update({
       where: { id: parentId },
-      data: { progress, version: { increment: 1 } },
+      data: {
+        progress,
+        version: { increment: 1 },
+        ...(shouldUncomplete ? { completedAt: null } : {}),
+      },
       select: {
         projectId: true,
         version: true,
@@ -1106,7 +1290,10 @@ export class TasksService {
       taskId: parentId,
       actorId,
       affectedUserIds: parent.assignees.map((a) => a.userId),
-      diff: { progress: { from: null, to: progress } },
+      diff: {
+        progress: { from: null, to: progress },
+        ...(shouldUncomplete ? { completedAt: { from: 'done', to: null } } : {}),
+      },
       version: parent.version,
       source: 'MANUAL',
       at: new Date(),

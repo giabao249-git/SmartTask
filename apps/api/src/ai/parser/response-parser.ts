@@ -151,7 +151,7 @@ function dropEmptyCodes(
 const DRAFT_KEY = /^d\d{1,3}$/;
 
 /** Trường gốc schema Gemini bắt buộc có mặt (docs 02/07 — đo 28/09) nhưng chỉ vài type dùng. */
-const NULLABLE_ROOT = ['sprint', 'targetDraftKeys', 'patch'] as const;
+const NULLABLE_ROOT = ['sprint', 'targetDraftKeys', 'patch', 'tasks'] as const;
 
 /** Trường chỉ nhận mã ngắn hoặc ngày — không bao giờ có nghĩa khi là chuỗi rỗng. */
 const CODE_FIELDS = new Set([
