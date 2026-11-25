@@ -1,0 +1,19 @@
+node_modules
+**/node_modules
+.git
+.github
+.vscode
+.claude
+**/.next
+**/.next-*
+apps/api/dist
+packages/shared/dist
+apps/api/uploads
+apps/api/coverage
+**/.env
+**/.env.*
+docs
+context for final report
+*.pdf
+*.docx
+*.log

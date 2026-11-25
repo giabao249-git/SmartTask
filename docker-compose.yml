@@ -1,6 +1,6 @@
-# Môi trường phát triển cục bộ — Tuần 02
-# Chạy:  docker compose -f infra/docker-compose.yml up -d   (hoặc: make db-up)
-# Dữ liệu nằm trong volume smarttask_pgdata; xoá bằng: make db-reset
+# Khởi chạy toàn bộ SmartTask (PostgreSQL + API + Web) chỉ với 1 lệnh:
+#   docker compose up -d
+# Dữ liệu nằm trong volume smarttask_pgdata và smarttask_api_uploads.
 name: smarttask
 
 services:
@@ -17,14 +17,84 @@ services:
       - "${POSTGRES_PORT:-5434}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./init:/docker-entrypoint-initdb.d:ro
+      - ./infra/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smarttask} -d ${POSTGRES_DB:-smarttask}"]
       interval: 5s
       timeout: 3s
       retries: 10
 
-  # Giao diện quản trị nhẹ (http://localhost:8080) — tuỳ chọn, bật bằng: make db-ui
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: smarttask-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-smarttask}:${POSTGRES_PASSWORD:-smarttask}@postgres:5432/${POSTGRES_DB:-smarttask}?schema=public
+      DIRECT_URL: postgresql://${POSTGRES_USER:-smarttask}:${POSTGRES_PASSWORD:-smarttask}@postgres:5432/${POSTGRES_DB:-smarttask}?schema=public
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-smarttask-dev-access-secret-key-32chars}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-smarttask-dev-refresh-secret-key-32chars}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-7}
+      APP_KEY: ${APP_KEY:-smarttask-dev-app-key-32-characters}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-100}
+      AI_PROVIDER: ${AI_PROVIDER:-gemini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      AI_DAILY_LIMIT_PER_USER: ${AI_DAILY_LIMIT_PER_USER:-20}
+      SYSTEM_ADMIN_EMAILS: ${SYSTEM_ADMIN_EMAILS:-}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-}
+      ELASTICSEARCH_API_KEY: ${ELASTICSEARCH_API_KEY:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-attachments}
+    volumes:
+      - api_uploads:/app/apps/api/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000/api/v1}
+        NEXT_PUBLIC_USE_MOCK: ${NEXT_PUBLIC_USE_MOCK:-0}
+    container_name: smarttask-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-3001}:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # Giao diện quản trị nhẹ (http://localhost:8080) — tuỳ chọn, bật bằng: docker compose --profile ui up -d
   adminer:
     image: adminer:4
     container_name: smarttask-adminer
@@ -38,7 +108,7 @@ services:
       postgres:
         condition: service_healthy
 
-  # Elasticsearch cho @mention (tuỳ chọn, bật bằng: make search-up). Cần ~1 GB RAM.
+  # Elasticsearch cho @mention (tuỳ chọn, bật bằng: docker compose --profile search up -d). Cần ~1 GB RAM.
   # Không có trên Render/Supabase free → API tự rơi về pg_trgm khi không kết nối được.
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
@@ -62,4 +132,5 @@ services:
 
 volumes:
   pgdata:
+  api_uploads:
   esdata:
